@@ -1,0 +1,24 @@
+appId: edu.wisc.niedenthal.ducksoup
+productName: DuckSoup Capture Station
+copyright: Copyright © 2026 Niedenthal Emotions Lab, UW–Madison
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DuckSoup Capture Station
+  artifactName: DuckSoup-Capture-Station-Setup-${version}.${ext}
+publish: null

@@ -1,0 +1,35 @@
+{
+  "private": true,
+  "name": "ducksoup-experimenter-platform",
+  "description": "Experimenter dashboard + participant capture station for DuckSoup/Mozza emotion-modification studies (Niedenthal Emotions Lab, UW-Madison)",
+  "version": "2.0.0",
+  "author": "Niedenthal Emotions Lab",
+  "type": "module",
+  "main": "app/main.js",
+  "scripts": {
+    "dev": "nextron",
+    "clean": "node -e \"require('fs').rmSync('renderer/.next',{recursive:true,force:true})\"",
+    "build": "npm run clean && nextron build",
+    "build:win": "npm run clean && nextron build --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.18",
+    "electron-serve": "^3.0.0",
+    "electron-store": "^11.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^20.11.16",
+    "@types/react": "^19.2.14",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "next": "^16.2.1",
+    "nextron": "^10.0.0",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.7.3"
+  }
+}
