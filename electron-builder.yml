@@ -1,5 +1,5 @@
-appId: edu.wisc.niedenthal.ducksoup
-productName: DuckSoup Capture Station
+appId: edu.wisc.niedenthal.labvideocall
+productName: Lab Video Call
 copyright: Copyright © 2026 Niedenthal Emotions Lab, UW–Madison
 directories:
   output: dist
@@ -19,6 +19,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: DuckSoup Capture Station
-  artifactName: DuckSoup-Capture-Station-Setup-${version}.${ext}
+  shortcutName: Lab Video Call
+  artifactName: Lab-Video-Call-Setup-${version}.${ext}
 publish: null
