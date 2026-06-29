@@ -1,0 +1,52 @@
+name: Build macOS app
+
+# Builds a universal (Intel + Apple Silicon) macOS app of Lab Video Call on a
+# GitHub-hosted macOS runner, so it can be built without owning a Mac.
+#
+# The build is UNSIGNED (no Apple Developer cert). On first launch the tester
+# must right-click the app -> Open (see the email instructions), because macOS
+# Gatekeeper blocks unsigned apps opened by double-click.
+
+on:
+  workflow_dispatch: # lets you trigger a build manually from the Actions tab
+  push:
+    branches: [main, ci/macos-build]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    env:
+      # Do not attempt to discover/use a code-signing identity in CI. Without
+      # this, electron-builder can hang or fail looking for an Apple cert.
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS app (universal)
+        run: npm run build:mac
+
+      - name: Upload macOS build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-video-call-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 30

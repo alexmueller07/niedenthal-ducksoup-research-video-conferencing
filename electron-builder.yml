@@ -21,4 +21,19 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Lab Video Call
   artifactName: Lab-Video-Call-Setup-${version}.${ext}
+mac:
+  category: public.app-category.education
+  icon: resources/icon.icns
+  target:
+    - target: dmg
+      arch: universal
+    - target: zip
+      arch: universal
+  artifactName: Lab-Video-Call-${version}-${arch}.${ext}
+  # macOS denies camera/mic access unless these usage strings are present in
+  # Info.plist. This is a video-call app, so they are required or no video/audio
+  # device prompt ever appears and getUserMedia fails silently.
+  extendInfo:
+    NSCameraUsageDescription: Lab Video Call uses the camera for the research video call.
+    NSMicrophoneUsageDescription: Lab Video Call uses the microphone for the research video call.
 publish: null
