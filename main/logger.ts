@@ -48,12 +48,15 @@ export interface EffectStateInput {
   faceFound: boolean
   fps: number
   cameraOn: boolean
+  /** Detected real-face expression at this telemetry tick (may be blank). */
+  expressionLabel?: string
+  smileType?: string
 }
 
 const EVENT_HEADER =
   'ts_iso,t_rel_ms,seq,actor_role,actor_slot,actor_name,event,target,param,value,detail\n'
 const STATE_HEADER =
-  'ts_iso,t_rel_ms,slot,participant_id,phase,alpha,voice_semitones,face_found,fps,camera_on\n'
+  'ts_iso,t_rel_ms,slot,participant_id,phase,alpha,voice_semitones,face_found,fps,camera_on,expression,smile_type\n'
 
 function csvField(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -151,6 +154,8 @@ export class SessionLogger {
         input.faceFound,
         Math.round(input.fps * 10) / 10,
         input.cameraOn,
+        csvField(input.expressionLabel ?? ''),
+        csvField(input.smileType ?? ''),
       ].join(',') + '\n',
     )
   }
@@ -162,8 +167,9 @@ export class SessionLogger {
   }
 
   /** Safe filename for a recording, namespaced under recordings/. */
-  recordingPath(label: string): string {
-    return path.join(this.recordingsDir, `${sanitize(label)}.webm`)
+  recordingPath(label: string, ext = 'webm'): string {
+    const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : 'webm'
+    return path.join(this.recordingsDir, `${sanitize(label)}.${safeExt}`)
   }
 
   async close(): Promise<void> {

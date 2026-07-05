@@ -15,17 +15,22 @@ import { useRouter } from 'next/router'
 import { SignalClient, SignalStatus } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { PRESETS } from '../lib/presets'
+import { pickRecorderFormat } from '../lib/recording'
 import {
   APP_VERSION,
   DEFAULT_PORT,
   NEUTRAL_EFFECTS,
 } from '../lib/protocol'
 import type {
+  AutomationRule,
   EffectState,
+  ExpressionState,
   Identity,
   LogRow,
   Phase,
   RosterState,
+  RuleExpression,
+  RuleRelease,
   SignalData,
   StreamMap,
   Telemetry,
@@ -82,6 +87,9 @@ export default function AdminDashboard() {
   const [logRows, setLogRows] = useState<LogRow[]>([])
   const [logFilter, setLogFilter] = useState('')
   const [eventCount, setEventCount] = useState(0)
+  const [expressions, setExpressions] = useState<Partial<Record<PSlot, ExpressionState>>>({})
+  const [rules, setRules] = useState<AutomationRule[]>([])
+  const [ruleActive, setRuleActive] = useState<Record<string, boolean>>({})
   const [micToggled, setMicToggled] = useState(false)
   const [micHolding, setMicHolding] = useState(false)
   const [micLevel, setMicLevel] = useState(0)
@@ -106,6 +114,10 @@ export default function AdminDashboard() {
   const bootedRef = useRef(false)
   const throttleRef = useRef<Map<string, number>>(new Map())
   const effectsTouchedRef = useRef<Map<PSlot, number>>(new Map())
+  // Rule edits: debounce the send, and ignore server echoes while typing so a
+  // slow round-trip cannot clobber an input mid-edit.
+  const rulesTouchedRef = useRef(0)
+  const rulesSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const phase: Phase = roster?.phase ?? 'waiting'
   const micLive = micToggled || micHolding
@@ -233,6 +245,21 @@ export default function AdminDashboard() {
               if (msg.slot === 'P1' || msg.slot === 'P2') {
                 setTelemetry((prev) => ({ ...prev, [msg.slot]: msg.data }))
               }
+              return
+            case 'expression':
+              if (msg.slot === 'P1' || msg.slot === 'P2') {
+                setExpressions((prev) => ({ ...prev, [msg.slot]: msg.data }))
+              }
+              return
+            case 'rules':
+              // Server echo / reconnect restore. Skip while the researcher is
+              // actively editing (their local state is newer).
+              if (performance.now() - rulesTouchedRef.current > 1500) {
+                setRules(msg.rules)
+              }
+              return
+            case 'rule-status':
+              setRuleActive(msg.active)
               return
             case 'stream-map':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
@@ -363,14 +390,13 @@ export default function AdminDashboard() {
       const part = (recPartsRef.current.get(key) ?? 0) + 1
       recPartsRef.current.set(key, part)
       const fullLabel = part > 1 ? `${label}_part${part}` : label
-      const opened = await ipcInvoke<{ id: string; path: string }>('rec:open', fullLabel)
+      // MP4 preferred (RA request); falls back to WebM if this Chromium can't mux it.
+      const format = pickRecorderFormat(stream.getVideoTracks().length > 0)
+      const opened = await ipcInvoke<{ id: string; path: string }>('rec:open', fullLabel, format.ext)
       if (!opened) return
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-        ? 'video/webm;codecs=vp9,opus'
-        : 'video/webm'
       const rec = new MediaRecorder(
         stream,
-        stream.getVideoTracks().length > 0 ? { mimeType: mime } : { mimeType: 'audio/webm' },
+        format.mimeType ? { mimeType: format.mimeType } : undefined,
       )
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) void appendChunk(key, opened.id, e.data)
@@ -385,7 +411,10 @@ export default function AdminDashboard() {
       }
       rec.start(1000)
       recordersRef.current.set(key, { rec, id: opened.id, part })
-      setRecState((prev) => ({ ...prev, [key]: { label: fullLabel, bytes: 0, active: true } }))
+      setRecState((prev) => ({
+        ...prev,
+        [key]: { label: `${fullLabel}.${format.ext}`, bytes: 0, active: true },
+      }))
     },
     [appendChunk],
   )
@@ -459,6 +488,21 @@ export default function AdminDashboard() {
     clientRef.current?.send({ type: 'set-phase', phase: 'ended' })
     // Give recorders a beat to flush, then write the manifest.
     setTimeout(() => void writeManifest(), 1500)
+  }
+
+  /** Sessions are restartable (RA request). Recordings continue as _partN files. */
+  function restartSession(to: 'live' | 'waiting') {
+    clientRef.current?.send({ type: 'set-phase', phase: to })
+  }
+
+  /** Replace the rule list locally and (debounced) on the server. */
+  function updateRules(next: AutomationRule[]) {
+    rulesTouchedRef.current = performance.now()
+    setRules(next)
+    if (rulesSendTimer.current) clearTimeout(rulesSendTimer.current)
+    rulesSendTimer.current = setTimeout(() => {
+      clientRef.current?.send({ type: 'set-rules', rules: next })
+    }, 400)
   }
 
   async function writeManifest() {
@@ -565,9 +609,27 @@ export default function AdminDashboard() {
               </button>
             )}
             {phase === 'ended' && (
-              <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800">
-                Session complete — data saved
-              </span>
+              <>
+                <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800">
+                  Session complete — data saved
+                </span>
+                <button
+                  type="button"
+                  onClick={() => restartSession('live')}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold transition hover:bg-emerald-500"
+                  title="Start the conversation again with a fresh clock. New recordings continue as _part2 files — nothing is overwritten."
+                >
+                  ↻ Restart conversation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => restartSession('waiting')}
+                  className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition hover:bg-gray-700"
+                  title="Send participants back to the waiting room"
+                >
+                  Waiting room
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -593,6 +655,7 @@ export default function AdminDashboard() {
               slot={slot}
               info={roster?.slots[slot] ?? null}
               telemetry={telemetry[slot]}
+              expression={expressions[slot]}
               streams={streams[slot]}
               effects={effectsUi[slot]}
               onEffect={(param, value, force) => sendEffect(slot, param, value, force)}
@@ -717,6 +780,18 @@ export default function AdminDashboard() {
             )}
           </Card>
 
+          {/* Automation rules */}
+          <RulesCard
+            rules={rules}
+            active={ruleActive}
+            phase={phase}
+            names={{
+              P1: roster?.slots.P1?.identity.name || 'Participant 1',
+              P2: roster?.slots.P2?.identity.name || 'Participant 2',
+            }}
+            onChange={updateRules}
+          />
+
           {/* Recordings */}
           <Card
             title="Recordings"
@@ -738,7 +813,7 @@ export default function AdminDashboard() {
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${r.active ? 'animate-pulse bg-red-500' : 'bg-gray-600'}`}
                       />
-                      {r.label}.webm
+                      {r.label}
                     </span>
                     <span className="tabular-nums text-gray-500">{fmtBytes(r.bytes)}</span>
                   </li>
@@ -788,7 +863,8 @@ export default function AdminDashboard() {
             <h2 className="text-base font-semibold">End the session?</h2>
             <p className="mt-2 text-sm text-gray-400">
               Participants will see an &ldquo;ended&rdquo; screen, all recordings stop and
-              finalize, and the manifest is written. This cannot be restarted.
+              finalize, and the manifest is written. If needed you can restart the
+              conversation afterwards — recordings continue as separate files.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -819,6 +895,7 @@ interface PanelProps {
   slot: PSlot
   info: RosterState['slots'][PSlot] | null
   telemetry: Telemetry | undefined
+  expression: ExpressionState | undefined
   streams: SlotStreams
   effects: EffectState
   onEffect: (param: keyof EffectState, value: number, force?: boolean) => void
@@ -830,6 +907,7 @@ function ParticipantPanel({
   slot,
   info,
   telemetry,
+  expression,
   streams,
   effects,
   onEffect,
@@ -968,6 +1046,7 @@ function ParticipantPanel({
             <Chip ok={telemetry.faceFound} label={telemetry.faceFound ? 'face tracked' : 'no face'} />
             <Chip ok={telemetry.fps >= 20} label={`${Math.round(telemetry.fps)} fps`} />
             <Chip ok={!!applied} label={applied ? 'applied ✓' : 'pending…'} />
+            {expression && <ExpressionChip expression={expression} />}
           </div>
         )}
         {/* Monitor volume */}
@@ -1040,6 +1119,341 @@ function ParticipantPanel({
         </div>
       </div>
     </section>
+  )
+}
+
+// ===== Automation rules (no-code rule builder) =====
+//
+// Plain-language rows a non-programmer can read left to right:
+//   WHEN  Participant 1  is smiling  for 1 s   THEN  Participant 2  Smile + (subtle)   when it stops: back to previous
+//   AT    5:00                                 THEN  Participant 1  Frown (subtle)     revert after 30 s
+// Edits apply immediately (including mid-call); execution happens on the
+// session server and every firing is written to events.csv.
+
+const EXPRESSION_OPTIONS: Array<{ value: RuleExpression; label: string }> = [
+  { value: 'smiling', label: 'is smiling (any type)' },
+  { value: 'reward-smile', label: 'shows a reward smile' },
+  { value: 'affiliative-smile', label: 'shows an affiliative smile' },
+  { value: 'dominance-smile', label: 'shows a dominance smile' },
+  { value: 'frowning', label: 'is frowning' },
+]
+
+const RELEASE_OPTIONS: Array<{ value: RuleRelease; label: string }> = [
+  { value: 'previous', label: 'back to how they were' },
+  { value: 'neutral', label: 'reset to neutral' },
+  { value: 'none', label: 'leave the change on' },
+]
+
+function ruleId(): string {
+  return `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+}
+
+function newExpressionRule(watch: PSlot, target: PSlot): AutomationRule {
+  return {
+    id: ruleId(),
+    enabled: true,
+    trigger: { kind: 'expression', slot: watch, expression: 'smiling', holdSec: 1 },
+    action: { slot: target, presetId: 'smile-subtle' },
+    release: 'previous',
+    revertAfterSec: null,
+  }
+}
+
+function newTimerRule(): AutomationRule {
+  return {
+    id: ruleId(),
+    enabled: true,
+    trigger: { kind: 'timer', atSec: 300 },
+    action: { slot: 'P1', presetId: 'smile-subtle' },
+    release: 'previous',
+    revertAfterSec: null,
+  }
+}
+
+function RulesCard({
+  rules,
+  active,
+  phase,
+  names,
+  onChange,
+}: {
+  rules: AutomationRule[]
+  active: Record<string, boolean>
+  phase: Phase
+  names: Record<PSlot, string>
+  onChange: (rules: AutomationRule[]) => void
+}) {
+  const patch = (id: string, fn: (r: AutomationRule) => AutomationRule) =>
+    onChange(rules.map((r) => (r.id === id ? fn(r) : r)))
+  const remove = (id: string) => onChange(rules.filter((r) => r.id !== id))
+
+  const sel =
+    'rounded-md border border-gray-700 bg-gray-800 px-1.5 py-1 text-[11px] outline-none transition focus:border-sky-500'
+  const num =
+    'w-12 rounded-md border border-gray-700 bg-gray-800 px-1.5 py-1 text-center text-[11px] outline-none transition focus:border-sky-500'
+
+  const slotSelect = (value: PSlot, onSel: (s: PSlot) => void) => (
+    <select className={sel} value={value} onChange={(e) => onSel(e.target.value as PSlot)}>
+      <option value="P1">P1 · {names.P1}</option>
+      <option value="P2">P2 · {names.P2}</option>
+    </select>
+  )
+
+  const presetSelect = (value: string, onSel: (id: string) => void) => (
+    <select className={sel} value={value} onChange={(e) => onSel(e.target.value)}>
+      {PRESETS.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.label}
+        </option>
+      ))}
+    </select>
+  )
+
+  return (
+    <Card
+      title="Automation rules"
+      subtitle="If-this-then-that, no code needed. Editable any time — even mid-conversation. Rules run only while the session is LIVE."
+    >
+      {rules.length === 0 && (
+        <p className="mb-2 text-xs text-gray-600">
+          No rules yet. Try “Mirror smiles”: when one participant genuinely smiles, the
+          other&apos;s smile is subtly lifted.
+        </p>
+      )}
+
+      <ul className="space-y-2">
+        {rules.map((rule) => {
+          const firing = phase === 'live' && !!active[rule.id]
+          return (
+            <li
+              key={rule.id}
+              className={
+                'rounded-xl border p-2.5 transition ' +
+                (firing
+                  ? 'border-violet-500/60 bg-violet-950/30'
+                  : rule.enabled
+                    ? 'border-gray-800 bg-gray-950/40'
+                    : 'border-gray-800 bg-gray-950/40 opacity-50')
+              }
+            >
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={rule.enabled}
+                  onChange={(e) => patch(rule.id, (r) => ({ ...r, enabled: e.target.checked }))}
+                  className="h-3.5 w-3.5 accent-violet-500"
+                  title={rule.enabled ? 'Rule is on' : 'Rule is off'}
+                />
+                {rule.trigger.kind === 'expression' ? (
+                  <>
+                    <span className="font-semibold text-gray-300">WHEN</span>
+                    {slotSelect(rule.trigger.slot, (s) =>
+                      patch(rule.id, (r) => ({
+                        ...r,
+                        trigger: { ...(r.trigger as Extract<AutomationRule['trigger'], { kind: 'expression' }>), slot: s },
+                      })),
+                    )}
+                    <select
+                      className={sel}
+                      value={rule.trigger.expression}
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({
+                          ...r,
+                          trigger: {
+                            ...(r.trigger as Extract<AutomationRule['trigger'], { kind: 'expression' }>),
+                            expression: e.target.value as RuleExpression,
+                          },
+                        }))
+                      }
+                    >
+                      {EXPRESSION_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span>for</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={0.5}
+                      className={num}
+                      value={rule.trigger.holdSec}
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({
+                          ...r,
+                          trigger: {
+                            ...(r.trigger as Extract<AutomationRule['trigger'], { kind: 'expression' }>),
+                            holdSec: Math.max(0, Number(e.target.value) || 0),
+                          },
+                        }))
+                      }
+                    />
+                    <span>s</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-gray-300">AT</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={180}
+                      className={num}
+                      value={Math.floor(rule.trigger.atSec / 60)}
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({
+                          ...r,
+                          trigger: {
+                            kind: 'timer',
+                            atSec:
+                              Math.max(0, Number(e.target.value) || 0) * 60 +
+                              ((r.trigger as Extract<AutomationRule['trigger'], { kind: 'timer' }>).atSec % 60),
+                          },
+                        }))
+                      }
+                    />
+                    <span>:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      className={num}
+                      value={rule.trigger.atSec % 60}
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({
+                          ...r,
+                          trigger: {
+                            kind: 'timer',
+                            atSec:
+                              Math.floor(
+                                (r.trigger as Extract<AutomationRule['trigger'], { kind: 'timer' }>).atSec / 60,
+                              ) *
+                                60 +
+                              Math.min(59, Math.max(0, Number(e.target.value) || 0)),
+                          },
+                        }))
+                      }
+                    />
+                    <span className="text-gray-600">into the conversation</span>
+                  </>
+                )}
+                {firing && (
+                  <span className="ml-auto rounded-full bg-violet-600/30 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/40">
+                    ● firing
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => remove(rule.id)}
+                  className={`${firing ? '' : 'ml-auto '}text-gray-600 transition hover:text-red-400`}
+                  title="Delete rule"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-[11px] text-gray-400">
+                <span className="font-semibold text-gray-300">THEN</span>
+                {slotSelect(rule.action.slot, (s) =>
+                  patch(rule.id, (r) => ({ ...r, action: { ...r.action, slot: s } })),
+                )}
+                <span>gets</span>
+                {presetSelect(rule.action.presetId, (id) =>
+                  patch(rule.id, (r) => ({ ...r, action: { ...r.action, presetId: id } })),
+                )}
+                {rule.trigger.kind === 'expression' ? (
+                  <>
+                    <span>· when it stops:</span>
+                    <select
+                      className={sel}
+                      value={rule.release}
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({ ...r, release: e.target.value as RuleRelease }))
+                      }
+                    >
+                      {RELEASE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <span>· revert after</span>
+                    <input
+                      type="number"
+                      min={1}
+                      className={num}
+                      value={rule.revertAfterSec ?? ''}
+                      placeholder="—"
+                      onChange={(e) =>
+                        patch(rule.id, (r) => ({
+                          ...r,
+                          revertAfterSec:
+                            e.target.value === '' ? null : Math.max(1, Number(e.target.value) || 1),
+                        }))
+                      }
+                    />
+                    <span className="text-gray-600">s (blank = stays on)</span>
+                  </>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange([...rules, newExpressionRule('P1', 'P2')])}
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+        >
+          + expression rule
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange([...rules, newTimerRule()])}
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+        >
+          + timer rule
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onChange([...rules, newExpressionRule('P1', 'P2'), newExpressionRule('P2', 'P1')])
+          }
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+          title="When either participant genuinely smiles, the partner's smile is subtly lifted"
+        >
+          + template: mirror smiles
+        </button>
+      </div>
+    </Card>
+  )
+}
+
+function ExpressionChip({ expression }: { expression: ExpressionState }) {
+  const face =
+    expression.label === 'smiling' ? '🙂' : expression.label === 'frowning' ? '🙁' : '😐'
+  const text =
+    expression.label === 'smiling' && expression.smileType
+      ? `smiling · ${expression.smileType}`
+      : expression.label
+  return (
+    <span
+      className={
+        'rounded-full px-2 py-0.5 font-medium backdrop-blur ' +
+        (expression.label === 'neutral'
+          ? 'bg-gray-700/50 text-gray-300'
+          : 'bg-sky-600/30 text-sky-200')
+      }
+      title={`detected real expression — smile ${expression.smile}, frown ${expression.frown}, asymmetry ${expression.asymmetry}, eye constriction ${expression.eyeConstriction}`}
+    >
+      {face} {text}
+    </span>
   )
 }
 

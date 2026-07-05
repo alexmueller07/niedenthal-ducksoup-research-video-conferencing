@@ -11,6 +11,7 @@
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
 import { getPreset } from './presets'
+import { pickRecorderFormat, type RecorderFormat } from './recording'
 import type {
   ConnectionStatus,
   RecordingFile,
@@ -53,6 +54,7 @@ export class CaptureStation {
   private cleanRecorder: MediaRecorder | null = null
   private alteredChunks: Blob[] = []
   private cleanChunks: Blob[] = []
+  private recFormat: RecorderFormat = { mimeType: 'video/webm', ext: 'webm' }
   private timer: ReturnType<typeof setInterval> | null = null
   private elapsed = 0
   private startedAt: string | null = null
@@ -194,6 +196,7 @@ export class CaptureStation {
     }
     this.alteredChunks = []
     this.cleanChunks = []
+    this.recFormat = pickRecorderFormat(true)
     this.alteredRecorder = this.makeRecorder(this.alteredStream, this.alteredChunks)
     this.cleanRecorder = this.makeRecorder(this.camera, this.cleanChunks)
     this.startedAt = new Date().toISOString()
@@ -210,10 +213,10 @@ export class CaptureStation {
   }
 
   private makeRecorder(stream: MediaStream, sink: Blob[]): MediaRecorder {
-    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-      ? 'video/webm;codecs=vp9,opus'
-      : 'video/webm'
-    const rec = new MediaRecorder(stream, { mimeType: mime })
+    const rec = new MediaRecorder(
+      stream,
+      this.recFormat.mimeType ? { mimeType: this.recFormat.mimeType } : undefined,
+    )
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) sink.push(e.data)
     }
@@ -236,10 +239,11 @@ export class CaptureStation {
     this.alteredRecorder = null
     this.cleanRecorder = null
 
+    const blobType = this.recFormat.mimeType || 'video/webm'
     try {
       await this.saveSession(
-        new Blob(altered, { type: 'video/webm' }),
-        new Blob(clean, { type: 'video/webm' }),
+        new Blob(altered, { type: blobType }),
+        new Blob(clean, { type: blobType }),
         this.startedAt,
         stoppedAt,
       )
@@ -281,7 +285,7 @@ export class CaptureStation {
         participantId: cfg.participantId,
       })
       for (const [kind, blob] of pairs) {
-        const filename = `${cfg.dyadId}_${cfg.participantId}_${kind}.webm`
+        const filename = `${cfg.dyadId}_${cfg.participantId}_${kind}.${this.recFormat.ext}`
         const buffer = await blob.arrayBuffer()
         const path = await ipc.invoke<string>('session:save-recording', { dir, filename, buffer })
         files.push({ kind, filename, path, bytes: blob.size })
@@ -294,7 +298,7 @@ export class CaptureStation {
     } else {
       // Browser fallback: download both files.
       for (const [kind, blob] of pairs) {
-        const filename = `${cfg.dyadId || 'session'}_${cfg.participantId || 'p'}_${kind}.webm`
+        const filename = `${cfg.dyadId || 'session'}_${cfg.participantId || 'p'}_${kind}.${this.recFormat.ext}`
         this.download(blob, filename)
         files.push({ kind, filename, path: filename, bytes: blob.size })
         this.log(`Downloaded ${kind}: ${(blob.size / 1048576).toFixed(1)} MB`, 'success')

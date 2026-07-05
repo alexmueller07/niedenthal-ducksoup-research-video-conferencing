@@ -15,18 +15,10 @@ export type RecordingStatus = 'idle' | 'recording' | 'saving'
 /**
  * A named emotion-modification condition. These are the experiment's independent
  * variable, so they are first-class and labelled, never just a raw slider value.
+ * Defined in main/presets.ts (shared with the session server's rule engine).
  */
-export interface ModificationPreset {
-  id: string
-  label: string
-  description: string
-  /** Smile intensity. 1.0 neutral, >1 more smile, <1 frown. */
-  alpha: number
-  /** Voice pitch shift in semitones. 0 = neutral. */
-  voiceSemitones: number
-  /** Whether this is the sham/control condition (no visible change). */
-  isControl?: boolean
-}
+import type { ModificationPreset } from '../../main/presets'
+export type { ModificationPreset }
 
 /** Everything the experimenter sets before a capture station goes live. */
 export interface SessionConfig {

@@ -43,12 +43,78 @@ export interface EffectState {
 
 export const NEUTRAL_EFFECTS: EffectState = { alpha: 1, voiceSemitones: 0 }
 
+// ---- Expression detection ----
+//
+// Detected from the participant's REAL face (the raw camera frame), never from
+// the morphed output — so a rule like "when P1 smiles" reacts to what the
+// participant actually did, not to what DuckSoup drew.
+//
+// The smile sub-types follow the lab's reward/affiliative/dominance framework
+// (Martin et al. 2021, Affective Science; Rychlowska et al. 2021, Cognition &
+// Emotion). The classifier is a heuristic on facial blendshapes — a starting
+// point to calibrate against lab data, not a validated instrument.
+
+export type SmileType = 'reward' | 'affiliative' | 'dominance'
+export type ExpressionLabel = 'neutral' | 'smiling' | 'frowning'
+
+export interface ExpressionState {
+  label: ExpressionLabel
+  /** Heuristic sub-type; only meaningful while `label` is 'smiling'. */
+  smileType: SmileType | null
+  /** Smoothed blendshape scores, 0..1. */
+  smile: number
+  frown: number
+  asymmetry: number
+  eyeConstriction: number
+  lipPress: number
+}
+
 /** 1 Hz applied-state report from each participant machine (ground truth). */
 export interface Telemetry extends EffectState {
   faceFound: boolean
   /** Render-loop frames per second of the morph pipeline. */
   fps: number
   cameraOn: boolean
+  /** Latest detected real-face expression (also streamed at ~5 Hz separately). */
+  expression?: ExpressionState | null
+}
+
+// ---- Automation rules (the no-code "if this, then that" builder) ----
+//
+// Rules are authored in the researcher dashboard, stored and evaluated on the
+// session server, and can be edited at any moment — including mid-call. Two
+// trigger kinds:
+//   expression — "while P1 is smiling (held ≥ holdSec) → apply preset to P2",
+//                with a configurable release behaviour when the expression stops
+//   timer      — "at mm:ss into the conversation → apply preset", optionally
+//                reverting after revertAfterSec seconds
+// Rules only run while the session phase is 'live'.
+
+export type PSlot = 'P1' | 'P2'
+
+export type RuleExpression =
+  | 'smiling'
+  | 'reward-smile'
+  | 'affiliative-smile'
+  | 'dominance-smile'
+  | 'frowning'
+
+export type RuleTrigger =
+  | { kind: 'expression'; slot: PSlot; expression: RuleExpression; holdSec: number }
+  | { kind: 'timer'; atSec: number }
+
+/** What happens when an expression rule's condition stops holding. */
+export type RuleRelease = 'previous' | 'neutral' | 'none'
+
+export interface AutomationRule {
+  id: string
+  enabled: boolean
+  trigger: RuleTrigger
+  action: { slot: PSlot; presetId: string }
+  /** Expression rules: behaviour on release. Ignored for timer rules. */
+  release: RuleRelease
+  /** Timer rules: revert to the pre-rule state after N seconds (null = stay). */
+  revertAfterSec: number | null
 }
 
 export interface SlotInfo {
@@ -98,6 +164,8 @@ export type ClientMessage =
   | { type: 'signal'; to: SlotId; data: SignalData }
   | { type: 'ready'; camera: boolean; faceModel: boolean; voice: boolean }
   | { type: 'telemetry'; data: Telemetry }
+  /** ~5 Hz real-face expression updates (sent only when the state changes). */
+  | { type: 'expression'; data: ExpressionState }
   | { type: 'stream-map'; map: StreamMap }
   /** Generic client-side event for the log (blur/focus, escape dialog, rtc state…). */
   | {
@@ -115,6 +183,8 @@ export type ClientMessage =
   | { type: 'banner'; text: string; durationSec: number }
   | { type: 'set-phase'; phase: Phase }
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
+  /** Replace the full automation rule list (rules are editable mid-call). */
+  | { type: 'set-rules'; rules: AutomationRule[] }
 
 // ---- Server → Client ----
 
@@ -150,8 +220,13 @@ export type ServerMessage =
   | { type: 'phase'; phase: Phase; sessionStartedAt: string | null }
   | { type: 'peer-left'; slot: SlotId }
   | { type: 'telemetry'; slot: SlotId; data: Telemetry }
+  | { type: 'expression'; slot: SlotId; data: ExpressionState }
   | { type: 'stream-map'; slot: SlotId; map: StreamMap }
   | { type: 'log-row'; row: LogRow }
+  /** Server echo of the current rule list (also sent to a reconnecting admin). */
+  | { type: 'rules'; rules: AutomationRule[] }
+  /** Which rules are currently holding/fired, for the dashboard indicator. */
+  | { type: 'rule-status'; active: Record<string, boolean> }
   | { type: 'rejected'; reason: string }
 
 export function parseClientMessage(raw: string): ClientMessage | null {

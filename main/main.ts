@@ -18,6 +18,8 @@ import {
   shell,
   globalShortcut,
   powerSaveBlocker,
+  session,
+  systemPreferences,
   BrowserWindow,
 } from 'electron'
 import serve from 'electron-serve'
@@ -54,6 +56,28 @@ function loadRoute(win: BrowserWindow, route: string) {
 ;(async () => {
   await app.whenReady()
   devPort = process.argv[2] || devPort
+
+  // ---- Camera/mic permissions (fixes the macOS "allow access" prompt spam) ----
+  //
+  // Two layers were prompting independently:
+  //  1. macOS TCC: ask once, up front, via the system API instead of letting
+  //     each getUserMedia call race its own prompt.
+  //  2. Chromium's own permission check: grant media requests outright — this
+  //     is a kiosk lab app, the OS-level permission is the real gate.
+  // Note for Ben: on an UNSIGNED (ad-hoc) build, macOS forgets the grant when a
+  // differently-signed build replaces the app, so a fresh install may ask once
+  // more. That's a code-signing limitation, not an app bug.
+  if (process.platform === 'darwin') {
+    try {
+      await systemPreferences.askForMediaAccess('microphone')
+      await systemPreferences.askForMediaAccess('camera')
+    } catch {
+      /* user denied — getUserMedia will surface the error in-app */
+    }
+  }
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
+    cb(['media', 'fullscreen', 'display-capture'].includes(permission))
+  })
 
   const win = createWindow('lab-call', {
     width: 1200,
@@ -237,9 +261,9 @@ interface RecSink {
 const recordings = new Map<string, RecSink>()
 let nextRecId = 1
 
-ipcMain.handle('rec:open', (_e, label: string) => {
+ipcMain.handle('rec:open', (_e, label: string, ext?: string) => {
   if (!server) throw new Error('Session server is not running')
-  const filePath = server.logger.recordingPath(label)
+  const filePath = server.logger.recordingPath(label, ext ?? 'webm')
   const id = `rec${nextRecId++}`
   recordings.set(id, { stream: fs.createWriteStream(filePath), path: filePath, bytes: 0 })
   server.logger.event({ event: 'recording_started', target: label, detail: { path: filePath } })
