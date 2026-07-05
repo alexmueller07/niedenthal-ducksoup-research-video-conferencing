@@ -63,18 +63,34 @@ const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
 const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
 
-// ---- Detection tuning (starting points; hysteresis avoids flicker) ----
+// ---- Detection tuning ----
+//
+// Calibrated 2026-07 against the lab's five example photos (smile_examples/):
+// FaceLandmarker blendshapes were measured for each image and the thresholds
+// below chosen so all five classify correctly. Findings that drove the design:
+//   - a relaxed "straight" face can score mouthSmile ≈ 0.54, so the smiling
+//     threshold must sit well above that;
+//   - cheekSquint and noseSneer are ~0 on every image (dead features here), and
+//     eyeSquint is contaminated by blinking/looking down — so the classic
+//     Duchenne eye cue is NOT usable as the reward marker with this model;
+//   - what actually separates the three smile types in the examples:
+//       reward      → mouth opens / teeth show (mouthUpperUp ≈ 0.65 vs ≈ 0.005)
+//       dominance   → left/right asymmetry of smile + lip press (rel. ≈ 0.21)
+//       affiliative → strong smile with closed lips and none of the above;
+//   - the frown example peaks at mouthFrown ≈ 0.12 with smile ≈ 0, so frowning
+//     uses a low mouthFrown threshold gated on the absence of a smile.
+// Still a heuristic — recalibrate when new example photos land.
 export const DETECTION_TUNING = {
-  smileOn: 0.35,
-  smileOff: 0.22,
-  frownOn: 0.18,
-  frownOff: 0.1,
-  /** Asymmetry (|left − right| smile) above this reads as a dominance smile. */
-  dominanceAsymmetry: 0.18,
-  /** Nose sneer above this also reads as dominance. */
-  dominanceSneer: 0.25,
-  /** Eye/cheek constriction above this reads as a reward (Duchenne) smile. */
-  rewardEyeConstriction: 0.32,
+  smileOn: 0.6,
+  smileOff: 0.45,
+  frownOn: 0.08,
+  frownOff: 0.04,
+  /** A frown only counts while the smile signal is below this. */
+  frownSmileGate: 0.15,
+  /** Openness (upper-lip raise + jaw + lower-lip drop) above this → reward. */
+  rewardOpenness: 0.2,
+  /** Relative L/R asymmetry (smile + lip press, ÷ smile level) above this → dominance. */
+  dominanceRelAsymmetry: 0.12,
   /** EMA time constant for blendshape smoothing. */
   emaTauMs: 220,
   /** A new label/sub-type must persist this long before it is published. */
@@ -283,29 +299,45 @@ export class FaceMorphProcessor {
     const smileR = ema('smileR', g('mouthSmileRight'))
     const smile = (smileL + smileR) / 2
     const frown = ema('frown', (g('mouthFrownLeft') + g('mouthFrownRight')) / 2)
-    const asymmetry = Math.abs(smileL - smileR)
+    const pressL = ema('pressL', g('mouthPressLeft'))
+    const pressR = ema('pressR', g('mouthPressRight'))
+    const lipPress = (pressL + pressR) / 2
+    // Openness: how much the smile bares teeth (the reward-smile separator).
+    const openness = ema(
+      'open',
+      (g('mouthUpperUpLeft') + g('mouthUpperUpRight')) / 2 +
+        g('jawOpen') * 0.8 +
+        ((g('mouthLowerDownLeft') + g('mouthLowerDownRight')) / 2) * 0.8,
+    )
+    // Combined smile + lip-press asymmetry, relative to how strong the smile
+    // is (the dominance-smile separator).
+    const asymmetry = Math.abs(smileL - smileR) + Math.abs(pressL - pressR)
+    const relAsymmetry = asymmetry / Math.max(0.3, Math.max(smileL, smileR))
+    // Kept for logging/telemetry even though it no longer drives the
+    // classifier (unreliable on lab webcams — see calibration note above).
     const eyeConstriction = ema(
       'eye',
       (g('eyeSquintLeft') + g('eyeSquintRight') + g('cheekSquintLeft') + g('cheekSquintRight')) / 4,
     )
-    const lipPress = ema('press', (g('mouthPressLeft') + g('mouthPressRight')) / 2)
-    const sneer = ema('sneer', (g('noseSneerLeft') + g('noseSneerRight')) / 2)
 
-    // Label with hysteresis: harder to enter a state than to stay in it.
+    // Label with hysteresis: harder to enter a state than to stay in it. A
+    // frown needs the smile signal gone (a relaxed face can score smile ≈ 0.5).
     const T = DETECTION_TUNING
+    const frowning = (on: boolean) =>
+      frown >= (on ? T.frownOn : T.frownOff) && smile < T.frownSmileGate
     let label: ExpressionLabel = this.publishedLabel
     if (this.publishedLabel === 'smiling') {
-      label = smile >= T.smileOff ? 'smiling' : frown >= T.frownOn ? 'frowning' : 'neutral'
+      label = smile >= T.smileOff ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
     } else if (this.publishedLabel === 'frowning') {
-      label = frown >= T.frownOff ? 'frowning' : smile >= T.smileOn ? 'smiling' : 'neutral'
+      label = frowning(false) ? 'frowning' : smile >= T.smileOn ? 'smiling' : 'neutral'
     } else {
-      label = smile >= T.smileOn ? 'smiling' : frown >= T.frownOn ? 'frowning' : 'neutral'
+      label = smile >= T.smileOn ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
     }
 
     let smileType: SmileType | null = null
     if (label === 'smiling') {
-      if (asymmetry >= T.dominanceAsymmetry || sneer >= T.dominanceSneer) smileType = 'dominance'
-      else if (eyeConstriction >= T.rewardEyeConstriction) smileType = 'reward'
+      if (openness >= T.rewardOpenness) smileType = 'reward'
+      else if (relAsymmetry >= T.dominanceRelAsymmetry) smileType = 'dominance'
       else smileType = 'affiliative'
     }
 
@@ -327,9 +359,10 @@ export class FaceMorphProcessor {
       smileType: this.publishedLabel === 'smiling' ? this.publishedType : null,
       smile: round2(smile),
       frown: round2(frown),
-      asymmetry: round2(asymmetry),
+      asymmetry: round2(relAsymmetry),
       eyeConstriction: round2(eyeConstriction),
       lipPress: round2(lipPress),
+      openness: round2(openness),
     }
   }
 

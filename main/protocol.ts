@@ -67,6 +67,8 @@ export interface ExpressionState {
   asymmetry: number
   eyeConstriction: number
   lipPress: number
+  /** Mouth openness (teeth showing): upper-lip raise + jaw open + lower-lip drop. */
+  openness: number
 }
 
 /** 1 Hz applied-state report from each participant machine (ground truth). */

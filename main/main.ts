@@ -150,7 +150,10 @@ async function shutdownServer() {
 
 const globalShortcuts = {
   register() {
-    globalShortcut.register('Control+Shift+Q', () => {
+    // May fail when several instances run on one machine (only one process can
+    // hold a global shortcut) — the per-window before-input-event handler and
+    // the renderer keydown listener cover that case.
+    globalShortcut.register('CommandOrControl+Shift+Q', () => {
       mainWin?.webContents.send('escape:open')
     })
   },
@@ -173,6 +176,13 @@ function lockdown(win: BrowserWindow) {
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
     const ctrlish = input.control || input.meta
+    // Escape combo handled per-window so it works even when another instance
+    // on this machine owns the global shortcut (single-laptop testing).
+    if (ctrlish && input.shift && (input.key === 'q' || input.key === 'Q')) {
+      event.preventDefault()
+      win.webContents.send('escape:open')
+      return
+    }
     if (BLOCKED_KEYS.has(input.key)) event.preventDefault()
     // Reload, close-tab, new-window, devtools, zoom — all swallowed.
     if (ctrlish && ['r', 'R', 'w', 'W', 'n', 'N', '+', '-', '0'].includes(input.key)) {
