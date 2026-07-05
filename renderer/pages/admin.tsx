@@ -99,6 +99,7 @@ export default function AdminDashboard() {
   const [recState, setRecState] = useState<Record<string, RecState>>({})
   const [nowTick, setNowTick] = useState(Date.now())
   const [endConfirm, setEndConfirm] = useState(false)
+  const [startConfirm, setStartConfirm] = useState(false)
   const [adminName, setAdminName] = useState('')
 
   const clientRef = useRef<SignalClient | null>(null)
@@ -525,6 +526,7 @@ export default function AdminDashboard() {
 
   const sessionDir = server?.sessionDir ?? null
   const bothReady = PSLOTS.every((s) => roster?.slots[s]?.ready)
+  const bothConnected = PSLOTS.every((s) => !!roster?.slots[s])
   const elapsedSec = roster?.sessionStartedAt
     ? Math.max(0, Math.floor((nowTick - Date.parse(roster.sessionStartedAt)) / 1000))
     : 0
@@ -591,10 +593,16 @@ export default function AdminDashboard() {
             {phase === 'waiting' && (
               <button
                 type="button"
-                onClick={startSession}
-                disabled={!bothReady}
+                onClick={() => (bothReady ? startSession() : setStartConfirm(true))}
+                disabled={!bothConnected}
                 className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold transition enabled:hover:bg-emerald-500 disabled:opacity-40"
-                title={bothReady ? 'Both participants are ready' : 'Waiting for both participants to be ready'}
+                title={
+                  !bothConnected
+                    ? 'Waiting for both participants to connect'
+                    : bothReady
+                      ? 'Both participants are ready'
+                      : 'Some readiness checks are still pending — you will be asked to confirm'
+                }
               >
                 ▶ Start conversation
               </button>
@@ -855,6 +863,39 @@ export default function AdminDashboard() {
           </Card>
         </div>
       </main>
+
+      {/* ===== Start-anyway confirm (readiness checks incomplete) ===== */}
+      {startConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-[440px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+            <h2 className="text-base font-semibold">Start with pending checks?</h2>
+            <p className="mt-2 text-sm text-gray-400">
+              Not every readiness check (camera · face model · voice) has reported green
+              yet. You can start anyway — video or audio may be missing for a participant
+              until their pipeline finishes.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setStartConfirm(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStartConfirm(false)
+                  startSession()
+                }}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500"
+              >
+                Start anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== End-session confirm ===== */}
       {endConfirm && (
@@ -1212,7 +1253,7 @@ function RulesCard({
   return (
     <Card
       title="Automation rules"
-      subtitle="If-this-then-that, no code needed. Editable any time — even mid-conversation. Rules run only while the session is LIVE."
+      subtitle="If-this-then-that, no code needed. Editable any time — even mid-conversation. Expression rules also run in the waiting room; timer rules count from conversation start."
     >
       {rules.length === 0 && (
         <p className="mb-2 text-xs text-gray-600">
@@ -1223,7 +1264,7 @@ function RulesCard({
 
       <ul className="space-y-2">
         {rules.map((rule) => {
-          const firing = phase === 'live' && !!active[rule.id]
+          const firing = (phase === 'live' || phase === 'waiting') && !!active[rule.id]
           return (
             <li
               key={rule.id}

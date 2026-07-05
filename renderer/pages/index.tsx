@@ -34,6 +34,9 @@ export default function SignInPage() {
   }, [])
 
   const isAdmin = accessCode.trim().toLowerCase() === 'admin'
+  // Access code "test" joins as a participant running on bundled example
+  // faces instead of the camera, with a switcher panel (single-laptop testing).
+  const isTest = accessCode.trim().toLowerCase() === 'test'
 
   async function join() {
     if (joining) return
@@ -49,6 +52,7 @@ export default function SignInPage() {
       'labcall',
       JSON.stringify({
         role,
+        testMode: isTest,
         serverAddr: addr,
         identity: {
           name: name.trim(),
@@ -172,7 +176,13 @@ export default function SignInPage() {
                 (joining ? ' cursor-wait opacity-60' : '')
               }
             >
-              {joining ? 'Joining…' : isAdmin ? 'Open researcher dashboard' : 'Join the call'}
+              {joining
+                ? 'Joining…'
+                : isAdmin
+                  ? 'Open researcher dashboard'
+                  : isTest
+                    ? 'Join as test participant (example faces)'
+                    : 'Join the call'}
             </button>
           </div>
         </div>

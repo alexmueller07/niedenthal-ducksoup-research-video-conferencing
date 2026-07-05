@@ -23,12 +23,13 @@ export interface EffectsStatus {
 
 export interface EffectsStartOptions {
   /**
-   * Use the bundled stock face photo instead of the camera. For single-machine
-   * testing only (two participant windows cannot share one webcam): the morph,
-   * detection, and the full call pipeline run on the stock face. Never use in
-   * a real session — the mode is written to the event log.
+   * URL of a bundled example-face photo to use instead of the camera. For
+   * single-machine testing only (sign in with access code "test"): the morph,
+   * detection, and the full call pipeline run on the photo, and the face can
+   * be swapped live via setTestFaceImage. Never use in a real session — the
+   * mode is written to the event log.
    */
-  testFace?: boolean
+  testFaceUrl?: string
 }
 
 export class LiveEffects {
@@ -44,6 +45,7 @@ export class LiveEffects {
   private semitones = 0
   private frameTimes: number[] = []
   private testFaceTimer: ReturnType<typeof setInterval> | null = null
+  private testFaceImg: HTMLImageElement | null = null
   private testAudioCtx: AudioContext | null = null
 
   cleanStream: MediaStream | null = null
@@ -77,9 +79,9 @@ export class LiveEffects {
       onLog(`Face model failed to load (video passes through unmorphed): ${err}`, 'warn')
     }
 
-    if (opts.testFace) {
-      this.camera = await this.makeTestFaceStream()
-      onLog('TEST MODE: stock face image used instead of the camera', 'warn')
+    if (opts.testFaceUrl) {
+      this.camera = await this.makeTestFaceStream(opts.testFaceUrl)
+      onLog('TEST MODE: example face image used instead of the camera', 'warn')
     } else {
       this.camera = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
@@ -118,16 +120,27 @@ export class LiveEffects {
     onLog('Outgoing media pipeline live')
   }
 
-  /**
-   * A camera-shaped MediaStream built from the bundled stock portrait: a
-   * head-and-shoulders crop drawn to a 720p canvas (repainted so captureStream
-   * keeps emitting frames) plus a silent audio track so the voice graph and
-   * the server's ready-gate behave exactly as they do with a real camera.
-   */
-  private async makeTestFaceStream(): Promise<MediaStream> {
+  /** Swap the displayed example face without restarting the pipeline. */
+  async setTestFaceImage(url: string): Promise<void> {
+    if (this.testFaceTimer === null) return // not in test mode
     const img = new Image()
-    img.src = '/images/test-face.jpg'
+    img.src = url
     await img.decode()
+    this.testFaceImg = img
+  }
+
+  /**
+   * A camera-shaped MediaStream built from a bundled example face: the image
+   * is letterboxed onto a 720p canvas (repainted so captureStream keeps
+   * emitting frames) plus a silent audio track so the voice graph and the
+   * server's ready-gate behave exactly as they do with a real camera. The
+   * image can be swapped live via setTestFaceImage.
+   */
+  private async makeTestFaceStream(url: string): Promise<MediaStream> {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    this.testFaceImg = img
 
     const canvas = document.createElement('canvas')
     canvas.width = 1280
@@ -135,13 +148,17 @@ export class LiveEffects {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('2D context unavailable')
 
-    // Zoom to the face (upper-center of the portrait) so it fills the frame
-    // like a webcam would.
-    const sw = Math.min(img.width, img.width * 0.55)
-    const sh = (sw * canvas.height) / canvas.width
-    const sx = Math.min(Math.max(0, img.width * 0.55 - sw / 2), img.width - sw)
-    const sy = Math.min(Math.max(0, img.height * 0.28 - sh / 2), img.height - sh)
-    const draw = () => ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    // Contain-fit (letterbox) so any example image shows its whole face.
+    const draw = () => {
+      const im = this.testFaceImg
+      if (!im) return
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      const scale = Math.min(canvas.width / im.width, canvas.height / im.height)
+      const w = im.width * scale
+      const h = im.height * scale
+      ctx.drawImage(im, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h)
+    }
     draw()
     this.testFaceTimer = setInterval(draw, 66)
 
@@ -206,6 +223,7 @@ export class LiveEffects {
     this.raf = null
     if (this.testFaceTimer !== null) clearInterval(this.testFaceTimer)
     this.testFaceTimer = null
+    this.testFaceImg = null
     void this.testAudioCtx?.close().catch(() => {})
     this.testAudioCtx = null
     this.face.close()

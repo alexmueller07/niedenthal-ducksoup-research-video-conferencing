@@ -73,7 +73,7 @@ export class SessionServer {
     this.port = port
     this.logger = logger
     this.ruleEngine = new RuleEngine({
-      isLive: () => this.phase === 'live',
+      phase: () => this.phase,
       liveStartMs: () =>
         this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null,
       effectsOf: (slot: PSlot) => this.bySlot(slot)?.effects ?? { ...NEUTRAL_EFFECTS },
@@ -488,8 +488,9 @@ export class SessionServer {
     if (phase === 'waiting') {
       this.sessionStartedAt = null
     }
-    // Automation rules start from a clean slate on every phase change.
-    this.ruleEngine.reset()
+    // Rules: going live re-arms the timers; ending or returning to the
+    // waiting room releases anything a rule left applied.
+    this.ruleEngine.onPhaseChange(phase)
     this.log({
       event: `session_${phase}`,
       actorRole: 'admin',

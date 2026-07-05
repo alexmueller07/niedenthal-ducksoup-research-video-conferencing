@@ -29,12 +29,24 @@ interface BootConfig {
   role: 'participant' | 'admin'
   serverAddr: string
   identity: Identity
+  /** Signed in with access code "test": run on example faces, show switcher. */
+  testMode?: boolean
 }
 
 interface BannerState {
   text: string
   key: number
 }
+
+// Example faces available in test mode (sign-in access code "test"). Starts on
+// the straight face; the panel on the right switches between them live.
+const TEST_FACES = [
+  { id: 'straight', label: 'Straight face', url: '/images/test-faces/straight.png' },
+  { id: 'reward', label: 'Reward smile', url: '/images/test-faces/reward.jpg' },
+  { id: 'affiliative', label: 'Affiliative smile', url: '/images/test-faces/affiliative.jpg' },
+  { id: 'dominance', label: 'Dominance smile', url: '/images/test-faces/dominance.jpg' },
+  { id: 'frown', label: 'Frown', url: '/images/test-faces/frown.png' },
+]
 
 export default function ParticipantSession() {
   const router = useRouter()
@@ -51,9 +63,9 @@ export default function ParticipantSession() {
   const [escapeOpen, setEscapeOpen] = useState(false)
   const [escapeText, setEscapeText] = useState('')
   const [testFaceMode, setTestFaceMode] = useState(false)
+  const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
 
   const effectsRef = useRef<LiveEffects | null>(null)
-  const startMediaRef = useRef<((testFace: boolean) => void) | null>(null)
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<SlotId, PeerLink>>(new Map())
   const mySlotRef = useRef<SlotId | null>(null)
@@ -104,7 +116,22 @@ export default function ParticipantSession() {
         identity: cfg.identity,
         appVersion: APP_VERSION,
       },
-      onStatus: setSignalStatus,
+      onStatus: (status) => {
+        setSignalStatus(status)
+        // The server forgets a seat's readiness across a reconnect, and a
+        // ready sent before the socket ever opened was silently dropped —
+        // re-announce whenever the connection (re)establishes. Without this,
+        // Start conversation can stay disabled even though the pipeline is up.
+        if (status === 'connected' && effectsReadyRef.current && effectsRef.current) {
+          const fx = effectsRef.current
+          client.send({
+            type: 'ready',
+            camera: fx.status.camera,
+            faceModel: fx.status.faceModel,
+            voice: fx.status.voice,
+          })
+        }
+      },
       onMessage: (msg) => handleMessage(msg),
     })
     clientRef.current = client
@@ -243,43 +270,35 @@ export default function ParticipantSession() {
     client.connect()
 
     // Pre-warm the entire media pipeline during the waiting screen so the
-    // first morph command is instant. Restartable so the "continue without
-    // video access" test mode can swap the camera for the stock face.
-    function startMedia(testFace: boolean) {
-      effectsReadyRef.current = false
-      setCameraReady(false)
-      effectsRef.current?.stop()
-      // Peer links carry the old stream's tracks — rebuild them fresh.
-      for (const slot of [...linksRef.current.keys()]) dropLink(slot)
-
-      const effects = new LiveEffects()
-      effectsRef.current = effects
-      void effects
-        .start((m, level) => console[level === 'warn' ? 'warn' : 'log'](`[effects] ${m}`), {
-          testFace,
+    // first morph command is instant. Test participants (access code "test")
+    // run on the bundled example faces instead of the camera.
+    const testMode = !!cfg.testMode
+    setTestFaceMode(testMode)
+    const effects = new LiveEffects()
+    effectsRef.current = effects
+    void effects
+      .start((m, level) => console[level === 'warn' ? 'warn' : 'log'](`[effects] ${m}`), {
+        testFaceUrl: testMode ? TEST_FACES[0].url : undefined,
+      })
+      .then(() => {
+        effectsReadyRef.current = true
+        setCameraReady(true)
+        setSelfStream(effects.cleanStream)
+        // Flag simulated video in the session log — a real session must
+        // never quietly run on an example face.
+        if (testMode) sendEvent('test_face_mode_enabled')
+        client.send({
+          type: 'ready',
+          camera: effects.status.camera,
+          faceModel: effects.status.faceModel,
+          voice: effects.status.voice,
         })
-        .then(() => {
-          effectsReadyRef.current = true
-          setCameraReady(true)
-          setSelfStream(effects.cleanStream)
-          // Flag simulated video in the session log — a real session must
-          // never quietly run on the stock face.
-          if (testFace) sendEvent('test_face_mode_enabled')
-          client.send({
-            type: 'ready',
-            camera: effects.status.camera,
-            faceModel: effects.status.faceModel,
-            voice: effects.status.voice,
-          })
-          ensureLinks()
-        })
-        .catch((err) => {
-          console.error('media pipeline failed', err)
-          sendEvent('media_pipeline_error', { detail: String(err) })
-        })
-    }
-    startMediaRef.current = startMedia
-    startMedia(false)
+        ensureLinks()
+      })
+      .catch((err) => {
+        console.error('media pipeline failed', err)
+        sendEvent('media_pipeline_error', { detail: String(err) })
+      })
 
     const telemetry = setInterval(() => {
       const fx = effectsRef.current
@@ -309,6 +328,20 @@ export default function ParticipantSession() {
     window.addEventListener('blur', onBlur)
     window.addEventListener('focus', onFocus)
 
+    // Ctrl/Cmd+Shift+Q handled in the page too. The Electron global shortcut
+    // can only be claimed by ONE instance per machine — with several windows
+    // open for single-laptop testing the other instances never received it,
+    // which is why the escape combo felt unreliable.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
+        e.preventDefault()
+        setEscapeOpen(true)
+        setEscapeText('')
+        sendEvent('escape_dialog_opened')
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+
     const offEscape = ipcOn('escape:open', () => {
       setEscapeOpen(true)
       setEscapeText('')
@@ -320,6 +353,7 @@ export default function ParticipantSession() {
       clearInterval(expression)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
+      window.removeEventListener('keydown', onKeyDown, true)
       offEscape()
       if (bannerTimer.current) clearTimeout(bannerTimer.current)
       for (const link of linksRef.current.values()) link.close()
@@ -377,23 +411,39 @@ export default function ParticipantSession() {
       {/* Researcher audio — invisible, plays only if they unmute. */}
       <audio ref={adminAudioRef} autoPlay />
 
-      {/* ---- Single-machine testing: run on a stock face instead of the camera ---- */}
-      {phase === 'waiting' && !testFaceMode && (
-        <button
-          type="button"
-          onClick={() => {
-            setTestFaceMode(true)
-            startMediaRef.current?.(true)
-          }}
-          className="absolute left-1/2 top-3 z-40 -translate-x-1/2 cursor-pointer rounded-full bg-gray-800/80 px-3 py-1.5 text-[11px] text-gray-500 ring-1 ring-gray-700 transition hover:text-white"
-        >
-          Continue without video access (test mode — stock face)
-        </button>
-      )}
+      {/* ---- Test mode (access code "test"): example-face switcher panel ---- */}
       {testFaceMode && (
-        <div className="absolute bottom-3 left-3 z-40 rounded-full bg-amber-500/15 px-3 py-1 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
-          TEST MODE — stock face, not a camera
-        </div>
+        <>
+          <div className="absolute right-3 top-1/2 z-40 w-44 -translate-y-1/2 cursor-auto rounded-xl border border-gray-700 bg-gray-900/90 p-3 backdrop-blur">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Test face
+            </p>
+            <div className="space-y-1.5">
+              {TEST_FACES.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    setTestFaceId(f.id)
+                    void effectsRef.current?.setTestFaceImage(f.url)
+                    sendEvent('test_face_changed', { value: f.id })
+                  }}
+                  className={
+                    'w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-xs transition ' +
+                    (testFaceId === f.id
+                      ? 'bg-sky-600 font-semibold text-white'
+                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
+                  }
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="absolute bottom-3 left-3 z-40 rounded-full bg-amber-500/15 px-3 py-1 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
+            TEST MODE — example face, not a camera
+          </div>
+        </>
       )}
 
       {/* ---- Live call ---- */}

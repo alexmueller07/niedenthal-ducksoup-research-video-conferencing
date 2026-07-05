@@ -12,13 +12,16 @@
 //   timer rule — AT atSec into the live conversation, apply the preset once.
 //     With revertAfterSec set, the pre-rule effects come back after that many
 //     seconds.
-// Rules only run while the phase is 'live'; state resets on phase changes so a
-// restarted session starts clean.
+// Expression rules run in the waiting room AND during the live conversation
+// (so the setup can be tested before pressing Start); timer rules count from
+// the moment the conversation goes live. Ending the session or returning to
+// the waiting room releases anything a rule left applied.
 
 import type {
   AutomationRule,
   EffectState,
   ExpressionState,
+  Phase,
   PSlot,
   RuleExpression,
 } from './protocol'
@@ -27,7 +30,7 @@ import { getPreset } from './presets'
 
 /** What the engine needs from the session server. */
 export interface RuleHost {
-  isLive(): boolean
+  phase(): Phase
   /** Epoch ms when the live phase started (null while waiting/ended). */
   liveStartMs(): number | null
   /** Server-tracked effect state of a seat (last commanded). */
@@ -108,7 +111,9 @@ export class RuleEngine {
 
   /** Called ~4×/s by the server. Drives holds, timers, and reverts. */
   tick(nowMs: number) {
-    if (!this.host.isLive()) return
+    const phase = this.host.phase()
+    // Expression rules also run in the waiting room; nothing runs after end.
+    if (phase !== 'live' && phase !== 'waiting') return
     const liveStart = this.host.liveStartMs()
 
     for (const rule of this.rules) {
@@ -129,8 +134,8 @@ export class RuleEngine {
           if (state.fired) this.release(rule, state, 'released')
         }
       } else {
-        // Timer rule.
-        if (liveStart === null || state.done) continue
+        // Timer rule — counts from conversation start only.
+        if (phase !== 'live' || liveStart === null || state.done) continue
         const tSec = (nowMs - liveStart) / 1000
         if (!state.fired && tSec >= rule.trigger.atSec) {
           this.fire(rule, state, nowMs)
@@ -149,10 +154,21 @@ export class RuleEngine {
     this.emitActive()
   }
 
-  /** Phase changed (live/ended/waiting): start from a clean slate. */
-  reset() {
-    this.rt = new Map(this.rules.map((r) => [r.id, freshRuntime()]))
-    this.expressions = {}
+  /** Phase changed. Live keeps expression holds (only timers re-arm); any
+   *  other phase releases whatever a rule left applied and starts clean. */
+  onPhaseChange(to: Phase) {
+    if (to === 'live') {
+      for (const rule of this.rules) {
+        if (rule.trigger.kind === 'timer') this.rt.set(rule.id, freshRuntime())
+      }
+    } else {
+      for (const rule of this.rules) {
+        const state = this.rt.get(rule.id)
+        if (state?.fired) this.release(rule, state, 'released')
+      }
+      this.rt = new Map(this.rules.map((r) => [r.id, freshRuntime()]))
+      this.expressions = {}
+    }
     this.emitActive()
   }
 
