@@ -50,8 +50,10 @@ export default function ParticipantSession() {
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [escapeOpen, setEscapeOpen] = useState(false)
   const [escapeText, setEscapeText] = useState('')
+  const [testFaceMode, setTestFaceMode] = useState(false)
 
   const effectsRef = useRef<LiveEffects | null>(null)
+  const startMediaRef = useRef<((testFace: boolean) => void) | null>(null)
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<SlotId, PeerLink>>(new Map())
   const mySlotRef = useRef<SlotId | null>(null)
@@ -241,27 +243,43 @@ export default function ParticipantSession() {
     client.connect()
 
     // Pre-warm the entire media pipeline during the waiting screen so the
-    // first morph command is instant.
-    const effects = new LiveEffects()
-    effectsRef.current = effects
-    void effects
-      .start((m, level) => console[level === 'warn' ? 'warn' : 'log'](`[effects] ${m}`))
-      .then(() => {
-        effectsReadyRef.current = true
-        setCameraReady(true)
-        setSelfStream(effects.cleanStream)
-        client.send({
-          type: 'ready',
-          camera: effects.status.camera,
-          faceModel: effects.status.faceModel,
-          voice: effects.status.voice,
+    // first morph command is instant. Restartable so the "continue without
+    // video access" test mode can swap the camera for the stock face.
+    function startMedia(testFace: boolean) {
+      effectsReadyRef.current = false
+      setCameraReady(false)
+      effectsRef.current?.stop()
+      // Peer links carry the old stream's tracks — rebuild them fresh.
+      for (const slot of [...linksRef.current.keys()]) dropLink(slot)
+
+      const effects = new LiveEffects()
+      effectsRef.current = effects
+      void effects
+        .start((m, level) => console[level === 'warn' ? 'warn' : 'log'](`[effects] ${m}`), {
+          testFace,
         })
-        ensureLinks()
-      })
-      .catch((err) => {
-        console.error('media pipeline failed', err)
-        sendEvent('media_pipeline_error', { detail: String(err) })
-      })
+        .then(() => {
+          effectsReadyRef.current = true
+          setCameraReady(true)
+          setSelfStream(effects.cleanStream)
+          // Flag simulated video in the session log — a real session must
+          // never quietly run on the stock face.
+          if (testFace) sendEvent('test_face_mode_enabled')
+          client.send({
+            type: 'ready',
+            camera: effects.status.camera,
+            faceModel: effects.status.faceModel,
+            voice: effects.status.voice,
+          })
+          ensureLinks()
+        })
+        .catch((err) => {
+          console.error('media pipeline failed', err)
+          sendEvent('media_pipeline_error', { detail: String(err) })
+        })
+    }
+    startMediaRef.current = startMedia
+    startMedia(false)
 
     const telemetry = setInterval(() => {
       const fx = effectsRef.current
@@ -307,7 +325,7 @@ export default function ParticipantSession() {
       for (const link of linksRef.current.values()) link.close()
       linksRef.current.clear()
       client.close()
-      effects.stop()
+      effectsRef.current?.stop()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -358,6 +376,25 @@ export default function ParticipantSession() {
     <div className="relative h-screen w-screen cursor-none select-none overflow-hidden bg-gray-950">
       {/* Researcher audio — invisible, plays only if they unmute. */}
       <audio ref={adminAudioRef} autoPlay />
+
+      {/* ---- Single-machine testing: run on a stock face instead of the camera ---- */}
+      {phase === 'waiting' && !testFaceMode && (
+        <button
+          type="button"
+          onClick={() => {
+            setTestFaceMode(true)
+            startMediaRef.current?.(true)
+          }}
+          className="absolute left-1/2 top-3 z-40 -translate-x-1/2 cursor-pointer rounded-full bg-gray-800/80 px-3 py-1.5 text-[11px] text-gray-500 ring-1 ring-gray-700 transition hover:text-white"
+        >
+          Continue without video access (test mode — stock face)
+        </button>
+      )}
+      {testFaceMode && (
+        <div className="absolute bottom-3 left-3 z-40 rounded-full bg-amber-500/15 px-3 py-1 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
+          TEST MODE — stock face, not a camera
+        </div>
+      )}
 
       {/* ---- Live call ---- */}
       {phase === 'live' && (

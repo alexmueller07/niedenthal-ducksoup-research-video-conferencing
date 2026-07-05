@@ -21,6 +21,16 @@ export interface EffectsStatus {
   voice: boolean
 }
 
+export interface EffectsStartOptions {
+  /**
+   * Use the bundled stock face photo instead of the camera. For single-machine
+   * testing only (two participant windows cannot share one webcam): the morph,
+   * detection, and the full call pipeline run on the stock face. Never use in
+   * a real session — the mode is written to the event log.
+   */
+  testFace?: boolean
+}
+
 export class LiveEffects {
   private face = new FaceMorphProcessor()
   private voice: VoiceProcessor | null = null
@@ -33,6 +43,8 @@ export class LiveEffects {
   private alpha = 1.0
   private semitones = 0
   private frameTimes: number[] = []
+  private testFaceTimer: ReturnType<typeof setInterval> | null = null
+  private testAudioCtx: AudioContext | null = null
 
   cleanStream: MediaStream | null = null
   alteredStream: MediaStream | null = null
@@ -53,7 +65,10 @@ export class LiveEffects {
    * cannot load (offline first run), video passes through unmorphed; if the
    * audio graph fails, raw mic audio is used. Status reports what is real.
    */
-  async start(onLog: (msg: string, level?: 'info' | 'warn' | 'error') => void): Promise<void> {
+  async start(
+    onLog: (msg: string, level?: 'info' | 'warn' | 'error') => void,
+    opts: EffectsStartOptions = {},
+  ): Promise<void> {
     try {
       await this.face.init()
       this.status.faceModel = true
@@ -62,10 +77,15 @@ export class LiveEffects {
       onLog(`Face model failed to load (video passes through unmorphed): ${err}`, 'warn')
     }
 
-    this.camera = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 },
-      audio: { echoCancellation: true, noiseSuppression: true },
-    })
+    if (opts.testFace) {
+      this.camera = await this.makeTestFaceStream()
+      onLog('TEST MODE: stock face image used instead of the camera', 'warn')
+    } else {
+      this.camera = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
+        audio: { echoCancellation: true, noiseSuppression: true },
+      })
+    }
     this.status.camera = true
     this.cleanStream = this.camera
 
@@ -96,6 +116,47 @@ export class LiveEffects {
     this.face.setAlpha(this.alpha)
     this.startRenderLoop(w, h)
     onLog('Outgoing media pipeline live')
+  }
+
+  /**
+   * A camera-shaped MediaStream built from the bundled stock portrait: a
+   * head-and-shoulders crop drawn to a 720p canvas (repainted so captureStream
+   * keeps emitting frames) plus a silent audio track so the voice graph and
+   * the server's ready-gate behave exactly as they do with a real camera.
+   */
+  private async makeTestFaceStream(): Promise<MediaStream> {
+    const img = new Image()
+    img.src = '/images/test-face.jpg'
+    await img.decode()
+
+    const canvas = document.createElement('canvas')
+    canvas.width = 1280
+    canvas.height = 720
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('2D context unavailable')
+
+    // Zoom to the face (upper-center of the portrait) so it fills the frame
+    // like a webcam would.
+    const sw = Math.min(img.width, img.width * 0.55)
+    const sh = (sw * canvas.height) / canvas.width
+    const sx = Math.min(Math.max(0, img.width * 0.55 - sw / 2), img.width - sw)
+    const sy = Math.min(Math.max(0, img.height * 0.28 - sh / 2), img.height - sh)
+    const draw = () => ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    draw()
+    this.testFaceTimer = setInterval(draw, 66)
+
+    const video = canvas.captureStream(15)
+
+    const ac = new AudioContext()
+    this.testAudioCtx = ac
+    const dst = ac.createMediaStreamDestination()
+    const osc = ac.createOscillator()
+    const gain = ac.createGain()
+    gain.gain.value = 0
+    osc.connect(gain).connect(dst)
+    osc.start()
+
+    return new MediaStream([...video.getVideoTracks(), ...dst.stream.getAudioTracks()])
   }
 
   private startRenderLoop(w: number, h: number) {
@@ -143,6 +204,10 @@ export class LiveEffects {
   stop() {
     if (this.raf !== null) cancelAnimationFrame(this.raf)
     this.raf = null
+    if (this.testFaceTimer !== null) clearInterval(this.testFaceTimer)
+    this.testFaceTimer = null
+    void this.testAudioCtx?.close().catch(() => {})
+    this.testAudioCtx = null
     this.face.close()
     this.voice?.close()
     this.voice = null
