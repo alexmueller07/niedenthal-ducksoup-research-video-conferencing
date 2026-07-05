@@ -36,4 +36,13 @@ mac:
   extendInfo:
     NSCameraUsageDescription: Lab Video Call uses the camera for the research video call.
     NSMicrophoneUsageDescription: Lab Video Call uses the microphone for the research video call.
+  # Camera/mic entitlements travel with the (ad-hoc) signature. Repeated
+  # permission prompts across REinstalls are inherent to unsigned builds —
+  # macOS ties the TCC grant to the code signature, and ad-hoc signatures
+  # change per build. A Developer ID certificate is the permanent fix; these
+  # entitlements make sure a signed build works unchanged.
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
 publish: null

@@ -13,7 +13,7 @@
 
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
-import type { Telemetry } from './protocol'
+import type { ExpressionState, Telemetry } from './protocol'
 
 export interface EffectsStatus {
   camera: boolean
@@ -124,6 +124,11 @@ export class LiveEffects {
     this.voice?.setSemitones(semitones)
   }
 
+  /** Latest REAL-face expression from the detector (null until a face is seen). */
+  currentExpression(): ExpressionState | null {
+    return this.face.expression
+  }
+
   telemetry(): Telemetry {
     return {
       alpha: this.alpha,
@@ -131,6 +136,7 @@ export class LiveEffects {
       faceFound: this.face.faceFound,
       fps: this.frameTimes.length,
       cameraOn: !!this.camera && this.camera.getVideoTracks().some((t) => t.readyState === 'live'),
+      expression: this.face.expression,
     }
   }
 

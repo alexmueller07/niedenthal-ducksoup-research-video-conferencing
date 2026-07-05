@@ -17,8 +17,10 @@ import os from 'os'
 import type {
   ClientMessage,
   EffectState,
+  ExpressionState,
   Identity,
   Phase,
+  PSlot,
   RosterState,
   ServerMessage,
   SlotId,
@@ -27,6 +29,7 @@ import type {
 } from './protocol'
 import { EMPTY_IDENTITY, NEUTRAL_EFFECTS, parseClientMessage } from './protocol'
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
+import { RuleEngine, describeRule } from './rules'
 
 interface ClientCtx {
   ws: WebSocket
@@ -37,6 +40,9 @@ interface ClientCtx {
   ready: boolean
   effects: EffectState
   telemetry?: Telemetry
+  expression?: ExpressionState
+  /** Last logged expression key, so events.csv records changes, not 5 Hz spam. */
+  lastExprKey?: string
   alive: boolean
 }
 
@@ -58,12 +64,41 @@ export class SessionServer {
   private phase: Phase = 'waiting'
   private sessionStartedAt: string | null = null
   private pingTimer: ReturnType<typeof setInterval> | null = null
+  private ruleTimer: ReturnType<typeof setInterval> | null = null
+  private readonly ruleEngine: RuleEngine
   readonly port: number
   readonly logger: SessionLogger
 
   constructor(port: number, logger: SessionLogger) {
     this.port = port
     this.logger = logger
+    this.ruleEngine = new RuleEngine({
+      isLive: () => this.phase === 'live',
+      liveStartMs: () =>
+        this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null,
+      effectsOf: (slot: PSlot) => this.bySlot(slot)?.effects ?? { ...NEUTRAL_EFFECTS },
+      applyEffects: (slot, effects, rule, why) => {
+        const target = this.bySlot(slot)
+        if (target) {
+          target.effects = effects
+          this.send(target.ws, { type: 'effect-command', effects, cause: `rule_${why}` })
+        }
+        this.log({
+          event: `rule_${why}`,
+          actorRole: 'server',
+          actorSlot: 'ADMIN',
+          target: slot,
+          param: 'rule',
+          value: rule.id,
+          detail: { rule: describeRule(rule), effects, targetConnected: !!target },
+        })
+        this.broadcastRoster()
+      },
+      onActiveChange: (active) => {
+        const admin = this.bySlot('ADMIN')
+        if (admin) this.send(admin.ws, { type: 'rule-status', active })
+      },
+    })
   }
 
   start(): Promise<void> {
@@ -77,6 +112,7 @@ export class SessionServer {
       })
       wss.on('connection', (ws, req) => this.onConnection(ws, req.socket.remoteAddress ?? ''))
       this.pingTimer = setInterval(() => this.heartbeat(), 5000)
+      this.ruleTimer = setInterval(() => this.ruleEngine.tick(Date.now()), 250)
     })
   }
 
@@ -97,6 +133,8 @@ export class SessionServer {
   async stop(): Promise<void> {
     if (this.pingTimer) clearInterval(this.pingTimer)
     this.pingTimer = null
+    if (this.ruleTimer) clearInterval(this.ruleTimer)
+    this.ruleTimer = null
     this.log({ event: 'server_stopped' })
     for (const ctx of this.clients.values()) ctx.ws.close()
     this.clients.clear()
@@ -177,6 +215,11 @@ export class SessionServer {
       roster: this.roster(),
       serverTime: new Date().toISOString(),
     })
+    // A (re)connecting dashboard gets the current rule list back so mid-call
+    // edits survive an admin reconnect.
+    if (ctx.role === 'admin') {
+      this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
+    }
     this.broadcastRoster()
   }
 
@@ -261,9 +304,33 @@ export class SessionServer {
           faceFound: msg.data.faceFound,
           fps: msg.data.fps,
           cameraOn: msg.data.cameraOn,
+          expressionLabel: msg.data.expression?.label ?? '',
+          smileType: msg.data.expression?.smileType ?? '',
         })
         const admin = this.bySlot('ADMIN')
         if (admin) this.send(admin.ws, { type: 'telemetry', slot: ctx.slot, data: msg.data })
+        return
+      }
+      case 'expression': {
+        if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
+        ctx.expression = msg.data
+        this.ruleEngine.onExpression(ctx.slot, msg.data)
+        const admin = this.bySlot('ADMIN')
+        if (admin) this.send(admin.ws, { type: 'expression', slot: ctx.slot, data: msg.data })
+        // Log state changes only — the 5 Hz stream itself would drown events.csv.
+        const key = `${msg.data.label}${msg.data.smileType ? `:${msg.data.smileType}` : ''}`
+        if (ctx.lastExprKey !== key) {
+          ctx.lastExprKey = key
+          this.log({
+            event: 'expression_changed',
+            actorRole: ctx.role,
+            actorSlot: ctx.slot,
+            actorName: ctx.identity.name,
+            param: 'expression',
+            value: key,
+            detail: msg.data,
+          })
+        }
         return
       }
       case 'stream-map': {
@@ -378,6 +445,21 @@ export class SessionServer {
         this.setPhase(msg.phase, ctx.identity.name)
         return
       }
+      case 'set-rules': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        this.ruleEngine.setRules(msg.rules)
+        this.log({
+          event: 'rules_updated',
+          actorRole: 'admin',
+          actorSlot: 'ADMIN',
+          actorName: ctx.identity.name,
+          param: 'count',
+          value: msg.rules.length,
+          detail: msg.rules.map((r) => ({ id: r.id, enabled: r.enabled, rule: describeRule(r) })),
+        })
+        this.send(ctx.ws, { type: 'rules', rules: msg.rules })
+        return
+      }
       case 'admin-mic': {
         if (!this.requireAdmin(ctx, msg.type)) return
         this.log({
@@ -395,16 +477,25 @@ export class SessionServer {
 
   private setPhase(phase: Phase, adminName: string) {
     if (phase === this.phase) return
+    const from = this.phase
     this.phase = phase
-    if (phase === 'live' && !this.sessionStartedAt) {
+    // Sessions are restartable (RA request): ended → live starts a fresh clock,
+    // and going back to the waiting room clears it entirely. Recordings from
+    // the earlier run are safe — restarted recorders write _partN files.
+    if (phase === 'live' && (from === 'ended' || !this.sessionStartedAt)) {
       this.sessionStartedAt = new Date().toISOString()
     }
+    if (phase === 'waiting') {
+      this.sessionStartedAt = null
+    }
+    // Automation rules start from a clean slate on every phase change.
+    this.ruleEngine.reset()
     this.log({
       event: `session_${phase}`,
       actorRole: 'admin',
       actorSlot: 'ADMIN',
       actorName: adminName,
-      detail: { sessionStartedAt: this.sessionStartedAt },
+      detail: { sessionStartedAt: this.sessionStartedAt, from },
     })
     this.broadcast({ type: 'phase', phase, sessionStartedAt: this.sessionStartedAt })
     this.broadcastRoster()

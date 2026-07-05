@@ -1,21 +1,43 @@
-// Real-time facial smile morph using in-browser face-landmark detection.
+// Real-time facial smile morph + real-expression detection, using in-browser
+// face-landmark detection.
 //
-// This is the Windows/no-backend path. MediaPipe FaceLandmarker (WASM) detects
-// the 468-point face mesh each frame; we warp a grid over the mouth region so the
-// mouth corners lift (smile) or drop (frown) with the alpha control. Unlike a
-// blind frame warp, this tracks the actual mouth, so it reads as an expression
-// change rather than video glitch, and it does nothing when no face is found.
+// MediaPipe FaceLandmarker (WASM) detects the 468-point face mesh each frame;
+// we warp a grid over the mouth region so the mouth corners move with the alpha
+// control. Because the warp tracks the actual mouth it reads as an expression
+// change rather than a video glitch, and it does nothing when no face is found.
 //
-// On lab hardware the genuine Mozza/dlib transformation replaces this; the
-// control (`alpha`) is the same, so the experimenter UX is identical.
+// Morph geometry (reworked after the 2026-07 lab demo feedback):
+//   smile — corners travel OUT and UP at ~25° above horizontal (mostly outward),
+//           instead of the old straight-vertical lift the RAs flagged as
+//           unnatural.
+//   frown — parabolic: the corners (the outer nodes) pull down and slightly
+//           inward while the area just below the centre of the lower lip drops
+//           a little, mimicking a protruding lower lip.
+//   Both are attenuated as the head turns toward a side profile, where the
+//   planar warp used to look "very weird" (RA note).
+//   Alpha changes are tweened (~350 ms time constant) so preset buttons ease in
+//   rather than snapping.
+//
+// Expression detection: the landmarker also outputs face blendshapes, computed
+// on the RAW camera frame — i.e. the participant's genuine expression, never
+// the morphed output. We classify smiling/frowning plus a heuristic smile
+// sub-type following the lab's reward / affiliative / dominance framework
+// (Martin et al. 2021; Rychlowska et al. 2021). The sub-type mapping is a
+// starting heuristic to calibrate with lab data:
+//   reward      — symmetric smile with eye/cheek constriction (Duchenne marker)
+//   dominance   — clearly asymmetric smile, or nose wrinkle / sneer component
+//   affiliative — everything else (often with a lip-press component)
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import type { ExpressionLabel, ExpressionState, SmileType } from './protocol'
 
-// Loaded from CDN for the demo (needs internet at first run). For an offline lab
-// build, vendor these two assets locally and point these at the local paths.
-const WASM_BASE =
+// Vendored locally (renderer/public/mediapipe/) so a session starts fast and
+// works offline. The CDN is only a fallback if the local assets are missing.
+const LOCAL_WASM_BASE = '/mediapipe/wasm'
+const LOCAL_MODEL_URL = '/mediapipe/face_landmarker.task'
+const CDN_WASM_BASE =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
-const MODEL_URL =
+const CDN_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
 // Outer-lip landmark indices (MediaPipe FaceMesh) used to bound the mouth ROI.
@@ -25,6 +47,39 @@ const LIP_INDICES = [
 ]
 const LEFT_CORNER = 61
 const RIGHT_CORNER = 291
+// Yaw estimation: nose tip vs. the two face-oval cheek extremes.
+const NOSE_TIP = 1
+const LEFT_FACE_EDGE = 234
+const RIGHT_FACE_EDGE = 454
+
+// ---- Morph tuning (calibrate with Randy; all displacements scale with mouth width) ----
+const SMILE_ANGLE_RAD = (25 * Math.PI) / 180 // corners move out+up at ~25° above horizontal
+const SMILE_GAIN = 0.17 // total corner travel per unit of (alpha - 1)
+const FROWN_GAIN = 0.13 // corner-down travel per unit of (1 - alpha)
+const FROWN_INWARD = 0.25 // slight inward pull of the corners while frowning
+const FROWN_POUT = 0.5 // lower-lip-centre drop relative to corner drop
+const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
+// Below this left/right face-half symmetry the morph fades out (side profile).
+const YAW_FADE_START = 0.65
+const YAW_FADE_END = 0.35
+
+// ---- Detection tuning (starting points; hysteresis avoids flicker) ----
+export const DETECTION_TUNING = {
+  smileOn: 0.35,
+  smileOff: 0.22,
+  frownOn: 0.18,
+  frownOff: 0.1,
+  /** Asymmetry (|left − right| smile) above this reads as a dominance smile. */
+  dominanceAsymmetry: 0.18,
+  /** Nose sneer above this also reads as dominance. */
+  dominanceSneer: 0.25,
+  /** Eye/cheek constriction above this reads as a reward (Duchenne) smile. */
+  rewardEyeConstriction: 0.32,
+  /** EMA time constant for blendshape smoothing. */
+  emaTauMs: 220,
+  /** A new label/sub-type must persist this long before it is published. */
+  debounceMs: 350,
+}
 
 interface Pt {
   x: number
@@ -35,10 +90,22 @@ export class FaceMorphProcessor {
   private landmarker: FaceLandmarker | null = null
   private src: HTMLCanvasElement // holds the raw frame for sampling
   private srcCtx: CanvasRenderingContext2D
-  private alpha = 1.0
+  private alphaTarget = 1.0
+  private alphaCurrent = 1.0
+  private lastTweenTs: number | null = null
   private cols = 12
   private rows = 8
   private lastFaceFound = false
+
+  // Expression state (smoothed + debounced).
+  private ema: Record<string, number> = {}
+  private publishedLabel: ExpressionLabel = 'neutral'
+  private publishedType: SmileType | null = null
+  private candidateLabel: ExpressionLabel = 'neutral'
+  private candidateType: SmileType | null = null
+  private candidateSince = 0
+  private lastExpression: ExpressionState | null = null
+  private lastFaceTs = 0
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -48,16 +115,28 @@ export class FaceMorphProcessor {
   }
 
   async init(): Promise<void> {
-    const fileset = await FilesetResolver.forVisionTasks(WASM_BASE)
-    this.landmarker = await FaceLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
+    try {
+      this.landmarker = await this.create(LOCAL_WASM_BASE, LOCAL_MODEL_URL)
+    } catch (err) {
+      console.warn('[faceMorph] local MediaPipe assets missing, falling back to CDN', err)
+      this.landmarker = await this.create(CDN_WASM_BASE, CDN_MODEL_URL)
+    }
+  }
+
+  private async create(wasmBase: string, modelUrl: string): Promise<FaceLandmarker> {
+    const fileset = await FilesetResolver.forVisionTasks(wasmBase)
+    return FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: modelUrl, delegate: 'GPU' },
       runningMode: 'VIDEO',
       numFaces: 1,
+      // Blendshapes drive real-expression detection (smile/frown + sub-type).
+      outputFaceBlendshapes: true,
     })
   }
 
+  /** Set the morph target; the render loop eases toward it (smooth transitions). */
   setAlpha(alpha: number) {
-    this.alpha = alpha
+    this.alphaTarget = alpha
   }
 
   get ready() {
@@ -66,6 +145,11 @@ export class FaceMorphProcessor {
 
   get faceFound() {
     return this.lastFaceFound
+  }
+
+  /** Latest detected REAL expression (null until a face has been seen). */
+  get expression(): ExpressionState | null {
+    return this.lastExpression
   }
 
   /**
@@ -86,11 +170,22 @@ export class FaceMorphProcessor {
     this.srcCtx.drawImage(video, 0, 0, width, height)
     dstCtx.drawImage(this.src, 0, 0, width, height)
 
-    if (!this.landmarker || Math.abs(this.alpha - 1) < 0.02) {
+    // Tween alpha toward its target (dt-based, so it is framerate-independent).
+    const dt = this.lastTweenTs === null ? 16 : Math.min(100, tsMs - this.lastTweenTs)
+    this.lastTweenTs = tsMs
+    const k = 1 - Math.exp(-dt / ALPHA_TWEEN_TAU_MS)
+    this.alphaCurrent += (this.alphaTarget - this.alphaCurrent) * k
+    if (Math.abs(this.alphaCurrent - this.alphaTarget) < 0.004) {
+      this.alphaCurrent = this.alphaTarget
+    }
+
+    if (!this.landmarker) {
       this.lastFaceFound = false
       return false
     }
 
+    // Detection always runs (it feeds expression rules even at neutral alpha),
+    // and always on the RAW video frame — never the morphed canvas.
     let result
     try {
       result = this.landmarker.detectForVideo(video, tsMs)
@@ -100,9 +195,19 @@ export class FaceMorphProcessor {
     const faces = result?.faceLandmarks
     if (!faces || faces.length === 0) {
       this.lastFaceFound = false
+      // A briefly lost face (hand wave, look-away) keeps the last expression;
+      // after a second we decay to neutral so rules do not hold forever.
+      if (this.lastExpression && tsMs - this.lastFaceTs > 1000) {
+        this.updateExpressionFromRaw(tsMs, null)
+      }
       return false
     }
     this.lastFaceFound = true
+    this.lastFaceTs = tsMs
+
+    this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null)
+
+    if (Math.abs(this.alphaCurrent - 1) < 0.02) return false
 
     const lm = faces[0]
     const toPx = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height })
@@ -113,6 +218,18 @@ export class FaceMorphProcessor {
     const centerX = (lc.x + rc.x) / 2
     const centerY = (lc.y + rc.y) / 2
     const mouthWidth = Math.hypot(rc.x - lc.x, rc.y - lc.y)
+
+    // Head-yaw attenuation: compare the two face halves (nose tip → cheek
+    // edge). Near-frontal ≈ 1; a side profile pushes the ratio toward 0 and the
+    // morph fades out instead of smearing across the cheek.
+    const nose = toPx(NOSE_TIP)
+    const lEdge = toPx(LEFT_FACE_EDGE)
+    const rEdge = toPx(RIGHT_FACE_EDGE)
+    const dl = Math.abs(nose.x - lEdge.x)
+    const dr = Math.abs(rEdge.x - nose.x)
+    const symmetry = Math.min(dl, dr) / Math.max(1e-3, Math.max(dl, dr))
+    const yawScale = clamp01((symmetry - YAW_FADE_END) / (YAW_FADE_START - YAW_FADE_END))
+    if (yawScale <= 0.01) return false
 
     // ROI bounding box over the lips, expanded to include surrounding skin so
     // the warp blends naturally.
@@ -136,14 +253,92 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    // Smile strength in pixels. alpha>1 lifts corners, alpha<1 drops them.
-    const strength = (this.alpha - 1) * 0.14 * mouthWidth
-
-    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
+    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, (this.alphaCurrent - 1) * yawScale)
     return true
   }
 
-  /** Mesh-warp the ROI; mouth corners displaced vertically by `strength`. */
+  // ---- Expression detection ----
+
+  private updateExpressionFromRaw(
+    tsMs: number,
+    categories: Array<{ categoryName: string; score: number }> | null,
+  ) {
+    // Raw scores (0 when the face is lost → everything decays to neutral).
+    const raw: Record<string, number> = {}
+    if (categories) {
+      for (const c of categories) raw[c.categoryName] = c.score
+    }
+    const g = (name: string) => raw[name] ?? 0
+
+    const dt = 33 // called once per rendered frame; exact dt matters little here
+    const k = 1 - Math.exp(-dt / DETECTION_TUNING.emaTauMs)
+    const ema = (key: string, v: number) => {
+      const prev = this.ema[key] ?? v
+      const next = prev + (v - prev) * k
+      this.ema[key] = next
+      return next
+    }
+
+    const smileL = ema('smileL', g('mouthSmileLeft'))
+    const smileR = ema('smileR', g('mouthSmileRight'))
+    const smile = (smileL + smileR) / 2
+    const frown = ema('frown', (g('mouthFrownLeft') + g('mouthFrownRight')) / 2)
+    const asymmetry = Math.abs(smileL - smileR)
+    const eyeConstriction = ema(
+      'eye',
+      (g('eyeSquintLeft') + g('eyeSquintRight') + g('cheekSquintLeft') + g('cheekSquintRight')) / 4,
+    )
+    const lipPress = ema('press', (g('mouthPressLeft') + g('mouthPressRight')) / 2)
+    const sneer = ema('sneer', (g('noseSneerLeft') + g('noseSneerRight')) / 2)
+
+    // Label with hysteresis: harder to enter a state than to stay in it.
+    const T = DETECTION_TUNING
+    let label: ExpressionLabel = this.publishedLabel
+    if (this.publishedLabel === 'smiling') {
+      label = smile >= T.smileOff ? 'smiling' : frown >= T.frownOn ? 'frowning' : 'neutral'
+    } else if (this.publishedLabel === 'frowning') {
+      label = frown >= T.frownOff ? 'frowning' : smile >= T.smileOn ? 'smiling' : 'neutral'
+    } else {
+      label = smile >= T.smileOn ? 'smiling' : frown >= T.frownOn ? 'frowning' : 'neutral'
+    }
+
+    let smileType: SmileType | null = null
+    if (label === 'smiling') {
+      if (asymmetry >= T.dominanceAsymmetry || sneer >= T.dominanceSneer) smileType = 'dominance'
+      else if (eyeConstriction >= T.rewardEyeConstriction) smileType = 'reward'
+      else smileType = 'affiliative'
+    }
+
+    // Debounce: a new label/sub-type must persist before it is published.
+    if (label !== this.candidateLabel || smileType !== this.candidateType) {
+      this.candidateLabel = label
+      this.candidateType = smileType
+      this.candidateSince = tsMs
+    } else if (
+      (label !== this.publishedLabel || smileType !== this.publishedType) &&
+      tsMs - this.candidateSince >= T.debounceMs
+    ) {
+      this.publishedLabel = label
+      this.publishedType = smileType
+    }
+
+    this.lastExpression = {
+      label: this.publishedLabel,
+      smileType: this.publishedLabel === 'smiling' ? this.publishedType : null,
+      smile: round2(smile),
+      frown: round2(frown),
+      asymmetry: round2(asymmetry),
+      eyeConstriction: round2(eyeConstriction),
+      lipPress: round2(lipPress),
+    }
+  }
+
+  // ---- Warp ----
+
+  /**
+   * Mesh-warp the ROI. `strength` is (alpha − 1) after yaw attenuation:
+   * positive → smile (corners out+up), negative → frown (parabolic, pout).
+   */
   private warp(
     ctx: CanvasRenderingContext2D,
     roi: { x: number; y: number; w: number; h: number },
@@ -156,6 +351,11 @@ export class FaceMorphProcessor {
     const srcPts: Pt[] = []
     const dstPts: Pt[] = []
     const sigmaY = mouthWidth * 0.6
+    const smiling = strength > 0
+    const mag = Math.abs(strength) * mouthWidth
+    // The lower-lip pout centre sits slightly below the mouth line.
+    const poutY = centerY + mouthWidth * 0.22
+    const poutSigma = mouthWidth * 0.35
 
     for (let r = 0; r <= rows; r++) {
       for (let c = 0; c <= cols; c++) {
@@ -171,9 +371,29 @@ export class FaceMorphProcessor {
         const vy = Math.exp(-((sy - centerY) ** 2) / (2 * sigmaY * sigmaY))
         // Edge window → 0 at ROI border so the warp blends seamlessly.
         const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
-        // Corners (xn^2 → 1) lift more than centre.
-        const dy = -strength * Math.min(1.6, xn * xn) * vy * win
-        dstPts.push({ x: sx, y: sy + dy })
+        // Corner weight: strongest at the mouth corners (xn² → 1), ~0 mid-mouth.
+        const cornerW = Math.min(1.6, xn * xn) * vy * win
+
+        let dx = 0
+        let dy = 0
+        if (smiling) {
+          // Corners travel out+up at ~25° above horizontal — out first, then up
+          // (RA feedback: straight-vertical lift looked unnatural).
+          const d = mag * SMILE_GAIN * cornerW
+          dx = Math.sign(xn) * Math.cos(SMILE_ANGLE_RAD) * d
+          dy = -Math.sin(SMILE_ANGLE_RAD) * d
+        } else {
+          // Frown: outer nodes pull down and slightly inward…
+          const d = mag * FROWN_GAIN * cornerW
+          dx = -Math.sign(xn) * FROWN_INWARD * d
+          dy = d
+          // …while the centre of the lower lip drops a little → a parabolic
+          // mouth with a hint of protruding lower lip, not a straight shift.
+          const centerW = Math.max(0, 1 - xn * xn)
+          const vb = Math.exp(-((sy - poutY) ** 2) / (2 * poutSigma * poutSigma))
+          dy += mag * FROWN_GAIN * FROWN_POUT * centerW * vb * win
+        }
+        dstPts.push({ x: sx + dx, y: sy + dy })
       }
     }
 
@@ -255,4 +475,12 @@ export class FaceMorphProcessor {
     this.landmarker?.close()
     this.landmarker = null
   }
+}
+
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100
 }

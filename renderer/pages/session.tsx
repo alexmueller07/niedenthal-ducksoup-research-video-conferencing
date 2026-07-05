@@ -270,6 +270,22 @@ export default function ParticipantSession() {
       }
     }, 1000)
 
+    // Real-face expression stream for the researcher dashboard and the
+    // automation rules. Checked at 5 Hz but only sent when the state actually
+    // changes, so a neutral face costs almost no traffic.
+    let lastExprSent = ''
+    const expression = setInterval(() => {
+      const fx = effectsRef.current
+      if (!fx || !effectsReadyRef.current || !client.isOpen) return
+      const e = fx.currentExpression()
+      if (!e) return
+      const key = `${e.label}|${e.smileType ?? ''}|${Math.round(e.smile * 20)}|${Math.round(e.frown * 20)}`
+      if (key !== lastExprSent) {
+        lastExprSent = key
+        client.send({ type: 'expression', data: e })
+      }
+    }, 200)
+
     const onBlur = () => sendEvent('window_blur')
     const onFocus = () => sendEvent('window_focus')
     window.addEventListener('blur', onBlur)
@@ -283,6 +299,7 @@ export default function ParticipantSession() {
 
     return () => {
       clearInterval(telemetry)
+      clearInterval(expression)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
       offEscape()
