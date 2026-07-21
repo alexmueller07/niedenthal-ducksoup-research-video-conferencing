@@ -64,6 +64,9 @@ export default function ParticipantSession() {
   const [escapeText, setEscapeText] = useState('')
   const [testFaceMode, setTestFaceMode] = useState(false)
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
+  // Hide the cursor only in the real Electron kiosk. In a plain browser tab
+  // (dev/testing) a hidden cursor is just an annoyance with no lockdown value.
+  const [browserMode, setBrowserMode] = useState(false)
 
   const effectsRef = useRef<LiveEffects | null>(null)
   const clientRef = useRef<SignalClient | null>(null)
@@ -85,6 +88,10 @@ export default function ParticipantSession() {
     },
     [],
   )
+
+  useEffect(() => {
+    setBrowserMode(!hasIpc())
+  }, [])
 
   // ---- Boot: lockdown, media pipeline, signaling ----
   useEffect(() => {
@@ -436,7 +443,11 @@ export default function ParticipantSession() {
     partnerStream !== null && partnerConn !== 'failed' && partnerConn !== 'closed'
 
   return (
-    <div className="relative h-screen w-screen cursor-none select-none overflow-hidden bg-gray-950">
+    <div
+      className={`relative h-screen w-screen select-none overflow-hidden bg-gray-950 ${
+        browserMode ? '' : 'cursor-none'
+      }`}
+    >
       {/* Researcher audio — invisible, plays only if they unmute. */}
       <audio ref={adminAudioRef} autoPlay />
 
