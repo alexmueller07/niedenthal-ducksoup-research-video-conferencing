@@ -488,12 +488,12 @@ export default function ParticipantSession() {
 
       {/* ---- Live call ---- */}
       {phase === 'live' && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-black">
           <video
             ref={partnerVideoRef}
             autoPlay
             playsInline
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
           />
           {!partnerLive && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gray-950/90">
