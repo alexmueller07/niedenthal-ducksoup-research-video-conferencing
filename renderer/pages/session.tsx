@@ -136,6 +136,21 @@ export default function ParticipantSession() {
     })
     clientRef.current = client
 
+    // Signals (offers/answers/ICE) that arrive before this seat's media
+    // pipeline is ready — so its PeerLink can't be built yet — are buffered
+    // here and replayed the instant the link is created. Dropping them (the
+    // old behaviour) deadlocked negotiation: the impolite peer would sit in
+    // have-local-offer forever and then ignore the polite peer's offer as
+    // glare, so no track ever arrived ("Connecting to your partner…").
+    const pendingSignals = new Map<SlotId, SignalData[]>()
+
+    function flushPending(slot: SlotId, link: PeerLink) {
+      const queued = pendingSignals.get(slot)
+      if (!queued) return
+      pendingSignals.delete(slot)
+      for (const data of queued) void link.handleSignal(data)
+    }
+
     function dropLink(slot: SlotId) {
       const link = linksRef.current.get(slot)
       if (link) {
@@ -181,6 +196,9 @@ export default function ParticipantSession() {
           })
         }
       }
+      // Local tracks are now attached (onnegotiationneeded is queued); replay
+      // any offer/ICE the peer sent before this link existed so glare resolves.
+      flushPending(slot, link)
       return link
     }
 
@@ -228,7 +246,18 @@ export default function ParticipantSession() {
             dropLink(msg.from)
             link = undefined
           }
-          if (!link && effectsReadyRef.current) link = makeLink(msg.from)
+          if (!link) {
+            if (effectsReadyRef.current) {
+              link = makeLink(msg.from)
+            } else {
+              // Pipeline not up yet — buffer the signal; makeLink replays it
+              // once this seat is ready, instead of losing it and deadlocking.
+              const queued = pendingSignals.get(msg.from) ?? []
+              queued.push(msg.data)
+              pendingSignals.set(msg.from, queued)
+              return
+            }
+          }
           void link?.handleSignal(msg.data)
           return
         }
