@@ -79,8 +79,7 @@ export default function SignInPage() {
               <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">Video Call</h1>
-          <p className="mt-1 text-sm text-gray-400">Niedenthal Emotions Lab · UW–Madison</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-white">Video Call</h1>
         </div>
 
         <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-6 shadow-2xl backdrop-blur">

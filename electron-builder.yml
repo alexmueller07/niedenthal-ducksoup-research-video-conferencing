@@ -1,6 +1,6 @@
 appId: edu.wisc.niedenthal.labvideocall
 productName: Lab Video Call
-copyright: Copyright © 2026 Niedenthal Emotions Lab, UW–Madison
+copyright: Copyright © 2026 Niedenthal Lab, UW–Madison
 directories:
   output: dist
   buildResources: resources

@@ -553,7 +553,7 @@ export default function AdminDashboard() {
             <div>
               <h1 className="text-sm font-semibold leading-tight">Researcher Dashboard</h1>
               <p className="text-[11px] leading-tight text-gray-500">
-                {adminName} · Niedenthal Emotions Lab
+                {adminName}
               </p>
             </div>
           </div>

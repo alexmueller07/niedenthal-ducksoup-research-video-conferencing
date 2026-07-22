@@ -141,7 +141,6 @@ export default function DashboardPage() {
         <header className="topbar">
           <div className="title">
             DuckSoup Capture Station
-            <span className="version">Niedenthal Emotions Lab</span>
           </div>
           <div className="status">
             <span className={`dot ${connection}`} />
