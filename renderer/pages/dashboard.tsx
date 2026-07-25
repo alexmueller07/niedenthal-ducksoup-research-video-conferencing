@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { CaptureStation } from '../lib/capture'
 import { PRESETS, getPreset, DEFAULT_PRESET_ID } from '../lib/presets'
 import type {
@@ -18,6 +19,7 @@ function ipc() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const cleanRef = useRef<HTMLVideoElement>(null)
   const alteredRef = useRef<HTMLCanvasElement>(null)
   const hiddenRef = useRef<HTMLVideoElement>(null)
@@ -139,8 +141,14 @@ export default function DashboardPage() {
 
       <div className="app">
         <header className="topbar">
-          <div className="title">
-            DuckSoup Capture Station
+          <div className="topbar-left">
+            <button className="back" type="button" onClick={() => void router.push('/')} aria-label="Back to main screen">
+              <span aria-hidden="true">‹</span>
+              Back
+            </button>
+            <div className="title">
+              DuckSoup Capture Station
+            </div>
           </div>
           <div className="status">
             <span className={`dot ${connection}`} />
@@ -279,6 +287,11 @@ export default function DashboardPage() {
       <style jsx>{`
         .app { display: flex; flex-direction: column; height: 100vh; background: #0e1116; color: #d7dbe0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
         .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #161a21; border-bottom: 1px solid #232831; }
+        .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .back { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 9px; background: #1d232c; border: 1px solid #2e3642; border-radius: 7px; color: #c7ccd3; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+        .back span { font-size: 20px; line-height: 1; margin-top: -1px; }
+        .back:hover { background: #242b36; border-color: #3b6fb0; color: #f1f5f9; }
+        .back:focus-visible { outline: 2px solid #3b6fb0; outline-offset: 2px; }
         .title { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
         .version { margin-left: 12px; font-size: 12px; font-weight: 400; color: #7d8794; }
         .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aab2bd; }
