@@ -51,12 +51,17 @@ export interface EffectStateInput {
   /** Detected real-face expression at this telemetry tick (may be blank). */
   expressionLabel?: string
   smileType?: string
+  labelConfidence?: number
+  smileTypeConfidence?: number
+  uncertain?: boolean
+  classifierMode?: string
+  classifierVersion?: string
 }
 
 const EVENT_HEADER =
   'ts_iso,t_rel_ms,seq,actor_role,actor_slot,actor_name,event,target,param,value,detail\n'
 const STATE_HEADER =
-  'ts_iso,t_rel_ms,slot,participant_id,phase,alpha,voice_semitones,face_found,fps,camera_on,expression,smile_type\n'
+  'ts_iso,t_rel_ms,slot,participant_id,phase,alpha,voice_semitones,face_found,fps,camera_on,expression,smile_type,label_confidence,smile_type_confidence,uncertain,classifier_mode,classifier_version\n'
 
 function csvField(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -156,6 +161,11 @@ export class SessionLogger {
         input.cameraOn,
         csvField(input.expressionLabel ?? ''),
         csvField(input.smileType ?? ''),
+        csvField(input.labelConfidence ?? ''),
+        csvField(input.smileTypeConfidence ?? ''),
+        csvField(input.uncertain ?? ''),
+        csvField(input.classifierMode ?? ''),
+        csvField(input.classifierVersion ?? ''),
       ].join(',') + '\n',
     )
   }

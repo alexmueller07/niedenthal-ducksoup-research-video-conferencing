@@ -447,6 +447,7 @@ All features are **EMA-smoothed** with time constant **τ = 220 ms** (`emaTauMs`
 | `frownSmileGate` | 0.15 | A frown only counts while smile < this (a relaxed face can score smile ≈ 0.5). |
 | `rewardOpenness` | 0.20 | Openness ≥ this → **reward** smile. |
 | `dominanceRelAsymmetry` | 0.12 | Relative L/R asymmetry ≥ this → **dominance** smile. |
+| `minPublishedSubtypeConfidence` | 0.55 | Below this, a detected smile is published as smile-only / uncertain instead of forcing a sub-type. |
 | `emaTauMs` | 220 ms | Blendshape smoothing time constant. |
 | `debounceMs` | 350 ms | A new label / sub-type must persist this long before it is published. |
 
@@ -457,7 +458,8 @@ All features are **EMA-smoothed** with time constant **τ = 220 ms** (`emaTauMs`
    - `openness ≥ 0.20` → **reward** (open/teeth-baring smile),
    - else `relAsymmetry ≥ 0.12` → **dominance** (asymmetric smile / lip-press),
    - else → **affiliative** (everything else).
-3. **Debounce** (`faceMorph.ts:344–355`): a candidate label/sub-type must hold for ≥ 350 ms before it is published.
+3. **Confidence / uncertainty**: the heuristic now publishes label confidence, smile-type confidence, classifier mode, classifier version, and an `uncertain` flag. A smiling frame whose sub-type evidence is weak is still treated as a basic smile, but its `smileType` is withheld or marked uncertain so sub-type automation does not over-claim it.
+4. **Debounce** (`faceMorph.ts:344–355`): a candidate label/sub-type must hold for ≥ 350 ms before it is published.
 
 ### 7.4 Theoretical framing and calibration
 
@@ -471,7 +473,7 @@ The thresholds were **calibrated against the lab's five example photos** in `smi
 
 ### 7.5 `ExpressionState` (what is logged and streamed)
 
-`main/protocol.ts:60–72`: `{ label: 'neutral'|'smiling'|'frowning', smileType: 'reward'|'affiliative'|'dominance'|null, smile, frown, asymmetry, eyeConstriction, lipPress, openness }` — all scores rounded to 2 decimals. Streamed to the dashboard and fed to the rule engine at up to 5 Hz (change-gated); label/sub-type changes are written to `events.csv` as `expression_changed`.
+`main/protocol.ts:60–72`: `{ label: 'neutral'|'smiling'|'frowning', smileType: 'reward'|'affiliative'|'dominance'|null, smile, frown, asymmetry, eyeConstriction, lipPress, openness, labelConfidence, smileTypeConfidence, uncertain, classifierMode, classifierVersion }` — numeric scores are rounded to 2 decimals. Streamed to the dashboard and fed to the rule engine at up to 5 Hz (change-gated); label/sub-type changes are written to `events.csv` as `expression_changed`. Basic `smiling` rules still fire on uncertain smiles, but sub-type rules require a confident, non-uncertain smile type.
 
 ---
 
@@ -603,7 +605,7 @@ Header: `ts_iso, t_rel_ms, seq, actor_role, actor_slot, actor_name, event, targe
 
 ### 11.3 `effect_state.csv` schema (ground-truth telemetry)
 
-Header: `ts_iso, t_rel_ms, slot, participant_id, phase, alpha, voice_semitones, face_found, fps, camera_on, expression, smile_type`.
+Header: `ts_iso, t_rel_ms, slot, participant_id, phase, alpha, voice_semitones, face_found, fps, camera_on, expression, smile_type, label_confidence, smile_type_confidence, uncertain, classifier_mode, classifier_version`.
 Written once per second from each participant's telemetry (`fps` rounded to 0.1). This is the authoritative record of **what was actually applied and shown**, independent of what was commanded — so any command-vs-applied discrepancy is auditable.
 
 ### 11.4 Manifests (two formats — mode-dependent)
@@ -797,4 +799,3 @@ A concise draft for the Application/Materials section, using only values verifie
 ---
 
 *End of documentation.*
-

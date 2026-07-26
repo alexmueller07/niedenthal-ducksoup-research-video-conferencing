@@ -25,7 +25,7 @@ import type {
   PSlot,
   RuleExpression,
 } from './protocol'
-import { NEUTRAL_EFFECTS } from './protocol'
+import { NEUTRAL_EFFECTS, SUBTYPE_RULE_CONFIDENCE_THRESHOLD } from './protocol'
 import { getPreset } from './presets'
 
 /** What the engine needs from the session server. */
@@ -65,12 +65,21 @@ function matches(expr: RuleExpression, state: ExpressionState | null): boolean {
     case 'frowning':
       return state.label === 'frowning'
     case 'reward-smile':
-      return state.label === 'smiling' && state.smileType === 'reward'
+      return confidentSubtype(state, 'reward')
     case 'affiliative-smile':
-      return state.label === 'smiling' && state.smileType === 'affiliative'
+      return confidentSubtype(state, 'affiliative')
     case 'dominance-smile':
-      return state.label === 'smiling' && state.smileType === 'dominance'
+      return confidentSubtype(state, 'dominance')
   }
+}
+
+function confidentSubtype(state: ExpressionState, type: ExpressionState['smileType']): boolean {
+  return (
+    state.label === 'smiling' &&
+    state.smileType === type &&
+    state.uncertain !== true &&
+    (state.smileTypeConfidence ?? 0) >= SUBTYPE_RULE_CONFIDENCE_THRESHOLD
+  )
 }
 
 export class RuleEngine {

@@ -1479,19 +1479,45 @@ function RulesCard({
 function ExpressionChip({ expression }: { expression: ExpressionState }) {
   const face =
     expression.label === 'smiling' ? '🙂' : expression.label === 'frowning' ? '🙁' : '😐'
+  const subtypeConfidence =
+    typeof expression.smileTypeConfidence === 'number'
+      ? `${Math.round(expression.smileTypeConfidence * 100)}%`
+      : ''
   const text =
-    expression.label === 'smiling' && expression.smileType
-      ? `smiling · ${expression.smileType}`
+    expression.label === 'smiling'
+      ? expression.smileType && !expression.uncertain
+        ? `smiling · ${expression.smileType}${subtypeConfidence ? ` ${subtypeConfidence}` : ''}`
+        : 'smiling · uncertain'
       : expression.label
+  const title = [
+    `detected real expression`,
+    `smile ${expression.smile}`,
+    `frown ${expression.frown}`,
+    `asymmetry ${expression.asymmetry}`,
+    `eye constriction ${expression.eyeConstriction}`,
+    `lip press ${expression.lipPress}`,
+    `openness ${expression.openness}`,
+    `label confidence ${Math.round((expression.labelConfidence ?? 0) * 100)}%`,
+    expression.label === 'smiling'
+      ? `smile-type confidence ${Math.round((expression.smileTypeConfidence ?? 0) * 100)}%`
+      : '',
+    expression.uncertain ? 'subtype uncertain' : '',
+    expression.classifierMode ? `classifier ${expression.classifierMode}` : '',
+    expression.classifierVersion ? `version ${expression.classifierVersion}` : '',
+  ]
+    .filter(Boolean)
+    .join(' — ')
   return (
     <span
       className={
         'rounded-full px-2 py-0.5 font-medium backdrop-blur ' +
         (expression.label === 'neutral'
           ? 'bg-gray-700/50 text-gray-300'
-          : 'bg-sky-600/30 text-sky-200')
+          : expression.uncertain
+            ? 'bg-amber-600/25 text-amber-100'
+            : 'bg-sky-600/30 text-sky-200')
       }
-      title={`detected real expression — smile ${expression.smile}, frown ${expression.frown}, asymmetry ${expression.asymmetry}, eye constriction ${expression.eyeConstriction}`}
+      title={title}
     >
       {face} {text}
     </span>

@@ -56,6 +56,9 @@ export const NEUTRAL_EFFECTS: EffectState = { alpha: 1, voiceSemitones: 0 }
 
 export type SmileType = 'reward' | 'affiliative' | 'dominance'
 export type ExpressionLabel = 'neutral' | 'smiling' | 'frowning'
+export type ClassifierMode = 'basic' | 'heuristic-subtype' | 'model-subtype'
+
+export const SUBTYPE_RULE_CONFIDENCE_THRESHOLD = 0.7
 
 export interface ExpressionState {
   label: ExpressionLabel
@@ -69,6 +72,16 @@ export interface ExpressionState {
   lipPress: number
   /** Mouth openness (teeth showing): upper-lip raise + jaw open + lower-lip drop. */
   openness: number
+  /** Confidence that the top-level label is correct, 0..1. */
+  labelConfidence?: number
+  /** Confidence that `smileType` is correct, 0..1. Omitted when no subtype is trusted. */
+  smileTypeConfidence?: number
+  /** True when a smile is present but the subtype should not be trusted. */
+  uncertain?: boolean
+  /** Which classifier produced this state. */
+  classifierMode?: ClassifierMode
+  /** Version string for audits and model/heuristic comparisons. */
+  classifierVersion?: string
 }
 
 /** 1 Hz applied-state report from each participant machine (ground truth). */
@@ -247,4 +260,71 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   } catch {
     return null
   }
+}
+
+export function normalizeExpressionState(input: unknown): ExpressionState | null {
+  if (!isRecord(input)) return null
+  const label = isExpressionLabel(input.label) ? input.label : null
+  if (!label) return null
+
+  const rawSmileType = isSmileType(input.smileType) ? input.smileType : null
+  const smileType = label === 'smiling' ? rawSmileType : null
+  const smileTypeConfidence =
+    smileType && typeof input.smileTypeConfidence !== 'undefined'
+      ? clamp01(input.smileTypeConfidence)
+      : undefined
+  const uncertain =
+    label === 'smiling' &&
+    (input.uncertain === true || smileType === null || (smileTypeConfidence ?? 0) <= 0)
+
+  return {
+    label,
+    smileType,
+    smile: clamp01(input.smile),
+    frown: clamp01(input.frown),
+    asymmetry: clamp01(input.asymmetry),
+    eyeConstriction: clamp01(input.eyeConstriction),
+    lipPress: clamp01(input.lipPress),
+    openness: clamp01(input.openness),
+    labelConfidence:
+      typeof input.labelConfidence === 'undefined' ? undefined : clamp01(input.labelConfidence),
+    smileTypeConfidence,
+    uncertain,
+    classifierMode: isClassifierMode(input.classifierMode) ? input.classifierMode : undefined,
+    classifierVersion:
+      typeof input.classifierVersion === 'string'
+        ? input.classifierVersion.replace(/[^\w.+-]/g, '').slice(0, 64)
+        : undefined,
+  }
+}
+
+export function normalizeTelemetry(input: Telemetry): Telemetry {
+  return {
+    ...input,
+    expression:
+      typeof input.expression === 'undefined' || input.expression === null
+        ? input.expression
+        : normalizeExpressionState(input.expression),
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function isExpressionLabel(v: unknown): v is ExpressionLabel {
+  return v === 'neutral' || v === 'smiling' || v === 'frowning'
+}
+
+function isSmileType(v: unknown): v is SmileType {
+  return v === 'reward' || v === 'affiliative' || v === 'dominance'
+}
+
+function isClassifierMode(v: unknown): v is ClassifierMode {
+  return v === 'basic' || v === 'heuristic-subtype' || v === 'model-subtype'
+}
+
+function clamp01(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : 0
+  return Math.min(1, Math.max(0, Math.round(n * 100) / 100))
 }

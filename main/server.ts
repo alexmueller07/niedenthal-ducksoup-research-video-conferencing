@@ -27,7 +27,13 @@ import type {
   SlotInfo,
   Telemetry,
 } from './protocol'
-import { EMPTY_IDENTITY, NEUTRAL_EFFECTS, parseClientMessage } from './protocol'
+import {
+  EMPTY_IDENTITY,
+  NEUTRAL_EFFECTS,
+  normalizeExpressionState,
+  normalizeTelemetry,
+  parseClientMessage,
+} from './protocol'
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule } from './rules'
 
@@ -294,31 +300,39 @@ export class SessionServer {
         return
       }
       case 'telemetry': {
-        ctx.telemetry = msg.data
+        const telemetry = normalizeTelemetry(msg.data)
+        ctx.telemetry = telemetry
         this.logger.effectState({
           slot: ctx.slot,
           participantId: ctx.identity.participantId,
           phase: this.phase,
-          alpha: msg.data.alpha,
-          voiceSemitones: msg.data.voiceSemitones,
-          faceFound: msg.data.faceFound,
-          fps: msg.data.fps,
-          cameraOn: msg.data.cameraOn,
-          expressionLabel: msg.data.expression?.label ?? '',
-          smileType: msg.data.expression?.smileType ?? '',
+          alpha: telemetry.alpha,
+          voiceSemitones: telemetry.voiceSemitones,
+          faceFound: telemetry.faceFound,
+          fps: telemetry.fps,
+          cameraOn: telemetry.cameraOn,
+          expressionLabel: telemetry.expression?.label ?? '',
+          smileType: telemetry.expression?.smileType ?? '',
+          labelConfidence: telemetry.expression?.labelConfidence,
+          smileTypeConfidence: telemetry.expression?.smileTypeConfidence,
+          uncertain: telemetry.expression?.uncertain,
+          classifierMode: telemetry.expression?.classifierMode,
+          classifierVersion: telemetry.expression?.classifierVersion,
         })
         const admin = this.bySlot('ADMIN')
-        if (admin) this.send(admin.ws, { type: 'telemetry', slot: ctx.slot, data: msg.data })
+        if (admin) this.send(admin.ws, { type: 'telemetry', slot: ctx.slot, data: telemetry })
         return
       }
       case 'expression': {
         if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
-        ctx.expression = msg.data
-        this.ruleEngine.onExpression(ctx.slot, msg.data)
+        const expression = normalizeExpressionState(msg.data)
+        if (!expression) return
+        ctx.expression = expression
+        this.ruleEngine.onExpression(ctx.slot, expression)
         const admin = this.bySlot('ADMIN')
-        if (admin) this.send(admin.ws, { type: 'expression', slot: ctx.slot, data: msg.data })
+        if (admin) this.send(admin.ws, { type: 'expression', slot: ctx.slot, data: expression })
         // Log state changes only — the 5 Hz stream itself would drown events.csv.
-        const key = `${msg.data.label}${msg.data.smileType ? `:${msg.data.smileType}` : ''}`
+        const key = `${expression.label}${expression.smileType ? `:${expression.smileType}` : ''}`
         if (ctx.lastExprKey !== key) {
           ctx.lastExprKey = key
           this.log({
@@ -328,7 +342,7 @@ export class SessionServer {
             actorName: ctx.identity.name,
             param: 'expression',
             value: key,
-            detail: msg.data,
+            detail: expression,
           })
         }
         return

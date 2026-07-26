@@ -352,7 +352,14 @@ export default function ParticipantSession() {
       if (!fx || !effectsReadyRef.current || !client.isOpen) return
       const e = fx.currentExpression()
       if (!e) return
-      const key = `${e.label}|${e.smileType ?? ''}|${Math.round(e.smile * 20)}|${Math.round(e.frown * 20)}`
+      const key = [
+        e.label,
+        e.smileType ?? '',
+        e.uncertain ? 'uncertain' : 'confident',
+        Math.round((e.smileTypeConfidence ?? 0) * 10),
+        Math.round(e.smile * 20),
+        Math.round(e.frown * 20),
+      ].join('|')
       if (key !== lastExprSent) {
         lastExprSent = key
         client.send({ type: 'expression', data: e })

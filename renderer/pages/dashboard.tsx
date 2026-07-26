@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { CaptureStation } from '../lib/capture'
+import type { ExpressionState } from '../lib/protocol'
 import { PRESETS, getPreset, DEFAULT_PRESET_ID } from '../lib/presets'
 import type {
   ConnectionStatus,
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [recording, setRecording] = useState<RecordingStatus>('idle')
   const [recTime, setRecTime] = useState(0)
   const [faceFound, setFaceFound] = useState(false)
+  const [expression, setExpression] = useState<ExpressionState | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [lastSaved, setLastSaved] = useState<SessionManifest | null>(null)
   // Determined after mount so the first client render matches the server-rendered
@@ -70,6 +72,7 @@ export default function DashboardPage() {
         addLog('Session saved', 'success')
       },
       onFaceState: (f) => setFaceFound(f),
+      onExpression: (e) => setExpression(e),
     })
     stationRef.current = station
     return () => station.stop()
@@ -109,13 +112,17 @@ export default function DashboardPage() {
   }
 
   const startCapture = () => {
+    setExpression(null)
     stationRef.current?.setConfig(config)
     stationRef.current?.setAlpha(alpha)
     stationRef.current?.setVoiceSemitones(voice)
     void stationRef.current?.start()
     ipc()?.invoke('config:set', config).catch(() => {})
   }
-  const stopCapture = () => stationRef.current?.stop()
+  const stopCapture = () => {
+    stationRef.current?.stop()
+    setExpression(null)
+  }
   const startRec = () => stationRef.current?.startRecording()
   const stopRec = () => void stationRef.current?.stopRecording()
 
@@ -132,6 +139,16 @@ export default function DashboardPage() {
     connected: 'Live',
     error: 'Error',
   }
+  const expressionText =
+    expression?.label === 'smiling'
+      ? expression.smileType && !expression.uncertain
+        ? `smiling · ${expression.smileType}`
+        : 'smiling · uncertain'
+      : expression?.label ?? 'waiting'
+  const expressionConfidence =
+    expression?.label === 'smiling' && typeof expression.smileTypeConfidence === 'number'
+      ? expression.smileTypeConfidence
+      : expression?.labelConfidence
 
   return (
     <>
@@ -227,6 +244,17 @@ export default function DashboardPage() {
             </div>
 
             <div className="ops">
+              <div className={`detect ${expression?.uncertain ? 'uncertain' : ''}`}>
+                <div>
+                  <span className="detect-label">Detected expression</span>
+                  <span className="detect-value">{expressionText}</span>
+                </div>
+                <div className="detect-meta">
+                  <span>{typeof expressionConfidence === 'number' ? `${Math.round(expressionConfidence * 100)}% confidence` : 'no reading yet'}</span>
+                  <span>{expression?.classifierMode ?? 'classifier idle'}</span>
+                  {expression?.classifierVersion && <span>{expression.classifierVersion}</span>}
+                </div>
+              </div>
               {connection !== 'connected' ? (
                 <button className="primary" disabled={!formValid || connection === 'connecting'} onClick={startCapture}>
                   {connection === 'connecting' ? 'Starting…' : 'Start capture'}
@@ -340,7 +368,14 @@ export default function DashboardPage() {
         .fs { position: absolute; bottom: 8px; right: 8px; z-index: 2; font-size: 11px; padding: 4px 9px; background: rgba(0,0,0,0.55); border: 1px solid #3a4250; border-radius: 5px; color: #cdd3da; cursor: pointer; }
         .fs:hover { background: rgba(0,0,0,0.8); }
 
-        .ops { display: flex; gap: 10px; margin: 16px 0 6px; }
+        .ops { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0 6px; }
+        .detect { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 42px; flex: 1 1 420px; padding: 9px 12px; background: #121923; border: 1px solid #263343; border-radius: 8px; color: #cfe0f5; }
+        .detect.uncertain { background: #20190d; border-color: #5d4520; color: #f1d49b; }
+        .detect-label { display: block; margin-bottom: 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #778392; }
+        .detect-value { font-size: 14px; font-weight: 650; }
+        .detect-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; font-size: 11px; color: #8f9aaa; }
+        .detect-meta span { padding: 2px 7px; border-radius: 999px; background: #1b222c; white-space: nowrap; }
+        .detect.uncertain .detect-meta span { background: #2b2113; color: #d7b979; }
         .ops button { padding: 10px 18px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
         .primary { background: #2f6fc0; color: #fff; }
         .primary:hover { background: #3a7cd0; }

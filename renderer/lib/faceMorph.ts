@@ -62,6 +62,8 @@ const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
 // Below this left/right face-half symmetry the morph fades out (side profile).
 const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
+const CLASSIFIER_MODE = 'heuristic-subtype' as const
+const CLASSIFIER_VERSION = 'heuristic-contract-v1'
 
 // ---- Detection tuning ----
 //
@@ -91,6 +93,8 @@ export const DETECTION_TUNING = {
   rewardOpenness: 0.2,
   /** Relative L/R asymmetry (smile + lip press, ÷ smile level) above this → dominance. */
   dominanceRelAsymmetry: 0.12,
+  /** Below this, a smile is published without a trusted sub-type. */
+  minPublishedSubtypeConfidence: 0.55,
   /** EMA time constant for blendshape smoothing. */
   emaTauMs: 220,
   /** A new label/sub-type must persist this long before it is published. */
@@ -334,11 +338,18 @@ export class FaceMorphProcessor {
       label = smile >= T.smileOn ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
     }
 
+    const labelConfidence = this.labelConfidence(label, smile, frown)
     let smileType: SmileType | null = null
+    let smileTypeConfidence: number | undefined
+    let uncertain = false
     if (label === 'smiling') {
-      if (openness >= T.rewardOpenness) smileType = 'reward'
-      else if (relAsymmetry >= T.dominanceRelAsymmetry) smileType = 'dominance'
-      else smileType = 'affiliative'
+      const subtype = this.classifySmileSubtype(openness, relAsymmetry, smile)
+      smileTypeConfidence = subtype.confidence
+      if (subtype.confidence >= T.minPublishedSubtypeConfidence) {
+        smileType = subtype.type
+      } else {
+        uncertain = true
+      }
     }
 
     // Debounce: a new label/sub-type must persist before it is published.
@@ -363,6 +374,54 @@ export class FaceMorphProcessor {
       eyeConstriction: round2(eyeConstriction),
       lipPress: round2(lipPress),
       openness: round2(openness),
+      labelConfidence: round2(labelConfidence),
+      smileTypeConfidence:
+        this.publishedLabel === 'smiling' && this.publishedType ? round2(smileTypeConfidence ?? 0) : undefined,
+      uncertain:
+        this.publishedLabel === 'smiling' &&
+        (uncertain || this.publishedType === null || (smileTypeConfidence ?? 0) <= 0),
+      classifierMode: CLASSIFIER_MODE,
+      classifierVersion: CLASSIFIER_VERSION,
+    }
+  }
+
+  private labelConfidence(label: ExpressionLabel, smile: number, frown: number): number {
+    const T = DETECTION_TUNING
+    if (label === 'smiling') {
+      return clamp01((smile - T.smileOff) / Math.max(0.01, T.smileOn - T.smileOff))
+    }
+    if (label === 'frowning') {
+      return clamp01((frown - T.frownOff) / Math.max(0.01, T.frownOn - T.frownOff))
+    }
+    const smilePressure = smile / Math.max(0.01, T.smileOn)
+    const frownPressure = frown / Math.max(0.01, T.frownOn)
+    return clamp01(1 - Math.max(smilePressure, frownPressure))
+  }
+
+  private classifySmileSubtype(
+    openness: number,
+    relAsymmetry: number,
+    smile: number,
+  ): { type: SmileType; confidence: number } {
+    const T = DETECTION_TUNING
+    const rewardEvidence = openness / Math.max(0.01, T.rewardOpenness)
+    const dominanceEvidence = relAsymmetry / Math.max(0.01, T.dominanceRelAsymmetry)
+
+    if (rewardEvidence >= 1) {
+      return { type: 'reward', confidence: clamp01(0.65 + (rewardEvidence - 1) * 0.25) }
+    }
+    if (dominanceEvidence >= 1) {
+      return { type: 'dominance', confidence: clamp01(0.65 + (dominanceEvidence - 1) * 0.25) }
+    }
+
+    // Affiliative is the most dangerous bucket to over-claim. Confidence is
+    // highest when the smile is strong and both reward/dominance evidence are
+    // comfortably below their thresholds.
+    const nearOtherSubtype = Math.max(rewardEvidence, dominanceEvidence)
+    const smileStrength = clamp01((smile - T.smileOn) / 0.25)
+    return {
+      type: 'affiliative',
+      confidence: clamp01(0.62 + smileStrength * 0.18 - nearOtherSubtype * 0.25),
     }
   }
 

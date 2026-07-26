@@ -12,6 +12,7 @@ import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
 import { getPreset } from './presets'
 import { pickRecorderFormat, type RecorderFormat } from './recording'
+import type { ExpressionState } from './protocol'
 import type {
   ConnectionStatus,
   RecordingFile,
@@ -31,6 +32,7 @@ export interface CaptureCallbacks {
   onTime: (seconds: number) => void
   onSaved: (manifest: SessionManifest) => void
   onFaceState?: (found: boolean) => void
+  onExpression?: (state: ExpressionState) => void
 }
 
 function hasIpc(): boolean {
@@ -63,6 +65,7 @@ export class CaptureStation {
   private alpha = 1.0
   private voiceSemitones = 0
   private overlay = false
+  private lastExpressionKey = ''
 
   private connection: ConnectionStatus = 'disconnected'
   private recording: RecordingStatus = 'idle'
@@ -173,6 +176,22 @@ export class CaptureStation {
       const found = this.face.render(this.hiddenVideo, this.alteredCtx, w, h, monotonic)
       if (this.overlay) this.drawOverlay(w, h, found)
       this.cb.onFaceState?.(found)
+      const expression = this.face.expression
+      if (expression) {
+        const key = [
+          expression.label,
+          expression.smileType ?? '',
+          expression.uncertain ? 'uncertain' : 'confident',
+          Math.round((expression.labelConfidence ?? 0) * 20),
+          Math.round((expression.smileTypeConfidence ?? 0) * 20),
+          Math.round(expression.smile * 20),
+          Math.round(expression.frown * 20),
+        ].join('|')
+        if (key !== this.lastExpressionKey) {
+          this.lastExpressionKey = key
+          this.cb.onExpression?.(expression)
+        }
+      }
       this.raf = requestAnimationFrame(loop)
     }
     this.raf = requestAnimationFrame(loop)
