@@ -117,7 +117,7 @@ function loadRoute(win: BrowserWindow, route: string) {
   })
 
   await loadRoute(win, '')
-  if (!isProd) win.webContents.openDevTools({ mode: 'detach' })
+  // if (!isProd) win.webContents.openDevTools({ mode: 'detach' })
 })()
 
 app.on('window-all-closed', () => {
