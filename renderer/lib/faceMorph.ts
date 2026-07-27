@@ -85,10 +85,10 @@ const CLASSIFIER_VERSION = 'heuristic-contract-v1'
 export const DETECTION_TUNING = {
   smileOn: 0.6,
   smileOff: 0.45,
-  frownOn: 0.08,
-  frownOff: 0.04,
+  frownOn: 0.03,
+  frownOff: 0.01,
   /** A frown only counts while the smile signal is below this. */
-  frownSmileGate: 0.15,
+  frownSmileGate: 0.75,
   /** Openness (upper-lip raise + jaw + lower-lip drop) above this → reward. */
   rewardOpenness: 0.2,
   /** Relative L/R asymmetry (smile + lip press, ÷ smile level) above this → dominance. */
