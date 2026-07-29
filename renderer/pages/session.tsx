@@ -444,8 +444,9 @@ export default function ParticipantSession() {
     }
     sendEvent('escape_confirmed')
     setTimeout(() => {
-      if (hasIpc()) void ipcInvoke('app:request-quit')
-      else window.close()
+      sessionStorage.removeItem('labcall')
+      if (hasIpc()) void ipcInvoke('app:return-home')
+      else void router.replace('/')
     }, 150)
   }
 

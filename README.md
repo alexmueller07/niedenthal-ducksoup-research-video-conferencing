@@ -167,7 +167,7 @@ Present only when signed in with access code `test` (§12). A right-side panel l
 
 ### 4.4 The escape hatch (only way out of a participant station)
 
-`session.tsx`. Triggered by **Ctrl/Cmd + Shift + Q** (handled three ways for reliability — see §13.2). Opens an experimenter login modal requiring username **`admin`** and password **`admin`** before "Close station" will quit the participant station. Enter submits, Escape cancels. On valid login, after a 150 ms delay it calls the Electron `app:request-quit` IPC (or `window.close()` in a browser). Every step is logged: `escape_dialog_opened`, `escape_dialog_cancelled`, `escape_login_failed`, `escape_confirmed`.
+`session.tsx`. Triggered by **Ctrl/Cmd + Shift + Q** (handled three ways for reliability — see §13.2). Opens an experimenter login modal requiring username **`admin`** and password **`admin`** before "Close station" returns the machine to the InterSync home screen. Enter submits, Escape cancels. On valid login, after a 150 ms delay it clears the saved participant session and calls the Electron `app:return-home` IPC (or routes to `/` in a browser). Every step is logged: `escape_dialog_opened`, `escape_dialog_cancelled`, `escape_login_failed`, `escape_confirmed`.
 
 ### 4.5 What the participant machine sends continuously
 
@@ -640,7 +640,7 @@ Signed in with access code **`test`** (`index.tsx:39`, `session.tsx:42–49, 275
 - `setKiosk(true)`, `setAlwaysOnTop(true, 'screen-saver')`, `setClosable(false)`, minimum size 800×600.
 - `powerSaveBlocker` prevents display sleep during a session.
 - Blocked keys: `F5`, `F11`, `F12`; `Ctrl/Cmd`-combos for reload/close/new-window/zoom (`R/W/N/+/−/0`); devtools combos (`Ctrl+Shift+I/J/C`) in production.
-- **The only exit is Ctrl/Cmd+Shift+Q → experimenter login.** This opens an admin credential modal (`admin` / `admin`) before the participant station can be closed. The shortcut is handled in **three** places for reliability: a global shortcut, a per-window `before-input-event` handler, and a renderer `keydown` listener — because an Electron global shortcut can only be claimed by one process per machine, which made the combo unreliable when several windows ran on one laptop for testing.
+- **The only exit is Ctrl/Cmd+Shift+Q → experimenter login.** This opens an admin credential modal (`admin` / `admin`) before the participant station can return to the InterSync home screen. On valid login, kiosk lockdown is released, the display sleep blocker stops, participant shortcut handlers are removed, and the home route is loaded. The shortcut is handled in **three** places for reliability while the participant station is locked: a global shortcut, a per-window `before-input-event` handler, and a renderer `keydown` listener — because an Electron global shortcut can only be claimed by one process per machine, which made the combo unreliable when several windows ran on one laptop for testing.
 - The researcher window is a normal window; closing it mid-live prompts a confirmation (it shuts the server down for everyone).
 
 ### 13.3 Permissions & autoplay

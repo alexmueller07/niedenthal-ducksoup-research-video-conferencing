@@ -47,6 +47,7 @@ let lockedDown = false
 let allowQuit = false
 let powerBlockerId: number | null = null
 let server: SessionServer | null = null
+let kioskInputHandler: ((event: Electron.Event, input: Electron.Input) => void) | null = null
 
 function loadRoute(win: BrowserWindow, route: string) {
   if (isProd) return win.loadURL(`app://./${route}`)
@@ -173,7 +174,7 @@ function lockdown(win: BrowserWindow) {
   win.setClosable(false)
   globalShortcuts.register()
   powerBlockerId = powerSaveBlocker.start('prevent-display-sleep')
-  win.webContents.on('before-input-event', (event, input) => {
+  kioskInputHandler = (event, input) => {
     if (input.type !== 'keyDown') return
     const ctrlish = input.control || input.meta
     // Escape combo handled per-window so it works even when another instance
@@ -191,7 +192,25 @@ function lockdown(win: BrowserWindow) {
     if (ctrlish && input.shift && ['i', 'I', 'j', 'J', 'c', 'C'].includes(input.key)) {
       if (isProd) event.preventDefault()
     }
-  })
+  }
+  win.webContents.on('before-input-event', kioskInputHandler)
+}
+
+function releaseLockdown(win: BrowserWindow) {
+  if (!lockedDown) return
+  lockedDown = false
+  if (kioskInputHandler) {
+    win.webContents.removeListener('before-input-event', kioskInputHandler)
+    kioskInputHandler = null
+  }
+  globalShortcuts.unregister()
+  if (powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)) {
+    powerSaveBlocker.stop(powerBlockerId)
+  }
+  powerBlockerId = null
+  win.setClosable(true)
+  win.setAlwaysOnTop(false)
+  win.setKiosk(false)
 }
 
 ipcMain.handle('role:participant', () => {
@@ -206,12 +225,17 @@ ipcMain.handle('role:admin', () => {
 
 ipcMain.handle('app:request-quit', () => {
   allowQuit = true
-  if (powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)) {
-    powerSaveBlocker.stop(powerBlockerId)
-  }
+  if (mainWin) releaseLockdown(mainWin)
   // setClosable(false) would make close() a no-op on Windows.
   mainWin?.setClosable(true)
   app.quit()
+  return true
+})
+
+ipcMain.handle('app:return-home', async () => {
+  if (!mainWin) return false
+  releaseLockdown(mainWin)
+  await loadRoute(mainWin, '')
   return true
 })
 
