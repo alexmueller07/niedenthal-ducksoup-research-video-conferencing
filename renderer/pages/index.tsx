@@ -22,6 +22,8 @@ export default function SignInPage() {
   const [serverAddr, setServerAddr] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [initialized, setInitialized] = useState(false)
+  const [joinError, setJoinError] = useState('')
+  const [joinShake, setJoinShake] = useState(0)
   const [joining, setJoining] = useState(false)
 
   useEffect(() => {
@@ -41,8 +43,14 @@ export default function SignInPage() {
 
   async function join() {
     if (joining) return
-    setJoining(true)
     const role = isAdmin ? 'admin' : 'participant'
+    if (role === 'participant' && (!name.trim() || !participantId.trim() || !dyadId.trim())) {
+      setJoinError('Enter full name, participant ID, and dyad ID before joining.')
+      setJoinShake((shake) => shake + 1)
+      return
+    }
+    setJoinError('')
+    setJoining(true)
     // Admin hosts the server on its own machine; participants need the address.
     const addr = role === 'admin' ? 'localhost' : serverAddr.trim() || 'localhost'
     if (hasIpc()) {
@@ -69,7 +77,12 @@ export default function SignInPage() {
   const input =
     'w-full rounded-lg border border-slate-700/80 bg-slate-950/45 px-3 py-2.5 text-sm text-white ' +
     'placeholder-slate-500 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/25'
+  const inputClass = (missing: boolean) =>
+    `${input} ${missing ? 'border-red-400/70 bg-red-950/20 focus:border-red-300 focus:ring-red-400/25' : ''}`
   const label = 'mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400'
+  const missingName = !!joinError && !name.trim()
+  const missingParticipantId = !!joinError && !participantId.trim()
+  const missingDyadId = !!joinError && !dyadId.trim()
 
   return (
     <div
@@ -112,35 +125,52 @@ export default function SignInPage() {
                 <span className="text-2xl leading-none transition group-hover:translate-x-1">›</span>
               </button>
             ) : (
-              <div className="w-full max-w-md rounded-2xl border border-slate-700/80 bg-slate-950/55 p-6 shadow-2xl backdrop-blur-xl">
+              <div
+                key={joinShake}
+                className={`w-full max-w-md rounded-2xl border border-slate-700/80 bg-slate-950/55 p-6 shadow-2xl backdrop-blur-xl ${
+                  joinError ? 'animate-[joinShake_.28s_ease-in-out]' : ''
+                }`}
+              >
                 <div className="space-y-4">
                   <div>
                     <label className={label}>Full name</label>
                     <input
-                      className={input}
+                      className={inputClass(missingName)}
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => {
+                        setName(e.target.value)
+                        setJoinError('')
+                      }}
                       placeholder="First and last name"
                       autoFocus
+                      aria-invalid={missingName}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={label}>Participant ID</label>
                       <input
-                        className={input}
+                        className={inputClass(missingParticipantId)}
                         value={participantId}
-                        onChange={(e) => setParticipantId(e.target.value)}
+                        onChange={(e) => {
+                          setParticipantId(e.target.value)
+                          setJoinError('')
+                        }}
                         placeholder="e.g. 1043"
+                        aria-invalid={missingParticipantId}
                       />
                     </div>
                     <div>
                       <label className={label}>Dyad ID</label>
                       <input
-                        className={input}
+                        className={inputClass(missingDyadId)}
                         value={dyadId}
-                        onChange={(e) => setDyadId(e.target.value)}
+                        onChange={(e) => {
+                          setDyadId(e.target.value)
+                          setJoinError('')
+                        }}
                         placeholder="e.g. D22"
+                        aria-invalid={missingDyadId}
                       />
                     </div>
                   </div>
@@ -152,10 +182,18 @@ export default function SignInPage() {
                       className={input}
                       type="password"
                       value={accessCode}
-                      onChange={(e) => setAccessCode(e.target.value)}
+                      onChange={(e) => {
+                        setAccessCode(e.target.value)
+                        setJoinError('')
+                      }}
                       placeholder="Leave blank to join as participant"
                     />
                   </div>
+                  {joinError && (
+                    <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200">
+                      {joinError}
+                    </p>
+                  )}
 
                   <button
                     type="button"
@@ -244,6 +282,20 @@ export default function SignInPage() {
           }
           to {
             transform: translate3d(18px, -14px, 0);
+          }
+        }
+        @keyframes joinShake {
+          0%,
+          100% {
+            transform: translateX(0);
+          }
+          20%,
+          60% {
+            transform: translateX(-8px);
+          }
+          40%,
+          80% {
+            transform: translateX(8px);
           }
         }
       `}</style>
