@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "niedenthal-lab-video-call",
-  "description": "Three-seat research video call (two participants + invisible researcher) with live face/voice modification, full session logging, and stream recording (Niedenthal Emotions Lab, UW-Madison)",
+  "description": "InterSync research platform for two-participant social interaction studies with live face/voice modification, full session logging, and stream recording (Niedenthal Emotions Lab, UW-Madison)",
   "version": "3.0.0",
   "author": "Niedenthal Emotions Lab",
   "type": "module",

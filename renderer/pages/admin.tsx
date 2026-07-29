@@ -510,7 +510,7 @@ export default function AdminDashboard() {
     if (!hasIpc()) return
     await ipcInvoke('server:write-manifest', {
       schemaVersion: 2,
-      app: 'Niedenthal Lab Video Call',
+      app: 'InterSync',
       appVersion: APP_VERSION,
       writtenAt: new Date().toISOString(),
       sessionStartedAt: roster?.sessionStartedAt ?? null,
