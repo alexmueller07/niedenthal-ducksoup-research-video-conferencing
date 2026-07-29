@@ -125,7 +125,7 @@ File: `renderer/pages/index.tsx`. One screen serves everyone. The role is decide
 | **Study ID** | text (advanced) | Placeholder "e.g. PPS-2". Remembered per machine. |
 | **Session address** | text (advanced) | The researcher machine's address (e.g. `10.140.2.15:8771`). Disabled when access code = admin. Remembered per machine after first session. |
 | **Join** button | button | Label changes with role (below). Disabled state "Joining…" while navigating. |
-| **capture station** link | link | Bottom of card ("IRB 2020-1657 · For lab use only · capture station"). Opens the legacy single-machine capture page `/dashboard`. |
+| **Capture station** button | button | Bottom of landing panel, on its own line in bold uppercase. Opens an experimenter login modal before routing to the legacy single-machine capture page `/dashboard`. |
 
 ### 3.2 Access codes (role selection)
 

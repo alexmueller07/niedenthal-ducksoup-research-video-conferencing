@@ -24,6 +24,11 @@ export default function SignInPage() {
   const [initialized, setInitialized] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [joinShake, setJoinShake] = useState(0)
+  const [captureLoginOpen, setCaptureLoginOpen] = useState(false)
+  const [captureUser, setCaptureUser] = useState('')
+  const [capturePass, setCapturePass] = useState('')
+  const [captureError, setCaptureError] = useState('')
+  const [captureShake, setCaptureShake] = useState(0)
   const [joining, setJoining] = useState(false)
 
   useEffect(() => {
@@ -72,6 +77,29 @@ export default function SignInPage() {
       }),
     )
     void router.push(role === 'admin' ? '/admin' : '/session')
+  }
+
+  function openCaptureLogin() {
+    setCaptureUser('')
+    setCapturePass('')
+    setCaptureError('')
+    setCaptureLoginOpen(true)
+  }
+
+  function closeCaptureLogin() {
+    setCaptureLoginOpen(false)
+    setCaptureUser('')
+    setCapturePass('')
+    setCaptureError('')
+  }
+
+  function confirmCaptureLogin() {
+    if (captureUser !== 'admin' || capturePass !== 'admin') {
+      setCaptureError('Invalid experimenter login.')
+      setCaptureShake((shake) => shake + 1)
+      return
+    }
+    void router.push('/dashboard')
   }
 
   const input =
@@ -256,14 +284,103 @@ export default function SignInPage() {
             )}
 
             <p className="mt-7 text-center text-[11px] text-slate-600">
-              IRB 2020-1657 · For lab use only ·{' '}
-              <a href="/dashboard" className="underline-offset-2 hover:text-slate-400 hover:underline">
-                capture station
-              </a>
+              IRB 2020-1657 · For lab use only
             </p>
+            <button
+              type="button"
+              onClick={openCaptureLogin}
+              className="mt-3 text-center text-xs font-bold uppercase tracking-[0.18em] text-slate-500 underline-offset-4 transition hover:text-cyan-200 hover:underline"
+            >
+              Capture station
+            </button>
           </div>
         </div>
       </main>
+
+      {captureLoginOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
+          <div
+            key={captureShake}
+            className={`w-full max-w-[430px] rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-2xl ring-1 ring-white/5 ${
+              captureError ? 'animate-[captureShake_.28s_ease-in-out]' : ''
+            }`}
+          >
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/15 ring-1 ring-cyan-400/30">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-cyan-200" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2Zm10-10V7a4 4 0 0 0-8 0v4" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-white">Experimenter login required</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              Access to the capture station is restricted to authorized experimenters.
+            </p>
+            <div className="mt-5 space-y-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Username
+                </span>
+                <input
+                  value={captureUser}
+                  onChange={(e) => {
+                    setCaptureUser(e.target.value)
+                    setCaptureError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmCaptureLogin()
+                    if (e.key === 'Escape') closeCaptureLogin()
+                  }}
+                  className={input}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoFocus
+                  placeholder="Enter username"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Password
+                </span>
+                <input
+                  value={capturePass}
+                  onChange={(e) => {
+                    setCapturePass(e.target.value)
+                    setCaptureError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmCaptureLogin()
+                    if (e.key === 'Escape') closeCaptureLogin()
+                  }}
+                  className={input}
+                  type="password"
+                  placeholder="Enter password"
+                />
+              </label>
+              {captureError && (
+                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200">
+                  {captureError}
+                </p>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCaptureLogin}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmCaptureLogin}
+                disabled={!captureUser || !capturePass}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition enabled:hover:bg-cyan-300 disabled:opacity-40"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .intersync-shell {
@@ -285,6 +402,20 @@ export default function SignInPage() {
           }
         }
         @keyframes joinShake {
+          0%,
+          100% {
+            transform: translateX(0);
+          }
+          20%,
+          60% {
+            transform: translateX(-8px);
+          }
+          40%,
+          80% {
+            transform: translateX(8px);
+          }
+        }
+        @keyframes captureShake {
           0%,
           100% {
             transform: translateX(0);
