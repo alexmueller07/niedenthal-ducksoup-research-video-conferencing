@@ -3,7 +3,7 @@
 // One binary, two personas decided at sign-in:
 //   participant → the window becomes a locked kiosk (fullscreen, frameless,
 //                 unclosable, key combos swallowed). The only way out is
-//                 Ctrl+Shift+Q → type "Confirm".
+//                 Ctrl+Shift+Q → experimenter login.
 //   researcher  → a normal window, plus this process starts the SessionServer
 //                 (WebSocket room + CSV logging) and accepts streamed
 //                 recording chunks from the dashboard.

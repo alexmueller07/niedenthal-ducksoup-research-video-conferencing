@@ -6,7 +6,7 @@
 //     unmute. The researcher is otherwise invisible.
 //
 // Nothing on screen is clickable and the cursor is hidden. The window is a
-// kiosk (main process). The only exit is Ctrl+Shift+Q → type "Confirm".
+// kiosk (main process). The only exit is Ctrl+Shift+Q → experimenter login.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
@@ -61,7 +61,10 @@ export default function ParticipantSession() {
   const [partnerConn, setPartnerConn] = useState<RTCPeerConnectionState | 'none'>('none')
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [escapeOpen, setEscapeOpen] = useState(false)
-  const [escapeText, setEscapeText] = useState('')
+  const [escapeUser, setEscapeUser] = useState('')
+  const [escapePass, setEscapePass] = useState('')
+  const [escapeError, setEscapeError] = useState('')
+  const [escapeShake, setEscapeShake] = useState(0)
   const [testFaceMode, setTestFaceMode] = useState(false)
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
   // Hide the cursor only in the real Electron kiosk. In a plain browser tab
@@ -379,7 +382,9 @@ export default function ParticipantSession() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
         e.preventDefault()
         setEscapeOpen(true)
-        setEscapeText('')
+        setEscapeUser('')
+        setEscapePass('')
+        setEscapeError('')
         sendEvent('escape_dialog_opened')
       }
     }
@@ -387,7 +392,9 @@ export default function ParticipantSession() {
 
     const offEscape = ipcOn('escape:open', () => {
       setEscapeOpen(true)
-      setEscapeText('')
+      setEscapeUser('')
+      setEscapePass('')
+      setEscapeError('')
       sendEvent('escape_dialog_opened')
     })
 
@@ -426,10 +433,15 @@ export default function ParticipantSession() {
 
   useEffect(() => {
     if (escapeOpen) escapeInputRef.current?.focus()
-  }, [escapeOpen])
+  }, [escapeOpen, escapeShake])
 
   function confirmEscape() {
-    if (escapeText !== 'Confirm') return
+    if (escapeUser !== 'admin' || escapePass !== 'admin') {
+      setEscapeError('Invalid experimenter login.')
+      setEscapeShake((shake) => shake + 1)
+      sendEvent('escape_login_failed')
+      return
+    }
     sendEvent('escape_confirmed')
     setTimeout(() => {
       if (hasIpc()) void ipcInvoke('app:request-quit')
@@ -440,6 +452,9 @@ export default function ParticipantSession() {
   function cancelEscape() {
     sendEvent('escape_dialog_cancelled')
     setEscapeOpen(false)
+    setEscapeUser('')
+    setEscapePass('')
+    setEscapeError('')
   }
 
   const reconnecting = signalStatus === 'reconnecting'
@@ -584,29 +599,72 @@ export default function ParticipantSession() {
         </div>
       )}
 
-      {/* ---- Escape hatch (Ctrl+Shift+Q) ---- */}
+      {/* ---- Experimenter exit hatch (Ctrl+Shift+Q) ---- */}
       {escapeOpen && (
         <div className="absolute inset-0 z-50 flex cursor-default items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-[420px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
-            <h2 className="text-base font-semibold text-white">Close this station?</h2>
+          <div
+            key={escapeShake}
+            className={`w-[430px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl ring-1 ring-white/5 ${
+              escapeError ? 'animate-[escapeShake_.28s_ease-in-out]' : ''
+            }`}
+          >
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-600/15 ring-1 ring-red-500/30">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-red-300" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2Zm10-10V7a4 4 0 0 0-8 0v4" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-white">Experimenter login required</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-400">
-              This ends the participant&apos;s view on this machine. Type{' '}
-              <span className="rounded bg-gray-800 px-1.5 py-0.5 font-mono text-gray-200">
-                Confirm
-              </span>{' '}
-              to close.
+              This closes the participant station on this machine. Participants cannot exit this
+              screen without an experimenter login.
             </p>
-            <input
-              ref={escapeInputRef}
-              value={escapeText}
-              onChange={(e) => setEscapeText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') confirmEscape()
-                if (e.key === 'Escape') cancelEscape()
-              }}
-              className="mt-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
-              placeholder="Type Confirm"
-            />
+            <div className="mt-5 space-y-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                  Username
+                </span>
+                <input
+                  ref={escapeInputRef}
+                  value={escapeUser}
+                  onChange={(e) => {
+                    setEscapeUser(e.target.value)
+                    setEscapeError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmEscape()
+                    if (e.key === 'Escape') cancelEscape()
+                  }}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  placeholder="Enter username"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                  Password
+                </span>
+                <input
+                  value={escapePass}
+                  onChange={(e) => {
+                    setEscapePass(e.target.value)
+                    setEscapeError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmEscape()
+                    if (e.key === 'Escape') cancelEscape()
+                  }}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                  type="password"
+                  placeholder="Enter password"
+                />
+              </label>
+              {escapeError && (
+                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200">
+                  {escapeError}
+                </p>
+              )}
+            </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
@@ -618,7 +676,7 @@ export default function ParticipantSession() {
               <button
                 type="button"
                 onClick={confirmEscape}
-                disabled={escapeText !== 'Confirm'}
+                disabled={!escapeUser || !escapePass}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition enabled:hover:bg-red-500 disabled:opacity-40"
               >
                 Close station
@@ -637,6 +695,20 @@ export default function ParticipantSession() {
           to {
             transform: translate(-50%, 0);
             opacity: 1;
+          }
+        }
+        @keyframes escapeShake {
+          0%,
+          100% {
+            transform: translateX(0);
+          }
+          20%,
+          60% {
+            transform: translateX(-8px);
+          }
+          40%,
+          80% {
+            transform: translateX(8px);
           }
         }
       `}</style>
