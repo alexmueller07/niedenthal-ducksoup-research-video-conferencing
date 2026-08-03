@@ -11,6 +11,7 @@
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import { spawn } from 'child_process'
 import {
   app,
   ipcMain,
@@ -201,6 +202,21 @@ ipcMain.handle('role:participant', () => {
 
 ipcMain.handle('role:admin', () => {
   mainWin?.maximize()
+  return true
+})
+
+ipcMain.handle('app:platform', () => process.platform)
+
+// Launches a second, fully independent copy of the app (its own process, own
+// window) — mainly for testing researcher + participant views on one Mac,
+// where double-clicking the app again just refocuses the existing window
+// instead of opening a new one.
+ipcMain.handle('app:new-instance', () => {
+  const child = spawn(process.execPath, process.argv.slice(1), {
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
   return true
 })
 

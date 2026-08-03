@@ -1,0 +1,93 @@
+name: Release
+
+# Builds Windows + macOS installers and publishes them to a single, always-
+# up-to-date GitHub Release ("latest") every time main is updated. No manual
+# tagging or version bumps needed. Mac build is unsigned (no Apple Developer
+# cert) — see build-mac.yml for details.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS app (universal)
+        run: npm run build:mac
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows app
+        run: npm run build:win
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-build
+          path: dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download built installers
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: Automatically built from the latest code on `main`. This download always reflects the current state of the app.
+          make_latest: true
+          files: |
+            dist-artifacts/mac-build/*
+            dist-artifacts/win-build/*
