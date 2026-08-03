@@ -21,6 +21,19 @@
 
 * **Date:** 03-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Add automatic build + download page
+
+* **Previous behavior:** 
+No easy way to get the app — it had to be built from source code.
+* **New behavior:** 
+Every push to `main` automatically builds a Windows and a Mac installer and publishes them to a "latest" GitHub Release page.
+* **Why this matters:** 
+Anyone can now download a ready-to-run copy of the app without touching any code.
+
+---
+
+* **Date:** 03-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Split README into a short summary plus separate guides
 
 * **Previous behavior:** 
