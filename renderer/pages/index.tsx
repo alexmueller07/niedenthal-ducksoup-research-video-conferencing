@@ -22,6 +22,8 @@ export default function SignInPage() {
   const [serverAddr, setServerAddr] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [joining, setJoining] = useState(false)
+  const [isMac, setIsMac] = useState(false)
+  const [launchingInstance, setLaunchingInstance] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -30,8 +32,20 @@ export default function SignInPage() {
       if (saved) setServerAddr(saved)
       const savedStudy = await ipcInvoke<string | null>('prefs:get', 'studyId')
       if (savedStudy) setStudyId(savedStudy)
+      const platform = await ipcInvoke<string | null>('app:platform')
+      setIsMac(platform === 'darwin')
     })()
   }, [])
+
+  // Mac only opens one window per double-click by default, which makes it
+  // hard to test researcher + participant on one laptop. This spawns a
+  // second, fully separate copy of the app.
+  async function openAnotherInstance() {
+    if (launchingInstance) return
+    setLaunchingInstance(true)
+    await ipcInvoke('app:new-instance')
+    setLaunchingInstance(false)
+  }
 
   const isAdmin = accessCode.trim().toLowerCase() === 'admin'
   // Access code "test" joins as a participant running on bundled example
@@ -191,6 +205,19 @@ export default function SignInPage() {
           <a href="/dashboard" className="underline-offset-2 hover:text-gray-400 hover:underline">
             capture station
           </a>
+          {isMac && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => void openAnotherInstance()}
+                disabled={launchingInstance}
+                className="underline-offset-2 hover:text-gray-400 hover:underline disabled:opacity-60"
+              >
+                {launchingInstance ? 'opening…' : 'open another window'}
+              </button>
+            </>
+          )}
         </p>
       </div>
     </div>

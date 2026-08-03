@@ -21,6 +21,19 @@
 
 * **Date:** 03-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Add a way to open a second window on Mac
+
+* **Previous behavior:** 
+On Mac, double-clicking the app a second time just refocused the existing window — no way to run a researcher and a test participant on one laptop.
+* **New behavior:** 
+A "open another window" link on the sign-in screen (Mac only) launches a fully separate copy of the app. Doesn't touch the camera/video code at all.
+* **Why this matters:** 
+Requested for testing the app solo on one Mac. Note: switching focus between windows still has the video lag issue — this only solves opening a second window, not that.
+
+---
+
+* **Date:** 03-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Add automatic build + download page
 
 * **Previous behavior:** 
