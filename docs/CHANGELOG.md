@@ -18,3 +18,14 @@
 ---
 
 ## Update History
+
+* **Date:** 03-08-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Split README into a short summary plus separate guides
+
+* **Previous behavior:** 
+One long README mixed a casual overview, deep technical detail, and an audit into a single cluttered file.
+* **New behavior:** 
+README is now a short summary with links to a researcher guide, a technical reference, and this changelog, all under `docs/`.
+* **Why this matters:** 
+Makes it much faster for both RAs and developers to find what they actually need.
