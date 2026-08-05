@@ -191,7 +191,7 @@ File: `renderer/pages/admin.tsx`. The invisible third seat. This machine hosts t
 - **Primary action button**, which changes by phase:
   - *Waiting:* **▶ Start conversation** — enabled once **both** participants are connected. If both are also *ready* (camera + voice reported), it starts immediately; if some readiness checks are still pending, it opens a "Start with pending checks?" confirmation.
   - *Live:* **■ End session** — opens an "End the session?" confirmation.
-  - *Ended:* "Session complete — data saved", plus **↻ Restart conversation** (new clock, recordings continue as `_part2…` files) and **Waiting room** (send participants back).
+  - *Ended:* "Session complete — data saved", plus **Conclude Study** (final closure log + manifest update), **↻ Restart conversation** (new clock, recordings continue as `_part2…` files), and **Waiting room** (send participants back).
 
 ### 5.2 Participant panels (one per P1/P2) — `ParticipantPanel`
 
@@ -226,6 +226,7 @@ Each panel contains:
 
 - **Start with pending checks?** — confirm starting before all readiness checks are green.
 - **End the session?** — confirm ending (participants see the ended screen, recorders stop and finalize, the manifest is written 1.5 s later).
+- **Conclude this study?** — confirm final study closure after the session is ended; writes `study_concluded` to `events.csv` and conclusion metadata to `session.json`.
 
 ---
 
@@ -595,12 +596,12 @@ Header: `ts_iso, t_rel_ms, seq, actor_role, actor_slot, actor_name, event, targe
 |---|---|
 | Server | `server_started`, `server_stopped` |
 | Connection | `client_connected`, `client_rejected`, `client_disconnected`, `client_timeout`, `client_ready`, `unauthorized_command`, `stream_map` |
-| Session phase | `session_waiting`, `session_live`, `session_ended` |
+| Session phase | `session_waiting`, `session_live`, `session_ended`, `study_concluded` |
 | Modification | `effect_command`, `preset_applied`, `identity_set_by_admin` |
 | Automation | `rules_updated`, `rule_fired`, `rule_released`, `rule_reverted` |
 | Expression | `expression_changed` (on label/sub-type change only — the 5 Hz stream is not logged row-by-row) |
 | Researcher | `banner_sent`, `admin_mic_live`, `admin_mic_muted` |
-| Recording | `recording_started`, `recording_stopped` |
+| Recording/output | `recording_format_selected`, `recording_format_fallback`, `recording_started`, `recording_stopped`, `manifest_written` |
 | Participant client-events | `rtc_state`, `window_blur`, `window_focus`, `escape_dialog_opened`, `escape_dialog_cancelled`, `escape_confirmed`, `banner_shown`, `effect_applied`, `media_pipeline_error`, `test_face_mode_enabled`, `test_face_changed` |
 
 ### 11.3 `effect_state.csv` schema (ground-truth telemetry)
@@ -610,7 +611,7 @@ Written once per second from each participant's telemetry (`fps` rounded to 0.1)
 
 ### 11.4 Manifests (two formats — mode-dependent)
 
-- **Three-seat call** (`admin.tsx:509–525`, written via `server:write-manifest` on End): `{ schemaVersion:2, app:'InterSync', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount }` → `session.json`.
+- **Three-seat call** (`admin.tsx`, written via `server:write-manifest` on End and updated on Conclude Study): `{ schemaVersion:2, app:'InterSync', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, studyConcludedAt?, concludedBy?, finalPhase?, recordingCount? }` → `session.json`.
 - **Legacy capture station** (`renderer/lib/capture.ts:310–330`): `{ schemaVersion:1, app:'DuckSoup Experimenter Platform', appVersion:'2.0.0', createdAt, config, preset, appliedParams:{alpha, voiceSemitones, overlay}, startedAt, stoppedAt, durationSec, files:[{kind, filename, path, bytes}] }`. This is the manifest the PPS questionnaire app was written to read (`renderer/lib/types.ts:44–60`). **The two formats differ** — see §15.
 
 ### 11.5 Recording format

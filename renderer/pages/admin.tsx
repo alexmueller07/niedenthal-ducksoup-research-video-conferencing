@@ -99,6 +99,8 @@ export default function AdminDashboard() {
   const [recState, setRecState] = useState<Record<string, RecState>>({})
   const [nowTick, setNowTick] = useState(Date.now())
   const [endConfirm, setEndConfirm] = useState(false)
+  const [concludeConfirm, setConcludeConfirm] = useState(false)
+  const [studyConcludedAt, setStudyConcludedAt] = useState<string | null>(null)
   const [startConfirm, setStartConfirm] = useState(false)
   const [adminName, setAdminName] = useState('')
 
@@ -112,6 +114,7 @@ export default function AdminDashboard() {
   const micTrackRef = useRef<MediaStreamTrack | null>(null)
   const recordersRef = useRef<Map<string, { rec: MediaRecorder; id: string; part: number }>>(new Map())
   const recPartsRef = useRef<Map<string, number>>(new Map())
+  const recStateRef = useRef<Record<string, RecState>>({})
   const bootedRef = useRef(false)
   const throttleRef = useRef<Map<string, number>>(new Map())
   const effectsTouchedRef = useRef<Map<PSlot, number>>(new Map())
@@ -122,6 +125,11 @@ export default function AdminDashboard() {
 
   const phase: Phase = roster?.phase ?? 'waiting'
   const micLive = micToggled || micHolding
+
+  const updateRecState = useCallback((updater: (prev: Record<string, RecState>) => Record<string, RecState>) => {
+    recStateRef.current = updater(recStateRef.current)
+    setRecState(recStateRef.current)
+  }, [])
 
   // ---- Boot ----
   useEffect(() => {
@@ -378,12 +386,12 @@ export default function AdminDashboard() {
     const buf = await data.arrayBuffer()
     const bytes = await ipcInvoke<number>('rec:append', recId, buf)
     if (typeof bytes === 'number') {
-      setRecState((prev) => {
+      updateRecState((prev) => {
         const cur = prev[key]
         return cur ? { ...prev, [key]: { ...cur, bytes } } : prev
       })
     }
-  }, [])
+  }, [updateRecState])
 
   const startRecorder = useCallback(
     async (key: string, label: string, stream: MediaStream) => {
@@ -393,6 +401,14 @@ export default function AdminDashboard() {
       const fullLabel = part > 1 ? `${label}_part${part}` : label
       // MP4 preferred (RA request); falls back to WebM if this Chromium can't mux it.
       const format = pickRecorderFormat(stream.getVideoTracks().length > 0)
+      clientRef.current?.send({
+        type: 'client-event',
+        event: format.ext === 'mp4' ? 'recording_format_selected' : 'recording_format_fallback',
+        target: fullLabel,
+        param: 'mimeType',
+        value: format.mimeType || 'browser-default',
+        detail: { ext: format.ext, hasVideo: stream.getVideoTracks().length > 0 },
+      })
       const opened = await ipcInvoke<{ id: string; path: string }>('rec:open', fullLabel, format.ext)
       if (!opened) return
       const rec = new MediaRecorder(
@@ -403,21 +419,33 @@ export default function AdminDashboard() {
         if (e.data.size > 0) void appendChunk(key, opened.id, e.data)
       }
       rec.onstop = () => {
-        void ipcInvoke('rec:close', opened.id)
+        void ipcInvoke<{ path: string; bytes: number } | null>('rec:close', opened.id).then(
+          (closed) => {
+            updateRecState((prev) => {
+              const cur = prev[key]
+              return cur
+                ? {
+                    ...prev,
+                    [key]: {
+                      ...cur,
+                      bytes: closed?.bytes ?? cur.bytes,
+                      active: false,
+                    },
+                  }
+                : prev
+            })
+          },
+        )
         recordersRef.current.delete(key)
-        setRecState((prev) => {
-          const cur = prev[key]
-          return cur ? { ...prev, [key]: { ...cur, active: false } } : prev
-        })
       }
       rec.start(1000)
       recordersRef.current.set(key, { rec, id: opened.id, part })
-      setRecState((prev) => ({
+      updateRecState((prev) => ({
         ...prev,
         [key]: { label: `${fullLabel}.${format.ext}`, bytes: 0, active: true },
       }))
     },
-    [appendChunk],
+    [appendChunk, updateRecState],
   )
 
   useEffect(() => {
@@ -491,6 +519,31 @@ export default function AdminDashboard() {
     setTimeout(() => void writeManifest(), 1500)
   }
 
+  async function concludeStudy() {
+    if (phase !== 'ended' || studyConcludedAt) return
+    setConcludeConfirm(false)
+    const concludedAt = new Date().toISOString()
+    const recordings = Object.values(recStateRef.current)
+    setStudyConcludedAt(concludedAt)
+    clientRef.current?.send({
+      type: 'client-event',
+      event: 'study_concluded',
+      detail: {
+        phase,
+        sessionStartedAt: roster?.sessionStartedAt ?? null,
+        concludedAt,
+        participants: PSLOTS.map((slot) => ({
+          slot,
+          identity: roster?.slots[slot]?.identity ?? null,
+        })),
+        recordings: recordings.map((r) => ({ label: r.label, bytes: r.bytes })),
+        eventCount,
+        sessionDir,
+      },
+    })
+    await writeManifest({ concludedAt })
+  }
+
   /** Sessions are restartable (RA request). Recordings continue as _partN files. */
   function restartSession(to: 'live' | 'waiting') {
     clientRef.current?.send({ type: 'set-phase', phase: to })
@@ -506,8 +559,9 @@ export default function AdminDashboard() {
     }, 400)
   }
 
-  async function writeManifest() {
+  async function writeManifest(conclusion?: { concludedAt: string }) {
     if (!hasIpc()) return
+    const recordings = Object.values(recStateRef.current)
     await ipcInvoke('server:write-manifest', {
       schemaVersion: 2,
       app: 'InterSync',
@@ -519,8 +573,16 @@ export default function AdminDashboard() {
         slot,
         identity: roster?.slots[slot]?.identity ?? null,
       })),
-      recordings: Object.values(recState).map((r) => ({ label: r.label, bytes: r.bytes })),
+      recordings: recordings.map((r) => ({ label: r.label, bytes: r.bytes })),
       eventCount,
+      ...(conclusion
+        ? {
+            studyConcludedAt: conclusion.concludedAt,
+            concludedBy: adminName,
+            finalPhase: phase,
+            recordingCount: recordings.length,
+          }
+        : {}),
     })
   }
 
@@ -619,8 +681,21 @@ export default function AdminDashboard() {
             {phase === 'ended' && (
               <>
                 <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800">
-                  Session complete — data saved
+                  {studyConcludedAt ? 'Study concluded — data saved' : 'Session complete — data saved'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setConcludeConfirm(true)}
+                  disabled={!!studyConcludedAt}
+                  className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold transition enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={
+                    studyConcludedAt
+                      ? 'This study has already been concluded'
+                      : 'Finalize and log the study conclusion'
+                  }
+                >
+                  Conclude Study
+                </button>
                 <button
                   type="button"
                   onClick={() => restartSession('live')}
@@ -921,6 +996,35 @@ export default function AdminDashboard() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500"
               >
                 End session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Conclude-study confirm ===== */}
+      {concludeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-[440px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+            <h2 className="text-base font-semibold">Conclude this study?</h2>
+            <p className="mt-2 text-sm text-gray-400">
+              This will mark the study as complete, finalize the session record, and log
+              the conclusion in the study output files.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConcludeConfirm(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void concludeStudy()}
+                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold hover:bg-sky-500"
+              >
+                Conclude study
               </button>
             </div>
           </div>

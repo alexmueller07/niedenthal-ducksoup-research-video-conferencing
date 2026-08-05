@@ -271,7 +271,14 @@ ipcMain.handle('server:status', () => (server ? server.status() : null))
 
 ipcMain.handle('server:write-manifest', async (_e, manifest: unknown) => {
   if (!server) return null
-  return server.logger.writeManifest(manifest)
+  const manifestPath = await server.logger.writeManifest(manifest)
+  server.logger.event({
+    event: 'manifest_written',
+    actorRole: 'server',
+    target: path.basename(manifestPath),
+    detail: { path: manifestPath },
+  })
+  return manifestPath
 })
 
 ipcMain.handle('server:stop', async () => {
