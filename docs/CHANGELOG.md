@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 10-08-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Fix broken recordings (corrupted files, wrong duration)
+
+* **Previous behavior:** 
+Session recordings sometimes came out corrupted, and finished videos often showed a bogus duration (tens of thousands of seconds) instead of the real length.
+* **New behavior:** 
+Recording chunks are now written to disk strictly in order, so files can no longer come out scrambled or missing their last second. Finished .mp4 files now get their real duration written in, instead of a placeholder value.
+* **Why this matters:** 
+Corrupted or mislabeled recordings could make session footage unusable for research.
+
+---
+
 * **Date:** 03-08-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Add a way to open a second window on Mac

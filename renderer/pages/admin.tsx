@@ -374,15 +374,32 @@ export default function AdminDashboard() {
   }, [micLive])
 
   // ---- Recording: every stream, auto-armed while the session is live ----
-  const appendChunk = useCallback(async (key: string, recId: string, data: Blob) => {
-    const buf = await data.arrayBuffer()
-    const bytes = await ipcInvoke<number>('rec:append', recId, buf)
-    if (typeof bytes === 'number') {
-      setRecState((prev) => {
-        const cur = prev[key]
-        return cur ? { ...prev, [key]: { ...cur, bytes } } : prev
+  //
+  // ondataavailable fires every 1s and each chunk must land on disk in the
+  // same order it was produced. appendChunk does two async hops (arrayBuffer
+  // + IPC round-trip), so without a queue two chunks' writes can race and
+  // land out of order — a real, timing-dependent cause of corrupted files.
+  // writeQueueRef chains each write after the previous one for that key so
+  // order always matches emission order, and onstop awaits the chain before
+  // closing the file so the final chunk is never truncated.
+  const writeQueueRef = useRef<Map<string, Promise<void>>>(new Map())
+
+  const appendChunk = useCallback((key: string, recId: string, data: Blob) => {
+    const prior = writeQueueRef.current.get(key) ?? Promise.resolve()
+    const next = prior
+      .then(() => data.arrayBuffer())
+      .then((buf) => ipcInvoke<number>('rec:append', recId, buf))
+      .then((bytes) => {
+        if (typeof bytes === 'number') {
+          setRecState((prev) => {
+            const cur = prev[key]
+            return cur ? { ...prev, [key]: { ...cur, bytes } } : prev
+          })
+        }
       })
-    }
+      .catch((err) => console.error(`[rec] append failed for ${key}`, err))
+    writeQueueRef.current.set(key, next)
+    return next
   }, [])
 
   const startRecorder = useCallback(
@@ -399,15 +416,20 @@ export default function AdminDashboard() {
         stream,
         format.mimeType ? { mimeType: format.mimeType } : undefined,
       )
+      const startedPerf = performance.now()
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) void appendChunk(key, opened.id, e.data)
       }
       rec.onstop = () => {
-        void ipcInvoke('rec:close', opened.id)
-        recordersRef.current.delete(key)
-        setRecState((prev) => {
-          const cur = prev[key]
-          return cur ? { ...prev, [key]: { ...cur, active: false } } : prev
+        const durationSec = (performance.now() - startedPerf) / 1000
+        const pending = writeQueueRef.current.get(key) ?? Promise.resolve()
+        void pending.then(() => ipcInvoke('rec:close', opened.id, durationSec)).finally(() => {
+          writeQueueRef.current.delete(key)
+          recordersRef.current.delete(key)
+          setRecState((prev) => {
+            const cur = prev[key]
+            return cur ? { ...prev, [key]: { ...cur, active: false } } : prev
+          })
         })
       }
       rec.start(1000)

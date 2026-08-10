@@ -29,6 +29,7 @@ import { createWindow } from './helpers/create-window'
 import { SessionServer, lanIps } from './server'
 import { SessionLogger } from './logger'
 import { DEFAULT_PORT } from './protocol'
+import { patchMp4Duration } from './mp4duration'
 
 const isProd = process.env.NODE_ENV === 'production'
 const store = new Store<Record<string, unknown>>({ name: 'lab-video-call' })
@@ -305,16 +306,34 @@ ipcMain.handle('rec:append', (_e, id: string, chunk: ArrayBuffer) => {
   return sink.bytes
 })
 
-ipcMain.handle('rec:close', async (_e, id: string) => {
+ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number) => {
   const sink = recordings.get(id)
   if (!sink) return null
   recordings.delete(id)
   await new Promise<void>((r) => sink.stream.end(() => r()))
+
+  // Chromium's fragmented-MP4 MediaRecorder output leaves the moov header's
+  // duration unknown (it's written before any media exists), which makes
+  // some players show a bogus multi-hour length. Patch it in place now that
+  // we know how long the recording actually ran.
+  let durationPatched = false
+  if (typeof durationSec === 'number' && path.extname(sink.path).toLowerCase() === '.mp4') {
+    try {
+      durationPatched = await patchMp4Duration(sink.path, durationSec)
+    } catch (err) {
+      server?.logger.event({
+        event: 'recording_duration_patch_failed',
+        target: path.basename(sink.path),
+        detail: { path: sink.path, error: String(err) },
+      })
+    }
+  }
+
   server?.logger.event({
     event: 'recording_stopped',
     target: path.basename(sink.path),
     value: sink.bytes,
-    detail: { path: sink.path, bytes: sink.bytes },
+    detail: { path: sink.path, bytes: sink.bytes, durationSec, durationPatched },
   })
   return { path: sink.path, bytes: sink.bytes }
 })
