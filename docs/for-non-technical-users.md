@@ -74,8 +74,8 @@ Rather than picking raw numbers, you can apply a named condition with one click:
 | Smile + (strong) | Clearly increases smiling |
 | Frown (subtle) | Slightly dampens toward a frown |
 | Frown (strong) | Clearly shifts toward a frown |
-| Warmer voice | Slight smile lift + slightly lower voice |
-| Brighter voice | Slight smile lift + slightly higher voice |
+| Lower voice | Slight smile lift + slightly lower voice |
+| Higher voice | Slight smile lift + slightly higher voice |
 
 ## Test mode
 

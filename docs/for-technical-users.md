@@ -172,8 +172,8 @@ Each of the 192 triangles is affine-mapped from source to displaced destination 
 | Neutral / Sham | 1.00 | 0 | — | — | — | none |
 | Smile + (subtle) | 1.35 | 0.35 | 0.0595 W | 0.0539 W out | +0.0251 W up | — |
 | Smile + (strong) | 1.90 | 0.90 | 0.1530 W | 0.1387 W out | +0.0647 W up | — |
-| Warmer voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice −2 st |
-| Brighter voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice +2 st |
+| Lower voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice −2 st |
+| Higher voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice +2 st |
 | Frown (subtle) | 0.60 | 0.40 | 0.0520 W | 0.0130 W in | −0.0520 W down | pout 0.0260 W |
 | Frown (strong) | 0.10 | 0.90 | 0.1170 W | 0.0293 W in | −0.1170 W down | pout 0.0585 W |
 
@@ -226,7 +226,7 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 
 - `n = 0` → bypass.
 - Dashboard slider: −12…+12 st (step 1); legacy capture station: −8…+8 st. Values beyond ±12 have no additional effect (clamped internally).
-- Presets: "Warmer voice" = −2 st, "Brighter voice" = +2 st (both with α = 1.25). All other presets = 0 st.
+- Presets: "Lower voice" = −2 st, "Higher voice" = +2 st (both with α = 1.25). All other presets = 0 st.
 - Reference: pitch ratio ≈ `2^(n/12)`; +2 st ≈ 1.122×, −2 st ≈ 0.891×, ±12 st = 2×/0.5×.
 
 ### 3.5 Modification presets
@@ -240,8 +240,8 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 | `smile-strong` | Smile + (strong) | 1.9 | 0 | no | Clearly increases smile intensity. |
 | `frown-subtle` | Frown (subtle) | 0.6 | 0 | no | Mildly dampens the smile toward neutral/negative. |
 | `frown-strong` | Frown (strong) | 0.1 | 0 | no | Clearly shifts the mouth toward a frown. |
-| `warm-voice` | Warmer voice | 1.25 | −2 | no | Subtle smile lift + slightly lower, warmer voice. |
-| `bright-voice` | Brighter voice | 1.25 | +2 | no | Subtle smile lift + slightly higher, brighter voice. |
+| `warm-voice` | Lower voice | 1.25 | −2 | no | Subtle smile lift + slightly lower voice. |
+| `bright-voice` | Higher voice | 1.25 | +2 | no | Subtle smile lift + slightly higher voice. |
 
 `DEFAULT_PRESET_ID = 'neutral'`. The sham/control condition runs the identical pipeline (detection, canvas, audio graph all live) but leaves parameters unchanged, so it differs from a real condition only in parameter values, not processing artifacts or latency.
 

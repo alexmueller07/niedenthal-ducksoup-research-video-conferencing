@@ -21,6 +21,19 @@
 
 * **Date:** 10-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Rename voice presets to "Lower voice" / "Higher voice"
+
+* **Previous behavior:** 
+The two voice-shift presets were labeled "Warmer voice" and "Brighter voice."
+* **New behavior:** 
+Same presets, relabeled "Lower voice" and "Higher voice" to describe the actual pitch change plainly.
+* **Why this matters:** 
+Clearer for RAs picking a condition — "lower/higher" describes what the voice does, not a vague feeling.
+
+---
+
+* **Date:** 10-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Fix broken recordings (corrupted files, wrong duration)
 
 * **Previous behavior:** 
