@@ -553,6 +553,20 @@ export default function AdminDashboard() {
     ? Math.max(0, Math.floor((nowTick - Date.parse(roster.sessionStartedAt)) / 1000))
     : 0
 
+  async function goHome() {
+    if (
+      phase === 'live' &&
+      !window.confirm(
+        'Return to the home screen? This will close the researcher dashboard and stop the active session on this machine.',
+      )
+    ) {
+      return
+    }
+    sessionStorage.removeItem('labcall')
+    if (hasIpc()) await ipcInvoke('server:stop')
+    void router.replace('/')
+  }
+
   const filteredLog = logFilter
     ? logRows.filter((r) =>
         `${r.event} ${r.actorSlot} ${r.actorName} ${r.param} ${r.value}`
@@ -566,6 +580,14 @@ export default function AdminDashboard() {
       {/* ===== Header ===== */}
       <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-950/95 backdrop-blur">
         <div className="flex items-center gap-4 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => void goHome()}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800"
+          >
+            <span aria-hidden="true">‹</span>
+            Back
+          </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 ring-1 ring-violet-500/40">
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-violet-400" fill="currentColor">

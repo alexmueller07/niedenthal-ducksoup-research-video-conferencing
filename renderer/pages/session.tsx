@@ -6,7 +6,7 @@
 //     unmute. The researcher is otherwise invisible.
 //
 // Nothing on screen is clickable and the cursor is hidden. The window is a
-// kiosk (main process). The only exit is Ctrl+Shift+Q → experimenter login.
+// kiosk (main process). The only exit is Ctrl+Shift+Q → typed experimenter confirmation.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
@@ -61,8 +61,7 @@ export default function ParticipantSession() {
   const [partnerConn, setPartnerConn] = useState<RTCPeerConnectionState | 'none'>('none')
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [escapeOpen, setEscapeOpen] = useState(false)
-  const [escapeUser, setEscapeUser] = useState('')
-  const [escapePass, setEscapePass] = useState('')
+  const [escapeText, setEscapeText] = useState('')
   const [escapeError, setEscapeError] = useState('')
   const [escapeShake, setEscapeShake] = useState(0)
   const [testFaceMode, setTestFaceMode] = useState(false)
@@ -382,8 +381,7 @@ export default function ParticipantSession() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
         e.preventDefault()
         setEscapeOpen(true)
-        setEscapeUser('')
-        setEscapePass('')
+        setEscapeText('')
         setEscapeError('')
         sendEvent('escape_dialog_opened')
       }
@@ -392,8 +390,7 @@ export default function ParticipantSession() {
 
     const offEscape = ipcOn('escape:open', () => {
       setEscapeOpen(true)
-      setEscapeUser('')
-      setEscapePass('')
+      setEscapeText('')
       setEscapeError('')
       sendEvent('escape_dialog_opened')
     })
@@ -436,10 +433,10 @@ export default function ParticipantSession() {
   }, [escapeOpen, escapeShake])
 
   function confirmEscape() {
-    if (escapeUser !== 'admin' || escapePass !== 'admin') {
-      setEscapeError('Invalid experimenter login.')
+    if (escapeText.trim().toLowerCase() !== 'confirm') {
+      setEscapeError('Type "confirm" to close the participant station.')
       setEscapeShake((shake) => shake + 1)
-      sendEvent('escape_login_failed')
+      sendEvent('escape_confirm_failed')
       return
     }
     sendEvent('escape_confirmed')
@@ -453,8 +450,7 @@ export default function ParticipantSession() {
   function cancelEscape() {
     sendEvent('escape_dialog_cancelled')
     setEscapeOpen(false)
-    setEscapeUser('')
-    setEscapePass('')
+    setEscapeText('')
     setEscapeError('')
   }
 
@@ -614,21 +610,21 @@ export default function ParticipantSession() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2Zm10-10V7a4 4 0 0 0-8 0v4" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-white">Experimenter login required</h2>
+            <h2 className="text-base font-semibold text-white">Confirm station closure</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-400">
               This closes the participant station on this machine. Participants cannot exit this
-              screen without an experimenter login.
+              screen without experimenter confirmation.
             </p>
             <div className="mt-5 space-y-3">
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                  Username
+                  Confirmation
                 </span>
                 <input
                   ref={escapeInputRef}
-                  value={escapeUser}
+                  value={escapeText}
                   onChange={(e) => {
-                    setEscapeUser(e.target.value)
+                    setEscapeText(e.target.value)
                     setEscapeError('')
                   }}
                   onKeyDown={(e) => {
@@ -638,26 +634,7 @@ export default function ParticipantSession() {
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
                   autoCapitalize="none"
                   autoCorrect="off"
-                  placeholder="Enter username"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                  Password
-                </span>
-                <input
-                  value={escapePass}
-                  onChange={(e) => {
-                    setEscapePass(e.target.value)
-                    setEscapeError('')
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') confirmEscape()
-                    if (e.key === 'Escape') cancelEscape()
-                  }}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
-                  type="password"
-                  placeholder="Enter password"
+                  placeholder='Type "confirm"'
                 />
               </label>
               {escapeError && (
@@ -677,7 +654,7 @@ export default function ParticipantSession() {
               <button
                 type="button"
                 onClick={confirmEscape}
-                disabled={!escapeUser || !escapePass}
+                disabled={!escapeText.trim()}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition enabled:hover:bg-red-500 disabled:opacity-40"
               >
                 Close station
