@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 11-08-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Add safer station navigation and researcher entry checks
+
+* **Previous behavior:**
+Researchers could open the dashboard without entering their name, so session logs could be missing the RA identity. Participant station exit used an experimenter login screen, and leaving the researcher dashboard or capture station during an active session could stop the flow without clearly guiding the RA through saving and returning home.
+* **New behavior:**
+Opening the researcher dashboard now requires the RA to enter a full name first. Participant station exit is back to the typed `confirm` flow, while still safely returning to the home screen and releasing kiosk lockdown. The researcher dashboard now has a Back button, and both the dashboard and capture station warn before leaving active sessions. If recording is active, the app ends the session, finalizes recordings, writes the session manifest, and then returns home.
+* **Why this matters:**
+These changes make the app harder to misuse during lab sessions. RAs get clearer navigation, participant stations stay protected, session metadata is more complete, and recordings/manifests are less likely to be lost by accidentally backing out mid-session.
+
+---
+
 * **Date:** 10-08-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Rename voice presets to "Lower voice" / "Higher voice"
