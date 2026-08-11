@@ -554,13 +554,14 @@ export default function AdminDashboard() {
     : 0
 
   async function goHome() {
-    if (
-      phase === 'live' &&
-      !window.confirm(
-        'Return to the home screen? This will close the researcher dashboard and stop the active session on this machine.',
+    if (phase === 'live') {
+      const ok = window.confirm(
+        'End session and return home? This will end the participant session, finalize recordings, write the session manifest, and then return to the home screen.',
       )
-    ) {
-      return
+      if (!ok) return
+      clientRef.current?.send({ type: 'set-phase', phase: 'ended' })
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await writeManifest()
     }
     sessionStorage.removeItem('labcall')
     if (hasIpc()) await ipcInvoke('server:stop')

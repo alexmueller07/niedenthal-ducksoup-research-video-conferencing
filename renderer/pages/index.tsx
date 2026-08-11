@@ -57,6 +57,11 @@ export default function SignInPage() {
   async function join() {
     if (joining) return
     const role = isAdmin ? 'admin' : 'participant'
+    if (role === 'admin' && !name.trim()) {
+      setJoinError('Enter the researcher name before opening the dashboard.')
+      setJoinShake((shake) => shake + 1)
+      return
+    }
     if (role === 'participant' && (!name.trim() || !participantId.trim() || !dyadId.trim())) {
       setJoinError('Enter full name, participant ID, and dyad ID before joining.')
       setJoinShake((shake) => shake + 1)

@@ -125,6 +125,29 @@ export default function DashboardPage() {
   }
   const startRec = () => stationRef.current?.startRecording()
   const stopRec = () => void stationRef.current?.stopRecording()
+  const backHome = async () => {
+    if (recording === 'saving') return
+    if (recording === 'recording') {
+      const ok = window.confirm(
+        'End session and return home? This will stop recording, save the videos, write the session manifest, and then return to the home screen.',
+      )
+      if (!ok) return
+      await stationRef.current?.stopRecording()
+      stationRef.current?.stop()
+      setExpression(null)
+      void router.push('/')
+      return
+    }
+    if (connection === 'connected' || connection === 'connecting') {
+      const ok = window.confirm(
+        'Return home? This will stop the active capture session on this machine.',
+      )
+      if (!ok) return
+      stationRef.current?.stop()
+      setExpression(null)
+    }
+    void router.push('/')
+  }
 
   const goFullscreen = () => {
     alteredWrapRef.current?.requestFullscreen?.().catch(() => {})
@@ -159,9 +182,15 @@ export default function DashboardPage() {
       <div className="app">
         <header className="topbar">
           <div className="topbar-left">
-            <button className="back" type="button" onClick={() => void router.push('/')} aria-label="Back to main screen">
+            <button
+              className="back"
+              type="button"
+              onClick={() => void backHome()}
+              disabled={recording === 'saving'}
+              aria-label="Back to main screen"
+            >
               <span aria-hidden="true">‹</span>
-              Back
+              {recording === 'saving' ? 'Saving…' : 'Back'}
             </button>
             <div className="title">
               DuckSoup Capture Station
