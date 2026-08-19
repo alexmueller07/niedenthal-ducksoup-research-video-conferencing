@@ -85,7 +85,7 @@ function loadRoute(win: BrowserWindow, route: string) {
     height: 800,
     minWidth: 980,
     minHeight: 640,
-    title: 'InterSync',
+    title: 'Video Call',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(import.meta.dirname, 'preload.js'),

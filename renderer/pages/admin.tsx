@@ -564,7 +564,7 @@ export default function AdminDashboard() {
     const recordings = Object.values(recStateRef.current)
     await ipcInvoke('server:write-manifest', {
       schemaVersion: 2,
-      app: 'InterSync',
+      app: 'Video Call',
       appVersion: APP_VERSION,
       writtenAt: new Date().toISOString(),
       sessionStartedAt: roster?.sessionStartedAt ?? null,

@@ -136,9 +136,9 @@ export default function SignInPage() {
           <div className={`relative flex min-h-[680px] flex-col items-center justify-center px-6 py-12 transition-all duration-500 ${initialized ? 'pb-8 pt-10' : ''}`}>
             <div className={`text-center transition-all duration-500 ${initialized ? 'mb-7 scale-90' : ''}`}>
               <h1 className="select-none text-[76px] font-black leading-[0.88] tracking-normal text-white drop-shadow-[0_12px_34px_rgba(125,211,252,.28)] sm:text-[112px]">
-                Inter
+                Video
                 <span className="block pr-2 text-[0.78em] font-black italic text-slate-100">
-                  Sync
+                  Call
                 </span>
               </h1>
             </div>
