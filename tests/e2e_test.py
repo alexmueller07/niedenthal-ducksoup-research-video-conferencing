@@ -72,6 +72,7 @@ with sync_playwright() as p:
     admin.wait_for_selector("text=P1 · Alice Test", timeout=20000)
     admin.wait_for_selector("text=P2 · Bob Test", timeout=20000)
     check("admin shows both names", True)
+    check("smile model test panel visible", admin.locator("text=Smile classification test").is_visible())
 
     start = admin.locator("button:has-text('Start conversation')")
     for _ in range(60):  # effects pipeline warm-up (model download on first run)

@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 19-08-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Add smile-model integration test branch
+
+* **Previous behavior:**
+The live app used only the built-in heuristic smile subtype classifier, and the researcher dashboard showed expression confidence mostly through compact video chips and hover text.
+* **New behavior:**
+The integration branch now loads a TypeScript export of the Phase 4 baseline model, adapts live MediaPipe/camera features into that model contract, and publishes model-style expression states with confidence, uncertainty, classifier mode, and classifier version. The researcher dashboard also has a dedicated Smile classification test panel for watching label and smile-type confidence while testing.
+* **Why this matters:**
+This lets the team smoke-test model-shaped output with a real camera before considering a merge into the approved app. It keeps the work off `main`, records the same confidence fields into the existing CSV output path, and makes the subtype detector clearly visible as research-only integration testing.
+
+---
+
 * **Date:** 11-08-2026
 * **Author:** Ismam Ferdous
 * **Changes Made:** Add safer station navigation and researcher entry checks

@@ -270,7 +270,7 @@ export function normalizeExpressionState(input: unknown): ExpressionState | null
   const rawSmileType = isSmileType(input.smileType) ? input.smileType : null
   const smileType = label === 'smiling' ? rawSmileType : null
   const smileTypeConfidence =
-    smileType && typeof input.smileTypeConfidence !== 'undefined'
+    label === 'smiling' && typeof input.smileTypeConfidence !== 'undefined'
       ? clamp01(input.smileTypeConfidence)
       : undefined
   const uncertain =

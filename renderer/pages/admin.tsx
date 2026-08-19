@@ -16,6 +16,7 @@ import { SignalClient, SignalStatus } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { PRESETS } from '../lib/presets'
 import { pickRecorderFormat } from '../lib/recording'
+import { smileModelMetadata } from '../lib/smileModel'
 import {
   APP_VERSION,
   DEFAULT_PORT,
@@ -40,6 +41,7 @@ import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
 type PSlot = 'P1' | 'P2'
 const PSLOTS: PSlot[] = ['P1', 'P2']
 type Kind = 'altered' | 'clean'
+const SMILE_MODEL_META = smileModelMetadata()
 
 interface ServerStatus {
   running: boolean
@@ -777,6 +779,8 @@ export default function AdminDashboard() {
               </span>
             </div>
           </Card>
+
+          <SmileModelCard expressions={expressions} telemetry={telemetry} />
 
           {/* Banner */}
           <Card title="Message banner" subtitle="Appears at the top of both participant screens">
@@ -1524,6 +1528,10 @@ function RulesCard({
 function ExpressionChip({ expression }: { expression: ExpressionState }) {
   const face =
     expression.label === 'smiling' ? '🙂' : expression.label === 'frowning' ? '🙁' : '😐'
+  const labelConfidence =
+    typeof expression.labelConfidence === 'number'
+      ? `${Math.round(expression.labelConfidence * 100)}%`
+      : ''
   const subtypeConfidence =
     typeof expression.smileTypeConfidence === 'number'
       ? `${Math.round(expression.smileTypeConfidence * 100)}%`
@@ -1533,7 +1541,7 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
       ? expression.smileType && !expression.uncertain
         ? `smiling · ${expression.smileType}${subtypeConfidence ? ` ${subtypeConfidence}` : ''}`
         : 'smiling · uncertain'
-      : expression.label
+      : `${expression.label}${labelConfidence ? ` ${labelConfidence}` : ''}`
   const title = [
     `detected real expression`,
     `smile ${expression.smile}`,
@@ -1566,6 +1574,121 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
     >
       {face} {text}
     </span>
+  )
+}
+
+function SmileModelCard({
+  expressions,
+  telemetry,
+}: {
+  expressions: Partial<Record<PSlot, ExpressionState>>
+  telemetry: Partial<Record<PSlot, Telemetry>>
+}) {
+  return (
+    <Card
+      title="Smile classification test"
+      subtitle="Phase 5 integration branch; review confidence before using for study decisions"
+    >
+      <div className="space-y-3">
+        {PSLOTS.map((slot) => (
+          <SmileModelRow
+            key={slot}
+            slot={slot}
+            expression={expressions[slot]}
+            faceFound={telemetry[slot]?.faceFound ?? false}
+          />
+        ))}
+      </div>
+      <div className="mt-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+        Research-only model adapter. Subtype predictions need human review before real participant
+        sessions.
+      </div>
+      <div className="mt-2 space-y-1 font-mono text-[10px] text-gray-600">
+        <div>version {SMILE_MODEL_META.classifierVersion}</div>
+        <div>source {SMILE_MODEL_META.sourceCommit}</div>
+      </div>
+    </Card>
+  )
+}
+
+function SmileModelRow({
+  slot,
+  expression,
+  faceFound,
+}: {
+  slot: PSlot
+  expression: ExpressionState | undefined
+  faceFound: boolean
+}) {
+  const labelConfidence = expression?.labelConfidence ?? 0
+  const subtypeConfidence = expression?.smileTypeConfidence ?? 0
+  const subtype =
+    expression?.label === 'smiling'
+      ? expression.smileType && !expression.uncertain
+        ? expression.smileType
+        : 'unknown'
+      : 'none'
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${faceFound ? 'bg-emerald-400' : 'bg-gray-600'}`} />
+          <span className="text-xs font-semibold text-gray-200">{slot}</span>
+          <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] text-gray-400">
+            {expression?.classifierMode ?? 'waiting'}
+          </span>
+        </div>
+        <span
+          className={
+            'rounded-full px-2 py-0.5 text-[10px] font-semibold ' +
+            (expression?.uncertain
+              ? 'bg-amber-600/25 text-amber-200'
+              : expression
+                ? 'bg-emerald-600/20 text-emerald-300'
+                : 'bg-gray-800 text-gray-500')
+          }
+        >
+          {expression?.uncertain ? 'uncertain' : expression ? 'confident' : 'no reading'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <Metric label="Label" value={expression?.label ?? 'waiting'} />
+        <Metric label="Smile type" value={subtype} />
+      </div>
+      <ConfidenceBar label="Label confidence" value={labelConfidence} />
+      <ConfidenceBar label="Smile-type confidence" value={subtypeConfidence} />
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-600">{label}</div>
+      <div className="mt-0.5 truncate font-medium text-gray-300">{value}</div>
+    </div>
+  )
+}
+
+function ConfidenceBar({ label, value }: { label: string; value: number }) {
+  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100)
+  return (
+    <div className="mt-2">
+      <div className="mb-1 flex justify-between text-[10px] text-gray-500">
+        <span>{label}</span>
+        <span className="font-mono tabular-nums">{pct}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
+        <div
+          className={
+            'h-full transition-[width] duration-150 ' +
+            (pct >= 70 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-500' : 'bg-gray-600')
+          }
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   )
 }
 

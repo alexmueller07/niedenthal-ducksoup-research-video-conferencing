@@ -7,6 +7,11 @@ import {
   NEUTRAL_EFFECTS,
   normalizeExpressionState,
 } from '../main/protocol'
+import {
+  expressionFromLiveSmileModel,
+  smileModelMetadata,
+  type SmileModelFeatureVector,
+} from '../renderer/lib/smileModel'
 
 function smiling(overrides: Partial<ExpressionState> = {}): ExpressionState {
   return {
@@ -69,6 +74,71 @@ assert.deepEqual(
     classifierVersion: 'badversionwithspacesandsymbols',
   },
 )
+
+assert.deepEqual(
+  normalizeExpressionState({
+    label: 'smiling',
+    smileType: null,
+    smile: 0.75,
+    frown: 0,
+    asymmetry: 0.2,
+    eyeConstriction: 0.1,
+    lipPress: 0.1,
+    openness: 0.4,
+    labelConfidence: 0.66,
+    smileTypeConfidence: 0.44,
+    uncertain: true,
+    classifierMode: 'model-subtype',
+    classifierVersion: 'phase5-app-contract-v1+phase4-logreg-v1+live-v1',
+  }),
+  {
+    label: 'smiling',
+    smileType: null,
+    smile: 0.75,
+    frown: 0,
+    asymmetry: 0.2,
+    eyeConstriction: 0.1,
+    lipPress: 0.1,
+    openness: 0.4,
+    labelConfidence: 0.66,
+    smileTypeConfidence: 0.44,
+    uncertain: true,
+    classifierMode: 'model-subtype',
+    classifierVersion: 'phase5-app-contract-v1+phase4-logreg-v1+live-v1',
+  },
+)
+
+const modelFeatures: SmileModelFeatureVector = {
+  frames_sampled: 1,
+  frames_ok: 1,
+  face_detection_rate: 1,
+  smile_detection_rate: 1,
+  image_width_median: 640,
+  image_height_median: 480,
+  brightness_mean: 90,
+  brightness_std: 50,
+  contrast_rms_mean: 50,
+  sharpness_laplacian_var_mean: 60,
+  edge_density_mean: 0.03,
+  lower_face_brightness_mean: 80,
+  lower_face_edge_density_mean: 0.03,
+  lower_face_symmetry_mad_mean: 0.1,
+  lower_face_dark_ratio_mean: 0.25,
+  face_area_pct_mean: 0.45,
+  face_area_pct_std: 0,
+  face_center_x_pct_mean: 0.5,
+  face_center_y_pct_mean: 0.55,
+  smile_area_pct_mean: 0.1,
+  smile_area_pct_std: 0,
+  smile_to_face_width_ratio_mean: 0.55,
+  smile_to_face_width_ratio_std: 0,
+  duration_ms: 0,
+}
+const modeled = expressionFromLiveSmileModel(modelFeatures, smiling())
+assert.equal(modeled.classifierMode, 'model-subtype')
+assert.equal(modeled.classifierVersion, smileModelMetadata().classifierVersion)
+assert.ok(typeof modeled.labelConfidence === 'number')
+assert.ok(typeof modeled.smileTypeConfidence === 'number' || modeled.smileType === null)
 
 const effects: Record<'P1' | 'P2', EffectState> = {
   P1: { ...NEUTRAL_EFFECTS },

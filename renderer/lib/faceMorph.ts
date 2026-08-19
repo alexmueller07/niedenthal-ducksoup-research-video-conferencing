@@ -30,6 +30,10 @@
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import type { ExpressionLabel, ExpressionState, SmileType } from './protocol'
+import {
+  expressionFromLiveSmileModel,
+  type SmileModelFeatureVector,
+} from './smileModel'
 
 // Vendored locally (renderer/public/mediapipe/) so a session starts fast and
 // works offline. The CDN is only a fallback if the local assets are missing.
@@ -64,6 +68,7 @@ const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
 const CLASSIFIER_MODE = 'heuristic-subtype' as const
 const CLASSIFIER_VERSION = 'heuristic-contract-v1'
+const MODEL_INFERENCE_INTERVAL_MS = 200
 
 // ---- Detection tuning ----
 //
@@ -126,6 +131,8 @@ export class FaceMorphProcessor {
   private candidateSince = 0
   private lastExpression: ExpressionState | null = null
   private lastFaceTs = 0
+  private lastModelTs = 0
+  private lastModeledExpression: ExpressionState | null = null
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -225,7 +232,13 @@ export class FaceMorphProcessor {
     this.lastFaceFound = true
     this.lastFaceTs = tsMs
 
-    this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null)
+    this.updateExpressionFromRaw(
+      tsMs,
+      result.faceBlendshapes?.[0]?.categories ?? null,
+      faces[0],
+      width,
+      height,
+    )
 
     if (Math.abs(this.alphaCurrent - 1) < 0.02) return false
 
@@ -282,6 +295,9 @@ export class FaceMorphProcessor {
   private updateExpressionFromRaw(
     tsMs: number,
     categories: Array<{ categoryName: string; score: number }> | null,
+    landmarks?: Array<{ x: number; y: number }>,
+    width?: number,
+    height?: number,
   ) {
     // Raw scores (0 when the face is lost → everything decays to neutral).
     const raw: Record<string, number> = {}
@@ -365,7 +381,7 @@ export class FaceMorphProcessor {
       this.publishedType = smileType
     }
 
-    this.lastExpression = {
+    const heuristicExpression: ExpressionState = {
       label: this.publishedLabel,
       smileType: this.publishedLabel === 'smiling' ? this.publishedType : null,
       smile: round2(smile),
@@ -382,6 +398,152 @@ export class FaceMorphProcessor {
         (uncertain || this.publishedType === null || (smileTypeConfidence ?? 0) <= 0),
       classifierMode: CLASSIFIER_MODE,
       classifierVersion: CLASSIFIER_VERSION,
+    }
+
+    if (!categories || !landmarks || !width || !height) {
+      this.lastModeledExpression = null
+      this.lastExpression = heuristicExpression
+      return
+    }
+
+    if (tsMs - this.lastModelTs >= MODEL_INFERENCE_INTERVAL_MS) {
+      const features = this.extractLiveModelFeatures(landmarks, width, height, {
+        smile,
+        frown,
+      })
+      if (features) {
+        this.lastModeledExpression = expressionFromLiveSmileModel(features, heuristicExpression)
+        this.lastModelTs = tsMs
+      }
+    }
+
+    this.lastExpression = this.lastModeledExpression
+      ? {
+          ...heuristicExpression,
+          label: this.lastModeledExpression.label,
+          smileType: this.lastModeledExpression.smileType,
+          labelConfidence: this.lastModeledExpression.labelConfidence,
+          smileTypeConfidence: this.lastModeledExpression.smileTypeConfidence,
+          uncertain: this.lastModeledExpression.uncertain,
+          classifierMode: this.lastModeledExpression.classifierMode,
+          classifierVersion: this.lastModeledExpression.classifierVersion,
+        }
+      : heuristicExpression
+  }
+
+  private extractLiveModelFeatures(
+    landmarks: Array<{ x: number; y: number }>,
+    width: number,
+    height: number,
+    signals: { smile: number; frown: number },
+  ): SmileModelFeatureVector | null {
+    const faceBox = boundsOf(landmarks, width, height)
+    const mouthBox = boundsOf(
+      LIP_INDICES.map((i) => landmarks[i]).filter(Boolean),
+      width,
+      height,
+    )
+    if (!faceBox || !mouthBox) return null
+
+    const lowerFaceBox = {
+      x: faceBox.x,
+      y: faceBox.y + faceBox.h * 0.45,
+      w: faceBox.w,
+      h: faceBox.h * 0.55,
+    }
+    const full = this.sampleStats({ x: 0, y: 0, w: width, h: height })
+    const lower = this.sampleStats(lowerFaceBox, true)
+    if (!full || !lower) return null
+
+    const imageArea = width * height
+    const faceArea = faceBox.w * faceBox.h
+    const mouthArea = mouthBox.w * mouthBox.h
+    return {
+      frames_sampled: 1,
+      frames_ok: 1,
+      face_detection_rate: 1,
+      smile_detection_rate: signals.smile >= DETECTION_TUNING.smileOn ? 1 : 0,
+      image_width_median: width,
+      image_height_median: height,
+      brightness_mean: full.mean,
+      brightness_std: full.std,
+      contrast_rms_mean: full.std,
+      sharpness_laplacian_var_mean: full.sharpness,
+      edge_density_mean: full.edgeDensity,
+      lower_face_brightness_mean: lower.mean,
+      lower_face_edge_density_mean: lower.edgeDensity,
+      lower_face_symmetry_mad_mean: lower.symmetry,
+      lower_face_dark_ratio_mean: lower.darkRatio,
+      face_area_pct_mean: faceArea / imageArea,
+      face_area_pct_std: 0,
+      face_center_x_pct_mean: (faceBox.x + faceBox.w / 2) / width,
+      face_center_y_pct_mean: (faceBox.y + faceBox.h / 2) / height,
+      smile_area_pct_mean: mouthArea / imageArea,
+      smile_area_pct_std: 0,
+      smile_to_face_width_ratio_mean: mouthBox.w / Math.max(1, faceBox.w),
+      smile_to_face_width_ratio_std: 0,
+      duration_ms: 0,
+    }
+  }
+
+  private sampleStats(
+    box: { x: number; y: number; w: number; h: number },
+    includeSymmetry = false,
+  ): {
+    mean: number
+    std: number
+    sharpness: number
+    edgeDensity: number
+    darkRatio: number
+    symmetry: number
+  } | null {
+    const x = Math.max(0, Math.floor(box.x))
+    const y = Math.max(0, Math.floor(box.y))
+    const w = Math.max(1, Math.min(this.src.width - x, Math.floor(box.w)))
+    const h = Math.max(1, Math.min(this.src.height - y, Math.floor(box.h)))
+    if (w <= 1 || h <= 1) return null
+
+    let data: Uint8ClampedArray
+    try {
+      data = this.srcCtx.getImageData(x, y, w, h).data
+    } catch {
+      return null
+    }
+
+    const total = w * h
+    const stride = Math.max(1, Math.floor(total / 4096))
+    const values: number[] = []
+    for (let i = 0; i < total; i += stride) {
+      const p = i * 4
+      values.push(gray(data[p], data[p + 1], data[p + 2]))
+    }
+    if (values.length === 0) return null
+
+    const mean = values.reduce((acc, v) => acc + v, 0) / values.length
+    const variance = values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / values.length
+    const sorted = [...values].sort((a, b) => a - b)
+    const darkThreshold = sorted[Math.floor(sorted.length * 0.25)] ?? 0
+    let edgeCount = 0
+    let sharpness = 0
+    let comparisons = 0
+    for (let row = 0; row < h; row += Math.max(1, Math.floor(h / 64))) {
+      for (let col = 0; col < w - 1; col += Math.max(1, Math.floor(w / 64))) {
+        const i = (row * w + col) * 4
+        const j = (row * w + col + 1) * 4
+        const diff = Math.abs(gray(data[i], data[i + 1], data[i + 2]) - gray(data[j], data[j + 1], data[j + 2]))
+        if (diff > 22) edgeCount++
+        sharpness += diff * diff
+        comparisons++
+      }
+    }
+
+    return {
+      mean,
+      std: Math.sqrt(variance),
+      sharpness: comparisons ? sharpness / comparisons : 0,
+      edgeDensity: comparisons ? edgeCount / comparisons : 0,
+      darkRatio: values.filter((v) => v <= darkThreshold).length / values.length,
+      symmetry: includeSymmetry ? symmetryMad(data, w, h) : 0,
     }
   }
 
@@ -567,6 +729,58 @@ export class FaceMorphProcessor {
     this.landmarker?.close()
     this.landmarker = null
   }
+}
+
+function boundsOf(
+  points: Array<{ x: number; y: number }>,
+  width: number,
+  height: number,
+): { x: number; y: number; w: number; h: number } | null {
+  if (points.length === 0) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of points) {
+    const x = point.x * width
+    const y = point.y * height
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null
+  return {
+    x: Math.max(0, minX),
+    y: Math.max(0, minY),
+    w: Math.max(1, Math.min(width, maxX) - Math.max(0, minX)),
+    h: Math.max(1, Math.min(height, maxY) - Math.max(0, minY)),
+  }
+}
+
+function gray(r: number, g: number, b: number): number {
+  return 0.299 * r + 0.587 * g + 0.114 * b
+}
+
+function symmetryMad(data: Uint8ClampedArray, width: number, height: number): number {
+  const half = Math.floor(width / 2)
+  if (half <= 0) return 0
+  const rowStep = Math.max(1, Math.floor(height / 48))
+  const colStep = Math.max(1, Math.floor(half / 48))
+  let total = 0
+  let count = 0
+  for (let y = 0; y < height; y += rowStep) {
+    for (let x = 0; x < half; x += colStep) {
+      const left = (y * width + x) * 4
+      const right = (y * width + (width - 1 - x)) * 4
+      total += Math.abs(
+        gray(data[left], data[left + 1], data[left + 2]) -
+          gray(data[right], data[right + 1], data[right + 2]),
+      )
+      count++
+    }
+  }
+  return count ? total / count / 255 : 0
 }
 
 function clamp01(v: number): number {

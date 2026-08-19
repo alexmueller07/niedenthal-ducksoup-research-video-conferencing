@@ -300,6 +300,13 @@ Sub-types follow the lab's smile-typology framework (cited in-code as Martin et 
 
 `main/protocol.ts:60–72`: `{ label, smileType, smile, frown, asymmetry, eyeConstriction, lipPress, openness, labelConfidence, smileTypeConfidence, uncertain, classifierMode, classifierVersion }`. Streamed to the dashboard and fed to the rule engine at up to 5 Hz (change-gated); label/sub-type changes are logged as `expression_changed`. Basic "smiling" rules fire on uncertain smiles; sub-type rules require a confident, non-uncertain smile type.
 
+Integration-test branch note: `iferdous/smile-model-integration-test` adds a
+Phase 5 model-contract adapter. The browser still uses MediaPipe as the live
+face signal source, then maps those live features into the exported Phase 4
+baseline logistic-regression artifacts. This is intended for smoke testing and
+CSV/UI validation only; subtype predictions are not approved for real
+participant sessions without further human-reviewed validation.
+
 ---
 
 ## 5. Automation rules
