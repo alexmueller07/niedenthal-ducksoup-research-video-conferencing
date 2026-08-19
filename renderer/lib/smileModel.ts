@@ -53,25 +53,34 @@ export function expressionFromLiveSmileModel(
 ): ExpressionState {
   const basic = predictBundle(SMILE_MODEL_BUNDLE_SET.models.basic, features)
   const subtype = predictBundle(SMILE_MODEL_BUNDLE_SET.models.subtype, features)
-  const heuristicFrown =
-    heuristic.label === 'frowning' && (heuristic.labelConfidence ?? 0) >= 0.5
+  const smileSignal = smileEvidence(heuristic)
+  const teethSignal = teethSmileEvidence(heuristic)
+  const frownSignal = frownEvidence(heuristic)
+  const modelSmileSignal = basic.label === 'smile' ? basic.confidence : 1 - basic.confidence
+  const modelNeutralSignal = basic.label === 'neutral' ? basic.confidence : 1 - basic.confidence
 
-  let label: ExpressionLabel = basic.label === 'smile' ? 'smiling' : 'neutral'
-  if (heuristicFrown) label = 'frowning'
+  let label: ExpressionLabel = 'neutral'
+  if (Math.max(modelSmileSignal, smileSignal, teethSignal) >= 0.58) {
+    label = 'smiling'
+  }
+  if (frownSignal >= 0.68 && smileSignal < 0.45 && teethSignal < 0.45) {
+    label = 'frowning'
+  }
 
   const basicUncertain = basic.confidence < SMILE_MODEL_BUNDLE_SET.models.basic.uncertainThreshold
-  const subtypeUncertain =
-    subtype.confidence < SMILE_MODEL_BUNDLE_SET.models.subtype.uncertainThreshold
+  const subtypeSignal = subtypeEvidence(subtype, heuristic, teethSignal)
+  const subtypeUncertain = subtypeSignal.confidence < SMILE_MODEL_BUNDLE_SET.models.subtype.uncertainThreshold
 
   let smileType: SmileType | null = null
   let smileTypeConfidence: number | undefined
   let uncertain = false
 
   if (label === 'smiling') {
-    smileTypeConfidence = round2(subtype.confidence)
-    uncertain = basicUncertain || subtypeUncertain
-    if (!uncertain && isSmileType(subtype.label)) {
-      smileType = subtype.label
+    smileTypeConfidence = round2(subtypeSignal.confidence)
+    uncertain = basicUncertain && smileSignal < 0.7 && teethSignal < 0.7
+    uncertain = uncertain || subtypeUncertain
+    if (!uncertain) {
+      smileType = subtypeSignal.type
     }
   }
 
@@ -79,11 +88,55 @@ export function expressionFromLiveSmileModel(
     ...heuristic,
     label,
     smileType,
-    labelConfidence: round2(heuristicFrown ? heuristic.labelConfidence ?? 0 : basic.confidence),
+    labelConfidence: round2(
+      label === 'frowning'
+        ? frownSignal
+        : label === 'smiling'
+          ? Math.max(modelSmileSignal, smileSignal, teethSignal)
+          : Math.max(modelNeutralSignal, 1 - smileSignal, 1 - frownSignal),
+    ),
     smileTypeConfidence,
     uncertain: label === 'smiling' ? uncertain || smileType === null : false,
     classifierMode: 'model-subtype',
     classifierVersion: LIVE_CLASSIFIER_VERSION,
+  }
+}
+
+function smileEvidence(heuristic: ExpressionState): number {
+  const directSmile = smoothstep(0.4, 0.62, heuristic.smile)
+  const publishedSmile =
+    heuristic.label === 'smiling' ? Math.max(0.65, heuristic.labelConfidence ?? 0) : 0
+  return clamp01(Math.max(directSmile, publishedSmile))
+}
+
+function teethSmileEvidence(heuristic: ExpressionState): number {
+  const openMouth = smoothstep(0.13, 0.25, heuristic.openness)
+  const smilePresent = smoothstep(0.22, 0.48, heuristic.smile)
+  return clamp01(openMouth * Math.max(0.55, smilePresent))
+}
+
+function frownEvidence(heuristic: ExpressionState): number {
+  if (heuristic.label === 'frowning') return Math.max(0.65, heuristic.labelConfidence ?? 0)
+  return smoothstep(0.02, 0.08, heuristic.frown) * (1 - smoothstep(0.35, 0.65, heuristic.smile))
+}
+
+function subtypeEvidence(
+  model: ModelPrediction,
+  heuristic: ExpressionState,
+  teethSignal: number,
+): { type: SmileType; confidence: number } {
+  if (teethSignal >= 0.72) {
+    return { type: 'reward', confidence: Math.max(model.confidence, teethSignal, 0.76) }
+  }
+  if (heuristic.smileType && !heuristic.uncertain && (heuristic.smileTypeConfidence ?? 0) >= 0.62) {
+    return {
+      type: heuristic.smileType,
+      confidence: Math.max(model.confidence, heuristic.smileTypeConfidence ?? 0),
+    }
+  }
+  return {
+    type: isSmileType(model.label) ? model.label : 'affiliative',
+    confidence: model.confidence,
   }
 }
 
@@ -134,6 +187,11 @@ function softmax(logits: number[]): number[] {
 
 function isSmileType(value: string): value is SmileType {
   return value === 'reward' || value === 'affiliative' || value === 'dominance'
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = clamp01((value - edge0) / Math.max(1e-6, edge1 - edge0))
+  return t * t * (3 - 2 * t)
 }
 
 function round2(value: number): number {

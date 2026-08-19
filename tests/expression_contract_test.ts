@@ -140,6 +140,28 @@ assert.equal(modeled.classifierVersion, smileModelMetadata().classifierVersion)
 assert.ok(typeof modeled.labelConfidence === 'number')
 assert.ok(typeof modeled.smileTypeConfidence === 'number' || modeled.smileType === null)
 
+const teethSmile = expressionFromLiveSmileModel(
+  {
+    ...modelFeatures,
+    smile_detection_rate: 0,
+    smile_area_pct_mean: 0.14,
+    smile_to_face_width_ratio_mean: 0.7,
+  },
+  smiling({
+    label: 'neutral',
+    smileType: null,
+    smile: 0.38,
+    frown: 0,
+    openness: 0.27,
+    labelConfidence: 0.2,
+    smileTypeConfidence: undefined,
+    uncertain: false,
+  }),
+)
+assert.equal(teethSmile.label, 'smiling', 'teeth/open-mouth smile should force smiling')
+assert.equal(teethSmile.smileType, 'reward', 'teeth/open-mouth smile should map to reward')
+assert.ok((teethSmile.labelConfidence ?? 0) >= 0.7)
+
 const effects: Record<'P1' | 'P2', EffectState> = {
   P1: { ...NEUTRAL_EFFECTS },
   P2: { ...NEUTRAL_EFFECTS },

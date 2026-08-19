@@ -21,6 +21,19 @@
 
 * **Date:** 19-08-2026
 * **Author:** Ismam Ferdous
+* **Changes Made:** Improve live smile sensitivity for testing
+
+* **Previous behavior:**
+The integration-test model could be too cautious with live webcam input, including cases where a visible teeth/open-mouth smile was still reported as neutral or low confidence.
+* **New behavior:**
+The live detector now combines the exported baseline model with stronger MediaPipe smile evidence. Clear smiles and teeth/open-mouth smiles are boosted into `smiling`, with open-mouth smiles mapped toward `reward` when confidence is high enough. The dashboard confidence panel and CSV fields continue to show uncertainty and classifier versioning.
+* **Why this matters:**
+This makes the next local test phase more practical with real faces and iPad/video playback while still keeping the subtype detector marked as research-only. Obvious smiles should now be easier to catch quickly instead of being suppressed by a weak baseline model prediction.
+
+---
+
+* **Date:** 19-08-2026
+* **Author:** Ismam Ferdous
 * **Changes Made:** Add smile-model integration test branch
 
 * **Previous behavior:**

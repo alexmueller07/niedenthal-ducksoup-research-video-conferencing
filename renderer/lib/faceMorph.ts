@@ -88,18 +88,18 @@ const MODEL_INFERENCE_INTERVAL_MS = 200
 //     uses a low mouthFrown threshold gated on the absence of a smile.
 // Still a heuristic — recalibrate when new example photos land.
 export const DETECTION_TUNING = {
-  smileOn: 0.6,
-  smileOff: 0.45,
+  smileOn: 0.52,
+  smileOff: 0.38,
   frownOn: 0.03,
   frownOff: 0.01,
   /** A frown only counts while the smile signal is below this. */
   frownSmileGate: 0.75,
   /** Openness (upper-lip raise + jaw + lower-lip drop) above this → reward. */
-  rewardOpenness: 0.2,
+  rewardOpenness: 0.16,
   /** Relative L/R asymmetry (smile + lip press, ÷ smile level) above this → dominance. */
   dominanceRelAsymmetry: 0.12,
   /** Below this, a smile is published without a trusted sub-type. */
-  minPublishedSubtypeConfidence: 0.55,
+  minPublishedSubtypeConfidence: 0.5,
   /** EMA time constant for blendshape smoothing. */
   emaTauMs: 220,
   /** A new label/sub-type must persist this long before it is published. */
