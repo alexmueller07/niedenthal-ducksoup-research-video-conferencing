@@ -342,11 +342,11 @@ Plain-language rows, e.g. `WHEN [P1] [is smiling] for [1] s THEN [P2] gets [Smil
 - **Client → Server**: `hello`, `signal`, `ready`, `telemetry`, `expression`, `stream-map`, `client-event`; admin-only: `set-identity`, `set-effect`, `apply-preset`, `banner`, `set-phase`, `admin-mic`, `set-rules`.
 - **Server → Client**: `welcome`, `roster`, `signal`, `effect-command`, `identity-assigned`, `banner`, `phase`, `peer-left`, `telemetry`, `expression`, `stream-map`, `log-row`, `rules`, `rule-status`, `rejected`.
 
-Admin-only commands from a participant are rejected and logged as `unauthorized_command`.
+Admin-only commands from a participant are rejected and logged as `blocked_action`.
 
 ### 6.2 Coordination server (`main/server.ts`)
 
-Binds `0.0.0.0:8771`. Assigns seats: admin → ADMIN; participants → the seat their `participantId` last held (reconnect), else P1, then P2, else reject ("The call is full."). Identities and effects survive a reconnect. Heartbeat pings every 5 s; a missed pong terminates the client (`client_timeout`). Relays signaling, routes effect commands, owns the phase, and logs every event via `SessionLogger`.
+Binds `0.0.0.0:8771`. Assigns seats: admin → ADMIN; participants → the seat their `participantId` last held (reconnect), else P1, then P2, else reject ("The call is full."). Identities and effects survive a reconnect. Heartbeat pings every 5 s; a missed pong terminates the client (`connection_lost`). Relays signaling, routes effect commands, owns the phase, and logs every event via `SessionLogger`.
 
 ### 6.3 WebRTC peer links (`renderer/lib/rtc.ts`)
 
@@ -385,9 +385,11 @@ Default root `Documents/NiedenthalLab/video-call-sessions` (selectable via folde
 
 ```
 session_<YYYY-MM-DDTHH-MM-SS>/
-├── events.csv          # every discrete event
-├── effect_state.csv    # 1 Hz applied-state telemetry (ground truth)
-├── session.json        # manifest (written on End)
+├── events.csv               # every discrete event
+├── effect_state_P1.csv      # 1 Hz applied-state telemetry for P1 (ground truth)
+├── effect_state_P2.csv      # 1 Hz applied-state telemetry for P2 (ground truth)
+├── recordings.csv           # one row per saved recording, with start/stop times
+├── session.json             # manifest (written on End)
 └── recordings/
     ├── P1_<pid>_clean.mp4      P1_<pid>_altered.mp4
     ├── P2_<pid>_clean.mp4      P2_<pid>_altered.mp4
@@ -396,29 +398,54 @@ session_<YYYY-MM-DDTHH-MM-SS>/
 
 CSVs use append write-streams so rows hit disk as they happen; recording chunks flush every 1 s. A crash mid-session loses at most the OS buffer.
 
+Every CSV follows the same conventions:
+- Column headers are plain English (e.g. `time`, not `ts_iso`), grouped left to right as **who/when → what happened → data-quality detail**, so the files are readable without a data dictionary.
+- `time` (and `started_at`/`stopped_at`) is your computer's own local clock, written like `Aug 18, 2026 3:46:51.175 PM` — not UTC, not ISO 8601.
+- `elapsed_ms` (and `elapsed_start_ms`/`elapsed_stop_ms`) is milliseconds since the session began, on the same clock across every file in the session, so a row in one file can be matched to a moment in another (or inside a recording) by comparing these numbers directly.
+
 ### 8.2 `events.csv`
 
-Header: `ts_iso, t_rel_ms, seq, actor_role, actor_slot, actor_name, event, target, param, value, detail` (`detail` is CSV-escaped JSON).
+Header: `seat, name, role, time, elapsed_ms, event, target, parameter, value, details` (`details` is CSV-escaped JSON).
+
+Event names are plain English on purpose — this column is read by researchers, not just developers.
 
 | Category | Events |
 |---|---|
-| Server | `server_started`, `server_stopped` |
-| Connection | `client_connected`, `client_rejected`, `client_disconnected`, `client_timeout`, `client_ready`, `unauthorized_command`, `stream_map` |
-| Session phase | `session_waiting`, `session_live`, `session_ended` |
-| Modification | `effect_command`, `preset_applied`, `identity_set_by_admin` |
-| Automation | `rules_updated`, `rule_fired`, `rule_released`, `rule_reverted` |
+| App | `app_started`, `app_stopped` |
+| Connection | `person_joined`, `join_blocked`, `person_left`, `connection_lost`, `camera_mic_ready`, `blocked_action` |
+| Session phase | `moved_to_waiting_room`, `conversation_started`, `conversation_ended` |
+| Modification | `setting_changed`, `preset_used`, `name_or_id_entered` |
+| Automation | `rules_changed`, `rule_turned_on`, `rule_turned_off`, `rule_undone` |
 | Expression | `expression_changed` (on label/sub-type change only) |
-| Researcher | `banner_sent`, `admin_mic_live`, `admin_mic_muted` |
+| Researcher | `message_sent`, `researcher_mic_on`, `researcher_mic_off` |
 | Recording | `recording_started`, `recording_stopped` |
-| Participant client-events | `rtc_state`, `window_blur`, `window_focus`, `escape_dialog_opened`, `escape_dialog_cancelled`, `escape_confirmed`, `banner_shown`, `effect_applied`, `media_pipeline_error`, `test_face_mode_enabled`, `test_face_changed` |
+| Participant client-events | `video_connection_lost`, `video_connection_restored`, `switched_away_from_call`, `switched_back_to_call`, `exit_attempt_started`, `exit_attempt_cancelled`, `exit_attempt_confirmed`, `exit_attempt_wrong_code`, `message_shown`, `change_shown`, `camera_video_problem`, `practice_mode_on`, `practice_face_changed` |
 
-### 8.3 `effect_state.csv`
+`video_connection_lost`/`video_connection_restored` are the only two states logged out of WebRTC's full connection-state machinery (new/connecting/connected/disconnected/failed/closed) — routine call setup and teardown isn't written, only an actual drop and its recovery.
 
-Header: `ts_iso, t_rel_ms, slot, participant_id, phase, alpha, voice_semitones, face_found, fps, camera_on, expression, smile_type, label_confidence, smile_type_confidence, uncertain, classifier_mode, classifier_version`. Written once per second from each participant's telemetry — the authoritative record of what was actually applied and shown, independent of what was commanded.
+Three earlier events were removed as pure internal bookkeeping with no research value: `stream_map` (matching up which video stream is the altered one — still happens, just isn't logged), `detector_info` (which expression-detection build was used — now written once into `session.json`'s `detection` field instead, see §8.4), and `recording_duration_patch_failed` (an internal repair-attempt failure — now only a developer-console warning).
+
+A per-row sequence number is still sent to the live dashboard feed (for React list keys) but isn't written to the CSV — file order already reflects it.
+
+### 8.3 `effect_state_P1.csv` / `effect_state_P2.csv`
+
+One file per participant seat instead of one shared file, so each person's data stands alone and never needs to be filtered out of a mixed file.
+
+Header: `pair_id, participant_id, partner_id, seat, time, elapsed_ms, phase, self_face_change, self_voice_change, partner_face_change, partner_voice_change, expression, smile_type, expression_confidence, smile_type_confidence, uncertain, face_detected, camera_on, frames_per_second`.
+
+Written once per second from each participant's own telemetry — the authoritative record of what was actually applied and shown, independent of what was commanded. `self_face_change`/`self_voice_change` are this person's own applied morph (this is the old `alpha`/`voice_semitones`, renamed). `partner_face_change`/`partner_voice_change` are the *other* seat's applied morph at that same moment (pulled from the partner's last known telemetry — blank if the partner isn't connected yet), so a single row lets you compare self vs. partner without joining files. `pair_id` and `partner_id` come from `Identity.dyadId` and the other seat's `participantId`.
+
+`detection_mode`/`detection_version` are **not** columns here — they never change during a session, so repeating them on every row was pure clutter. They're captured once per seat instead and written into `session.json`'s `detection` field (see §8.4).
+
+### 8.3b `recordings.csv`
+
+One row per saved recording (each participant's clean track, altered track, and the researcher mic), written once the recording stops — so if the app crashes mid-recording, that row is missing here but the start is still in `events.csv`.
+
+Header: `seat, participant_id, type, started_at, stopped_at, elapsed_start_ms, elapsed_stop_ms, duration_sec, file_path, file_size_mb`. `type` is `clean`, `altered`, or `mic`. `recording_name` isn't a separate column — `seat` + `participant_id` + `type` already identify the recording, and `file_path` gives the actual filename.
 
 ### 8.4 Manifests
 
-- **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount }` → `session.json`.
+- **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, detection:{P1:{classifierMode, classifierVersion}, P2:{...}} }` → `session.json`. `detection` is added automatically by `SessionLogger.writeManifest` from whatever each seat's telemetry reported first, so callers don't need to supply it.
 - **Legacy capture station** (`renderer/lib/capture.ts:310–330`): `{ schemaVersion:1, app:'DuckSoup Experimenter Platform', appVersion:'2.0.0', ... }` — the format the PPS questionnaire app reads. **The two formats differ**; see §12.
 
 ### 8.5 Recording format
@@ -429,7 +456,7 @@ Header: `ts_iso, t_rel_ms, slot, participant_id, phase, alpha, voice_semitones, 
 
 ## 9. Test mode
 
-Access code `test` (`index.tsx:39`, `session.tsx:42–49, 275–301`). Runs the pipeline on a bundled example face image (letterboxed onto a 720p canvas, redrawn every 66 ms → ~15 fps, `captureStream(15)`) plus a silent oscillator audio track, so morph/detection/ready-gate/WebRTC all behave as with a real camera. A panel switches live among five faces (Straight, Reward smile, Affiliative smile, Dominance smile, Frown) under `renderer/public/images/test-faces/`. Every use is logged (`test_face_mode_enabled`, `test_face_changed`) with an on-screen "TEST MODE" indicator, so a real session can never quietly run on an example face.
+Access code `test` (`index.tsx:39`, `session.tsx:42–49, 275–301`). Runs the pipeline on a bundled example face image (letterboxed onto a 720p canvas, redrawn every 66 ms → ~15 fps, `captureStream(15)`) plus a silent oscillator audio track, so morph/detection/ready-gate/WebRTC all behave as with a real camera. A panel switches live among five faces (Straight, Reward smile, Affiliative smile, Dominance smile, Frown) under `renderer/public/images/test-faces/`. Every use is logged (`practice_mode_on`, `practice_face_changed`) with an on-screen "TEST MODE" indicator, so a real session can never quietly run on an example face.
 
 ---
 
@@ -544,9 +571,9 @@ Things to know before citing or relying on this software in a study.
 
 1. **Manipulation intensities are un-calibrated placeholders.** `main/presets.ts` notes the current α values are starting points, reduced from earlier values after a demo. No psychophysical validation (detection threshold, naturalness, believability) has been run — describe presets as pilot settings, not validated intensities.
 2. **The smile sub-type classifier is a heuristic tuned to five still images**, not validated against FACS-coded or human-rated video. The Duchenne eye-constriction cue is deliberately unused (unreliable on webcams with this model). Treat sub-type as exploratory unless independently validated.
-3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry and a lower-lip pout only — no Duchenne eye/cheek changes, teeth, or lighting consistent with a real smile. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_found` in `effect_state.csv` for affected frames.
+3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry and a lower-lip pout only — no Duchenne eye/cheek changes, teeth, or lighting consistent with a real smile. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_detected` in `effect_state_P1.csv`/`effect_state_P2.csv` for affected frames.
 4. **Detection latency**: ~5 Hz sampling, 220 ms EMA smoothing, 350 ms debounce — expression onset is reported with up to ~0.5–0.7 s latency. Interpret rule "hold" durations accordingly.
-5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state.csv` records the true per-second trajectory.
+5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
 
 ---
@@ -562,7 +589,7 @@ Things to know before citing or relying on this software in a study.
 | `rules.ts` | `RuleEngine`: expression/timer triggers, holds, reverts, release modes. |
 | `presets.ts` | Modification conditions, `getPreset`, `counterbalanceConditions`. |
 | `protocol.ts` | Wire protocol, message types, `EffectState`, `ExpressionState`, `AutomationRule`, `Telemetry`, versions, port. |
-| `logger.ts` | `SessionLogger`: `events.csv`, `effect_state.csv`, `session.json`, recording paths. |
+| `logger.ts` | `SessionLogger`: `events.csv`, `effect_state_<seat>.csv`, `recordings.csv`, `session.json`, recording paths. |
 | `preload.ts` | Context-bridge IPC (`window.ipc.invoke/on/send`). |
 | `server-standalone.ts` | Browser-dev standalone server entry (`npm run server:dev`). |
 | `helpers/create-window.ts` | Window creation + persisted window state. |

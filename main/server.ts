@@ -62,6 +62,18 @@ export interface ServerStatus {
 
 let nextClientNum = 1
 
+/** Plain-English event names for the events.csv `event` column. */
+const SESSION_PHASE_EVENT_NAMES: Record<Phase, string> = {
+  waiting: 'moved_to_waiting_room',
+  live: 'conversation_started',
+  ended: 'conversation_ended',
+}
+const RULE_EVENT_NAMES: Record<'fired' | 'released' | 'reverted', string> = {
+  fired: 'rule_turned_on',
+  released: 'rule_turned_off',
+  reverted: 'rule_undone',
+}
+
 export class SessionServer {
   private wss: WebSocketServer | null = null
   private clients = new Map<WebSocket, ClientCtx>()
@@ -90,7 +102,7 @@ export class SessionServer {
           this.send(target.ws, { type: 'effect-command', effects, cause: `rule_${why}` })
         }
         this.log({
-          event: `rule_${why}`,
+          event: RULE_EVENT_NAMES[why],
           actorRole: 'server',
           actorSlot: 'ADMIN',
           target: slot,
@@ -113,7 +125,7 @@ export class SessionServer {
       this.wss = wss
       wss.on('error', (err) => reject(err))
       wss.on('listening', () => {
-        this.log({ event: 'server_started', detail: { port: this.port, lanIps: lanIps() } })
+        this.log({ event: 'app_started', detail: { port: this.port, lanIps: lanIps() } })
         resolve()
       })
       wss.on('connection', (ws, req) => this.onConnection(ws, req.socket.remoteAddress ?? ''))
@@ -141,7 +153,7 @@ export class SessionServer {
     this.pingTimer = null
     if (this.ruleTimer) clearInterval(this.ruleTimer)
     this.ruleTimer = null
-    this.log({ event: 'server_stopped' })
+    this.log({ event: 'app_stopped' })
     for (const ctx of this.clients.values()) ctx.ws.close()
     this.clients.clear()
     await new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()))
@@ -179,7 +191,7 @@ export class SessionServer {
     if (!slot) {
       this.send(ws, { type: 'rejected', reason: 'The call is full.' })
       this.log({
-        event: 'client_rejected',
+        event: 'join_blocked',
         actorRole: msg.role,
         actorName: msg.identity?.name ?? '',
         detail: { remoteAddress, reason: 'full' },
@@ -207,7 +219,7 @@ export class SessionServer {
     this.clients.set(ws, ctx)
     this.slotIdentities.set(slot, identity)
     this.log({
-      event: 'client_connected',
+      event: 'person_joined',
       actorRole: ctx.role,
       actorSlot: slot,
       actorName: identity.name,
@@ -255,7 +267,7 @@ export class SessionServer {
     if (!ctx) return
     this.clients.delete(ws)
     this.log({
-      event: 'client_disconnected',
+      event: 'person_left',
       actorRole: ctx.role,
       actorSlot: ctx.slot,
       actorName: ctx.identity.name,
@@ -267,7 +279,7 @@ export class SessionServer {
   private heartbeat() {
     for (const ctx of this.clients.values()) {
       if (!ctx.alive) {
-        this.log({ event: 'client_timeout', actorRole: ctx.role, actorSlot: ctx.slot })
+        this.log({ event: 'connection_lost', actorRole: ctx.role, actorSlot: ctx.slot })
         ctx.ws.terminate()
         continue
       }
@@ -290,7 +302,7 @@ export class SessionServer {
       case 'ready': {
         ctx.ready = msg.camera && msg.voice
         this.log({
-          event: 'client_ready',
+          event: 'camera_mic_ready',
           actorRole: ctx.role,
           actorSlot: ctx.slot,
           actorName: ctx.identity.name,
@@ -302,12 +314,17 @@ export class SessionServer {
       case 'telemetry': {
         const telemetry = normalizeTelemetry(msg.data)
         ctx.telemetry = telemetry
+        const partner = ctx.slot === 'P1' || ctx.slot === 'P2' ? this.bySlot(otherSlot(ctx.slot)) : undefined
         this.logger.effectState({
           slot: ctx.slot,
           participantId: ctx.identity.participantId,
+          dyadId: ctx.identity.dyadId,
+          partnerId: partner?.identity.participantId,
           phase: this.phase,
-          alpha: telemetry.alpha,
-          voiceSemitones: telemetry.voiceSemitones,
+          selfAlpha: telemetry.alpha,
+          selfVoiceSemitones: telemetry.voiceSemitones,
+          partnerAlpha: partner?.telemetry?.alpha,
+          partnerVoiceSemitones: partner?.telemetry?.voiceSemitones,
           faceFound: telemetry.faceFound,
           fps: telemetry.fps,
           cameraOn: telemetry.cameraOn,
@@ -350,12 +367,6 @@ export class SessionServer {
       case 'stream-map': {
         const admin = this.bySlot('ADMIN')
         if (admin) this.send(admin.ws, { type: 'stream-map', slot: ctx.slot, map: msg.map })
-        this.log({
-          event: 'stream_map',
-          actorRole: ctx.role,
-          actorSlot: ctx.slot,
-          detail: msg.map,
-        })
         return
       }
       case 'client-event': {
@@ -382,7 +393,7 @@ export class SessionServer {
           this.send(target.ws, { type: 'identity-assigned', identity })
         }
         this.log({
-          event: 'identity_set_by_admin',
+          event: 'name_or_id_entered',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -404,7 +415,7 @@ export class SessionServer {
           this.send(target.ws, { type: 'effect-command', effects, cause: msg.param })
         }
         this.log({
-          event: 'effect_command',
+          event: 'setting_changed',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -424,7 +435,7 @@ export class SessionServer {
           this.send(target.ws, { type: 'effect-command', effects: msg.effects, cause: 'preset' })
         }
         this.log({
-          event: 'preset_applied',
+          event: 'preset_used',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -444,7 +455,7 @@ export class SessionServer {
           }
         }
         this.log({
-          event: 'banner_sent',
+          event: 'message_sent',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -463,7 +474,7 @@ export class SessionServer {
         if (!this.requireAdmin(ctx, msg.type)) return
         this.ruleEngine.setRules(msg.rules)
         this.log({
-          event: 'rules_updated',
+          event: 'rules_changed',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -477,7 +488,7 @@ export class SessionServer {
       case 'admin-mic': {
         if (!this.requireAdmin(ctx, msg.type)) return
         this.log({
-          event: msg.live ? 'admin_mic_live' : 'admin_mic_muted',
+          event: msg.live ? 'researcher_mic_on' : 'researcher_mic_off',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
@@ -506,7 +517,7 @@ export class SessionServer {
     // waiting room releases anything a rule left applied.
     this.ruleEngine.onPhaseChange(phase)
     this.log({
-      event: `session_${phase}`,
+      event: SESSION_PHASE_EVENT_NAMES[phase],
       actorRole: 'admin',
       actorSlot: 'ADMIN',
       actorName: adminName,
@@ -519,7 +530,7 @@ export class SessionServer {
   private requireAdmin(ctx: ClientCtx, what: string): boolean {
     if (ctx.role === 'admin') return true
     this.log({
-      event: 'unauthorized_command',
+      event: 'blocked_action',
       actorRole: ctx.role,
       actorSlot: ctx.slot,
       param: 'command',
@@ -600,6 +611,11 @@ export function lanIps(): string[] {
     }
   }
   return out
+}
+
+/** The other participant seat in a P1/P2 pair. */
+function otherSlot(slot: PSlot): PSlot {
+  return slot === 'P1' ? 'P2' : 'P1'
 }
 
 function stripEmpty(identity: Identity): Partial<Identity> {

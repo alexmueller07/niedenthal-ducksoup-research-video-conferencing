@@ -304,20 +304,34 @@ ipcMain.handle('net:hostname', () => os.hostname())
 // The dashboard's MediaRecorders push 1 s chunks here; each goes straight to
 // disk so a crash never loses more than the last second.
 
+interface RecMeta {
+  slot?: string
+  participantId?: string
+  kind?: string
+}
+
 interface RecSink {
   stream: fs.WriteStream
   path: string
+  label: string
   bytes: number
 }
 const recordings = new Map<string, RecSink>()
 let nextRecId = 1
 
-ipcMain.handle('rec:open', (_e, label: string, ext?: string) => {
+ipcMain.handle('rec:open', (_e, label: string, ext?: string, meta?: RecMeta) => {
   if (!server) throw new Error('Session server is not running')
   const filePath = server.logger.recordingPath(label, ext ?? 'webm')
   const id = `rec${nextRecId++}`
-  recordings.set(id, { stream: fs.createWriteStream(filePath), path: filePath, bytes: 0 })
+  recordings.set(id, { stream: fs.createWriteStream(filePath), path: filePath, label, bytes: 0 })
   server.logger.event({ event: 'recording_started', target: label, detail: { path: filePath } })
+  server.logger.recordingStarted({
+    slot: meta?.slot ?? '',
+    participantId: meta?.participantId ?? '',
+    kind: meta?.kind ?? '',
+    label,
+    path: filePath,
+  })
   return { id, path: filePath }
 })
 
@@ -345,11 +359,7 @@ ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number) => {
     try {
       durationPatched = await patchMp4Duration(sink.path, durationSec)
     } catch (err) {
-      server?.logger.event({
-        event: 'recording_duration_patch_failed',
-        target: path.basename(sink.path),
-        detail: { path: sink.path, error: String(err) },
-      })
+      console.warn(`Failed to patch duration for ${sink.path}:`, err)
     }
   }
 
@@ -359,6 +369,7 @@ ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number) => {
     value: sink.bytes,
     detail: { path: sink.path, bytes: sink.bytes, durationSec, durationPatched },
   })
+  server?.logger.recordingStopped({ label: sink.label, durationSec, bytes: sink.bytes })
   return { path: sink.path, bytes: sink.bytes }
 })
 

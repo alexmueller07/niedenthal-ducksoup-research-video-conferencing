@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 23-08-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Make session files easier for researchers to read
+
+* **Previous behavior:**
+Session data was one shared file, with short coded column names, UTC timestamps, and technical event names like `rtc_state` and `window_blur`.
+* **New behavior:**
+Each participant now gets their own file, with plain-English column names and your computer's own local time. Every event name is now a plain phrase (e.g. `connection_lost` instead of `client_timeout`), and a few events with no research value were removed.
+* **Why this matters:**
+Researchers can now read every file top to bottom without a lookup table.
+
+---
+
 * **Date:** 11-08-2026
 * **Author:** Ismam Ferdous
 * **Changes Made:** Add safer station navigation and researcher entry checks

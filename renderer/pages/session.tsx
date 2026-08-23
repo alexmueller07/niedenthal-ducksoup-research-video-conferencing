@@ -73,6 +73,8 @@ export default function ParticipantSession() {
   const effectsRef = useRef<LiveEffects | null>(null)
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<SlotId, PeerLink>>(new Map())
+  /** Which links are currently down, so we only log the drop and the recovery — not every connection-setup step. */
+  const connectionLostRef = useRef<Map<SlotId, boolean>>(new Map())
   const mySlotRef = useRef<SlotId | null>(null)
   const rosterRef = useRef<RosterState | null>(null)
   const effectsReadyRef = useRef(false)
@@ -187,7 +189,14 @@ export default function ParticipantSession() {
           else setPartnerStream(stream)
         },
         onConnectionState: (state) => {
-          sendEvent('rtc_state', { target: slot, value: state })
+          const wasLost = connectionLostRef.current.get(slot) ?? false
+          if ((state === 'disconnected' || state === 'failed') && !wasLost) {
+            connectionLostRef.current.set(slot, true)
+            sendEvent('video_connection_lost', { target: slot })
+          } else if (state === 'connected' && wasLost) {
+            connectionLostRef.current.set(slot, false)
+            sendEvent('video_connection_restored', { target: slot })
+          }
           if (slot === partnerSlot()) setPartnerConn(state)
           if (state === 'failed') dropLink(slot)
         },
@@ -275,7 +284,7 @@ export default function ParticipantSession() {
           if (fx) {
             fx.setAlpha(msg.effects.alpha)
             fx.setSemitones(msg.effects.voiceSemitones)
-            sendEvent('effect_applied', { detail: msg.effects })
+            sendEvent('change_shown', { detail: msg.effects })
           }
           return
         }
@@ -285,7 +294,7 @@ export default function ParticipantSession() {
         case 'banner': {
           if (bannerTimer.current) clearTimeout(bannerTimer.current)
           setBanner({ text: msg.text, key: Date.now() })
-          sendEvent('banner_shown', { detail: { text: msg.text } })
+          sendEvent('message_shown', { detail: { text: msg.text } })
           bannerTimer.current = setTimeout(
             () => setBanner(null),
             Math.max(1, msg.durationSec) * 1000,
@@ -324,7 +333,7 @@ export default function ParticipantSession() {
         setSelfStream(effects.cleanStream)
         // Flag simulated video in the session log — a real session must
         // never quietly run on an example face.
-        if (testMode) sendEvent('test_face_mode_enabled')
+        if (testMode) sendEvent('practice_mode_on')
         client.send({
           type: 'ready',
           camera: effects.status.camera,
@@ -335,7 +344,7 @@ export default function ParticipantSession() {
       })
       .catch((err) => {
         console.error('media pipeline failed', err)
-        sendEvent('media_pipeline_error', { detail: String(err) })
+        sendEvent('camera_video_problem', { detail: String(err) })
       })
 
     const telemetry = setInterval(() => {
@@ -368,8 +377,8 @@ export default function ParticipantSession() {
       }
     }, 200)
 
-    const onBlur = () => sendEvent('window_blur')
-    const onFocus = () => sendEvent('window_focus')
+    const onBlur = () => sendEvent('switched_away_from_call')
+    const onFocus = () => sendEvent('switched_back_to_call')
     window.addEventListener('blur', onBlur)
     window.addEventListener('focus', onFocus)
 
@@ -383,7 +392,7 @@ export default function ParticipantSession() {
         setEscapeOpen(true)
         setEscapeText('')
         setEscapeError('')
-        sendEvent('escape_dialog_opened')
+        sendEvent('exit_attempt_started')
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -392,7 +401,7 @@ export default function ParticipantSession() {
       setEscapeOpen(true)
       setEscapeText('')
       setEscapeError('')
-      sendEvent('escape_dialog_opened')
+      sendEvent('exit_attempt_started')
     })
 
     return () => {
@@ -436,10 +445,10 @@ export default function ParticipantSession() {
     if (escapeText.trim().toLowerCase() !== 'confirm') {
       setEscapeError('Type "confirm" to close the participant station.')
       setEscapeShake((shake) => shake + 1)
-      sendEvent('escape_confirm_failed')
+      sendEvent('exit_attempt_wrong_code')
       return
     }
-    sendEvent('escape_confirmed')
+    sendEvent('exit_attempt_confirmed')
     setTimeout(() => {
       sessionStorage.removeItem('labcall')
       if (hasIpc()) void ipcInvoke('app:return-home')
@@ -448,7 +457,7 @@ export default function ParticipantSession() {
   }
 
   function cancelEscape() {
-    sendEvent('escape_dialog_cancelled')
+    sendEvent('exit_attempt_cancelled')
     setEscapeOpen(false)
     setEscapeText('')
     setEscapeError('')
@@ -485,7 +494,7 @@ export default function ParticipantSession() {
                   onClick={() => {
                     setTestFaceId(f.id)
                     void effectsRef.current?.setTestFaceImage(f.url)
-                    sendEvent('test_face_changed', { value: f.id })
+                    sendEvent('practice_face_changed', { value: f.id })
                   }}
                   className={
                     'w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-xs transition ' +

@@ -104,6 +104,8 @@ export default function AdminDashboard() {
 
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<PSlot, PeerLink>>(new Map())
+  /** Which links are currently down, so we only log the drop and the recovery — not every connection-setup step. */
+  const connectionLostRef = useRef<Map<PSlot, boolean>>(new Map())
   const bucketsRef = useRef<Record<PSlot, { byId: Map<string, MediaStream>; map: StreamMap | null }>>({
     P1: { byId: new Map(), map: null },
     P2: { byId: new Map(), map: null },
@@ -317,12 +319,22 @@ export default function AdminDashboard() {
           reclassify(slot)
         },
         onConnectionState: (state) => {
-          clientRef.current?.send({
-            type: 'client-event',
-            event: 'rtc_state',
-            target: slot,
-            value: state,
-          })
+          const wasLost = connectionLostRef.current.get(slot) ?? false
+          if ((state === 'disconnected' || state === 'failed') && !wasLost) {
+            connectionLostRef.current.set(slot, true)
+            clientRef.current?.send({
+              type: 'client-event',
+              event: 'video_connection_lost',
+              target: slot,
+            })
+          } else if (state === 'connected' && wasLost) {
+            connectionLostRef.current.set(slot, false)
+            clientRef.current?.send({
+              type: 'client-event',
+              event: 'video_connection_restored',
+              target: slot,
+            })
+          }
           if (state === 'failed') dropLink(slot)
         },
       })
@@ -403,14 +415,24 @@ export default function AdminDashboard() {
   }, [])
 
   const startRecorder = useCallback(
-    async (key: string, label: string, stream: MediaStream) => {
+    async (
+      key: string,
+      label: string,
+      stream: MediaStream,
+      meta: { slot?: string; participantId?: string; kind?: string },
+    ) => {
       if (!hasIpc() || recordersRef.current.has(key)) return
       const part = (recPartsRef.current.get(key) ?? 0) + 1
       recPartsRef.current.set(key, part)
       const fullLabel = part > 1 ? `${label}_part${part}` : label
       // MP4 preferred (RA request); falls back to WebM if this Chromium can't mux it.
       const format = pickRecorderFormat(stream.getVideoTracks().length > 0)
-      const opened = await ipcInvoke<{ id: string; path: string }>('rec:open', fullLabel, format.ext)
+      const opened = await ipcInvoke<{ id: string; path: string }>(
+        'rec:open',
+        fullLabel,
+        format.ext,
+        meta,
+      )
       if (!opened) return
       const rec = new MediaRecorder(
         stream,
@@ -448,11 +470,16 @@ export default function AdminDashboard() {
         const pid = roster?.slots[slot]?.identity.participantId || slot
         for (const kind of ['altered', 'clean'] as Kind[]) {
           const stream = streams[slot][kind]
-          if (stream) void startRecorder(`${slot}:${kind}`, `${slot}_${pid}_${kind}`, stream)
+          if (stream)
+            void startRecorder(`${slot}:${kind}`, `${slot}_${pid}_${kind}`, stream, {
+              slot,
+              participantId: pid,
+              kind,
+            })
         }
       }
       if (micStreamRef.current) {
-        void startRecorder('mic', 'researcher_mic', micStreamRef.current)
+        void startRecorder('mic', 'researcher_mic', micStreamRef.current, { kind: 'mic' })
       }
     }
     if (phase === 'ended') {
@@ -1692,11 +1719,18 @@ function fmtBytes(n: number): string {
 }
 
 function eventColor(event: string): string {
-  if (event.startsWith('effect') || event === 'preset_applied') return 'text-violet-300'
-  if (event.startsWith('session')) return 'text-emerald-300'
-  if (event.includes('disconnect') || event.includes('error') || event.includes('timeout'))
+  if (['setting_changed', 'change_shown', 'preset_used'].includes(event)) return 'text-violet-300'
+  if (
+    ['moved_to_waiting_room', 'conversation_started', 'conversation_ended', 'video_connection_restored'].includes(
+      event,
+    )
+  )
+    return 'text-emerald-300'
+  if (
+    ['person_left', 'connection_lost', 'camera_video_problem', 'video_connection_lost'].includes(event)
+  )
     return 'text-red-300'
-  if (event.startsWith('admin_mic') || event === 'banner_sent') return 'text-sky-300'
-  if (event.startsWith('escape') || event.startsWith('window')) return 'text-amber-300'
+  if (event.startsWith('researcher_mic') || event === 'message_sent') return 'text-sky-300'
+  if (event.startsWith('exit_attempt') || event.startsWith('switched_')) return 'text-amber-300'
   return 'text-gray-300'
 }
