@@ -181,7 +181,7 @@ export class CaptureStation {
         const key = [
           expression.label,
           expression.smileType ?? '',
-          expression.uncertain ? 'uncertain' : 'confident',
+          expression.smileTypeTrusted ? 'confident' : 'uncertain',
           Math.round((expression.labelConfidence ?? 0) * 20),
           Math.round((expression.smileTypeConfidence ?? 0) * 20),
           Math.round(expression.smile * 20),

@@ -21,6 +21,19 @@
 
 * **Date:** 23-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Add video-matched timing, raw face readings, a clearer confidence column, and a session guide
+
+* **Previous behavior:**
+There was no way to line up a data row with a moment in the recorded video without doing your own math. The file only showed the final smiling/frowning guess, not the individual face readings behind it. The confidence column was a confusing double negative. A camera that just turned on could show an oddly low speed reading. None of the column conventions were written down anywhere handy.
+* **New behavior:**
+A new column shows time since the conversation actually started, matching the recordings. New columns show the individual face readings behind each smiling/frowning guess. The confusing confidence column was renamed and flipped so it reads naturally. The speed reading no longer looks artificially low right when the camera turns on. Every session folder now includes a short guide explaining all of this in plain English.
+* **Why this matters:**
+Researchers can match a data point to the video without doing math, see the evidence behind a smiling/frowning call instead of trusting a single label, and read the confidence column without reversing it in their head.
+
+---
+
+* **Date:** 23-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Make session files easier for researchers to read
 
 * **Previous behavior:**

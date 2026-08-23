@@ -366,7 +366,7 @@ export default function ParticipantSession() {
       const key = [
         e.label,
         e.smileType ?? '',
-        e.uncertain ? 'uncertain' : 'confident',
+        e.smileTypeTrusted ? 'confident' : 'uncertain',
         Math.round((e.smileTypeConfidence ?? 0) * 10),
         Math.round(e.smile * 20),
         Math.round(e.frown * 20),

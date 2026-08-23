@@ -76,12 +76,31 @@ export interface ExpressionState {
   labelConfidence?: number
   /** Confidence that `smileType` is correct, 0..1. Omitted when no subtype is trusted. */
   smileTypeConfidence?: number
-  /** True when a smile is present but the subtype should not be trusted. */
-  uncertain?: boolean
+  /** True when `smileType` should be trusted. Undefined while not smiling (not applicable). */
+  smileTypeTrusted?: boolean
   /** Which classifier produced this state. */
   classifierMode?: ClassifierMode
   /** Version string for audits and model/heuristic comparisons. */
   classifierVersion?: string
+
+  // ---- Raw facial-movement scores (0..1), smoothed but not combined ----
+  // These are MediaPipe's own facial-movement readings, NOT OpenFace/FACS
+  // Action Units — the `smile`/`frown`/etc. fields above are built from these.
+  rawMouthSmileLeft: number
+  rawMouthSmileRight: number
+  rawMouthFrownLeft: number
+  rawMouthFrownRight: number
+  rawLipPressLeft: number
+  rawLipPressRight: number
+  rawUpperLipRaiseLeft: number
+  rawUpperLipRaiseRight: number
+  rawJawOpen: number
+  rawLowerLipDropLeft: number
+  rawLowerLipDropRight: number
+  rawEyeSquintLeft: number
+  rawEyeSquintRight: number
+  rawCheekSquintLeft: number
+  rawCheekSquintRight: number
 }
 
 /** 1 Hz applied-state report from each participant machine (ground truth). */
@@ -273,9 +292,13 @@ export function normalizeExpressionState(input: unknown): ExpressionState | null
     smileType && typeof input.smileTypeConfidence !== 'undefined'
       ? clamp01(input.smileTypeConfidence)
       : undefined
-  const uncertain =
-    label === 'smiling' &&
-    (input.uncertain === true || smileType === null || (smileTypeConfidence ?? 0) <= 0)
+  // Trust the sub-type only while smiling, the client says to, and the type/
+  // confidence it sent are actually consistent with that (De Morgan's inverse
+  // of the old OR-based "uncertain" check).
+  const smileTypeTrusted =
+    label === 'smiling'
+      ? input.smileTypeTrusted === true && smileType !== null && (smileTypeConfidence ?? 0) > 0
+      : undefined
 
   return {
     label,
@@ -289,12 +312,27 @@ export function normalizeExpressionState(input: unknown): ExpressionState | null
     labelConfidence:
       typeof input.labelConfidence === 'undefined' ? undefined : clamp01(input.labelConfidence),
     smileTypeConfidence,
-    uncertain,
+    smileTypeTrusted,
     classifierMode: isClassifierMode(input.classifierMode) ? input.classifierMode : undefined,
     classifierVersion:
       typeof input.classifierVersion === 'string'
         ? input.classifierVersion.replace(/[^\w.+-]/g, '').slice(0, 64)
         : undefined,
+    rawMouthSmileLeft: clamp01(input.rawMouthSmileLeft),
+    rawMouthSmileRight: clamp01(input.rawMouthSmileRight),
+    rawMouthFrownLeft: clamp01(input.rawMouthFrownLeft),
+    rawMouthFrownRight: clamp01(input.rawMouthFrownRight),
+    rawLipPressLeft: clamp01(input.rawLipPressLeft),
+    rawLipPressRight: clamp01(input.rawLipPressRight),
+    rawUpperLipRaiseLeft: clamp01(input.rawUpperLipRaiseLeft),
+    rawUpperLipRaiseRight: clamp01(input.rawUpperLipRaiseRight),
+    rawJawOpen: clamp01(input.rawJawOpen),
+    rawLowerLipDropLeft: clamp01(input.rawLowerLipDropLeft),
+    rawLowerLipDropRight: clamp01(input.rawLowerLipDropRight),
+    rawEyeSquintLeft: clamp01(input.rawEyeSquintLeft),
+    rawEyeSquintRight: clamp01(input.rawEyeSquintRight),
+    rawCheekSquintLeft: clamp01(input.rawCheekSquintLeft),
+    rawCheekSquintRight: clamp01(input.rawCheekSquintRight),
   }
 }
 

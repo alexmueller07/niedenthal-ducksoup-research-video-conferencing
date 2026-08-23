@@ -57,6 +57,8 @@ export interface EffectStateInput {
   /** The other participant in the same pair, if known. */
   partnerId?: string
   phase: string
+  /** Epoch ms the researcher started the live conversation, or null/undefined if not live yet. */
+  liveStartedAtMs?: number | null
   /** How much this participant's own face was changed (1 = no change). */
   selfAlpha: number
   /** How much this participant's own voice pitch was changed. */
@@ -73,9 +75,25 @@ export interface EffectStateInput {
   smileType?: string
   labelConfidence?: number
   smileTypeConfidence?: number
-  uncertain?: boolean
+  smileTypeTrusted?: boolean
   classifierMode?: string
   classifierVersion?: string
+  /** Raw MediaPipe facial-movement scores (0..1) behind the expression label — not OpenFace/FACS AUs. */
+  rawMouthSmileLeft?: number
+  rawMouthSmileRight?: number
+  rawMouthFrownLeft?: number
+  rawMouthFrownRight?: number
+  rawLipPressLeft?: number
+  rawLipPressRight?: number
+  rawUpperLipRaiseLeft?: number
+  rawUpperLipRaiseRight?: number
+  rawJawOpen?: number
+  rawLowerLipDropLeft?: number
+  rawLowerLipDropRight?: number
+  rawEyeSquintLeft?: number
+  rawEyeSquintRight?: number
+  rawCheekSquintLeft?: number
+  rawCheekSquintRight?: number
 }
 
 export interface RecordingStartInput {
@@ -95,7 +113,7 @@ export interface RecordingStopInput {
 
 const EVENT_HEADER = 'seat,name,role,time,elapsed_ms,event,target,parameter,value,details\n'
 const STATE_HEADER =
-  'pair_id,participant_id,partner_id,seat,time,elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,uncertain,face_detected,camera_on,frames_per_second\n'
+  'pair_id,participant_id,partner_id,seat,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
 const RECORDINGS_HEADER =
   'seat,participant_id,type,started_at,stopped_at,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
@@ -113,6 +131,75 @@ const MONTHS = [
   'Nov',
   'Dec',
 ]
+
+const README_CONTENT = `This session folder
+====================
+
+events.csv               Every discrete thing that happened during the
+                          session (someone joined, a setting changed, a
+                          message was sent, a connection dropped, etc.) —
+                          one row per event, in plain English.
+effect_state_P1.csv      What was actually shown to/by Participant 1, once
+effect_state_P2.csv      per second — the ground truth of what was applied,
+                          not just what was commanded. One file per person.
+recordings.csv           One row per saved video/audio file, with its start
+                          and stop time.
+session.json             Summary written when the session ends (who was in
+                          it, which recordings were made, what detection
+                          software version was used).
+
+Times
+-----
+"time" (and started_at/stopped_at) is your computer's own local clock, e.g.
+"Aug 18, 2026 3:46:51.175 PM" — not UTC.
+
+"elapsed_ms" is milliseconds since the whole session began (including any
+time spent in the waiting room before the conversation started).
+
+"conversation_elapsed_ms" (effect_state files only) is milliseconds since
+the researcher actually started the live conversation — blank while still
+in the waiting room, ~0 the moment the conversation starts. Recordings also
+start at that same moment, so this number is effectively the timestamp
+inside the recorded video: to find when something happened in the video,
+look up its conversation_elapsed_ms directly instead of subtracting times.
+
+Face and voice change numbers
+------------------------------
+self_face_change / partner_face_change: 1 = normal (no change). Higher than
+1 = more smiling. Lower than 1 = more frowning.
+self_voice_change / partner_voice_change: 0 = normal (no change). Positive
+= pitched up. Negative = pitched down.
+"self" is this file's own participant; "partner" is what was being done to
+the other participant, at that same moment.
+
+Facial expression columns
+--------------------------
+expression / smile_type / expression_confidence / smile_type_confidence:
+the app's overall read of the participant's real (unmodified) face —
+neutral/smiling/frowning, and if smiling, which kind (reward, affiliative,
+or dominance), each with a confidence score from 0 to 1.
+
+smile_type_trusted: true if the smile_type reading above should be trusted,
+false if it's a low-confidence guess, blank if the person isn't smiling
+(smile_type doesn't apply).
+
+raw_* columns: the individual facial-movement readings the app actually
+measures (0 to 1 each) — the "ingredients" that expression/smile_type/etc.
+are built from. These come from this app's face-tracking software
+(MediaPipe); they are NOT OpenFace or FACS-coded Action Units, so please
+don't cite them as such. Roughly: the app calls someone "smiling" once the
+left/right mouth-corner-raise readings average above about 0.6, and once
+smiling, "reward" means the mouth is opening (teeth showing), "dominance"
+means the two sides of the face disagree with each other, and
+"affiliative" is a strong, even, closed-mouth smile that's neither of
+those. See docs/for-technical-users.md section 4 in the project's GitHub
+repo for the exact thresholds and formulas.
+
+frames_per_second: how smoothly this participant's video was updating,
+averaged over the last second. Can legitimately read low for about the
+first second right after the pipeline starts up (the one-second average
+hasn't filled up yet) — that's expected, not a fault.
+`
 
 /** Your computer's own local time, e.g. "Aug 18, 2026 3:46:51.175 PM". Not UTC. */
 function formatLocalTime(epochMs: number): string {
@@ -179,6 +266,7 @@ export class SessionLogger {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const dir = path.join(outputRoot, `session_${stamp}`)
     await fsp.mkdir(path.join(dir, 'recordings'), { recursive: true })
+    await fsp.writeFile(path.join(dir, 'README.txt'), README_CONTENT, 'utf-8')
     return new SessionLogger(dir)
   }
 
@@ -245,6 +333,11 @@ export class SessionLogger {
       })
     }
 
+    const conversationElapsedMs =
+      input.phase !== 'waiting' && input.liveStartedAtMs != null
+        ? now - input.liveStartedAtMs
+        : ''
+
     this.stateStreamFor(input.slot).write(
       [
         csvField(input.dyadId ?? ''),
@@ -253,6 +346,7 @@ export class SessionLogger {
         csvField(input.slot),
         csvField(formatLocalTime(now)),
         now - this.startedAtMs,
+        conversationElapsedMs,
         csvField(input.phase),
         input.selfAlpha,
         input.selfVoiceSemitones,
@@ -262,7 +356,22 @@ export class SessionLogger {
         csvField(input.smileType ?? ''),
         csvField(input.labelConfidence ?? ''),
         csvField(input.smileTypeConfidence ?? ''),
-        csvField(input.uncertain ?? ''),
+        csvField(input.smileTypeTrusted ?? ''),
+        input.rawMouthSmileLeft ?? '',
+        input.rawMouthSmileRight ?? '',
+        input.rawMouthFrownLeft ?? '',
+        input.rawMouthFrownRight ?? '',
+        input.rawLipPressLeft ?? '',
+        input.rawLipPressRight ?? '',
+        input.rawUpperLipRaiseLeft ?? '',
+        input.rawUpperLipRaiseRight ?? '',
+        input.rawJawOpen ?? '',
+        input.rawLowerLipDropLeft ?? '',
+        input.rawLowerLipDropRight ?? '',
+        input.rawEyeSquintLeft ?? '',
+        input.rawEyeSquintRight ?? '',
+        input.rawCheekSquintLeft ?? '',
+        input.rawCheekSquintRight ?? '',
         input.faceFound,
         input.cameraOn,
         Math.round(input.fps * 10) / 10,

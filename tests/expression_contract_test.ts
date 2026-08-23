@@ -20,9 +20,24 @@ function smiling(overrides: Partial<ExpressionState> = {}): ExpressionState {
     openness: 0.7,
     labelConfidence: 0.95,
     smileTypeConfidence: 0.9,
-    uncertain: false,
+    smileTypeTrusted: true,
     classifierMode: 'heuristic-subtype',
     classifierVersion: 'test',
+    rawMouthSmileLeft: 0.9,
+    rawMouthSmileRight: 0.9,
+    rawMouthFrownLeft: 0,
+    rawMouthFrownRight: 0,
+    rawLipPressLeft: 0.1,
+    rawLipPressRight: 0.1,
+    rawUpperLipRaiseLeft: 0.6,
+    rawUpperLipRaiseRight: 0.6,
+    rawJawOpen: 0.3,
+    rawLowerLipDropLeft: 0.3,
+    rawLowerLipDropRight: 0.3,
+    rawEyeSquintLeft: 0.2,
+    rawEyeSquintRight: 0.2,
+    rawCheekSquintLeft: 0.2,
+    rawCheekSquintRight: 0.2,
     ...overrides,
   }
 }
@@ -64,9 +79,24 @@ assert.deepEqual(
     openness: 0.3,
     labelConfidence: undefined,
     smileTypeConfidence: undefined,
-    uncertain: false,
+    smileTypeTrusted: undefined,
     classifierMode: undefined,
     classifierVersion: 'badversionwithspacesandsymbols',
+    rawMouthSmileLeft: 0,
+    rawMouthSmileRight: 0,
+    rawMouthFrownLeft: 0,
+    rawMouthFrownRight: 0,
+    rawLipPressLeft: 0,
+    rawLipPressRight: 0,
+    rawUpperLipRaiseLeft: 0,
+    rawUpperLipRaiseRight: 0,
+    rawJawOpen: 0,
+    rawLowerLipDropLeft: 0,
+    rawLowerLipDropRight: 0,
+    rawEyeSquintLeft: 0,
+    rawEyeSquintRight: 0,
+    rawCheekSquintLeft: 0,
+    rawCheekSquintRight: 0,
   },
 )
 
@@ -91,7 +121,7 @@ engine.onExpression('P1', smiling({ smileTypeConfidence: 0.69 }))
 engine.tick(1000)
 assert.deepEqual(applied, [], 'low-confidence reward subtype must not fire')
 
-engine.onExpression('P1', smiling({ smileTypeConfidence: 0.95, uncertain: true }))
+engine.onExpression('P1', smiling({ smileTypeConfidence: 0.95, smileTypeTrusted: false }))
 engine.tick(1250)
 assert.deepEqual(applied, [], 'uncertain reward subtype must not fire')
 
@@ -107,7 +137,7 @@ const basicEngine = new RuleEngine({
   onActiveChange: () => {},
 })
 basicEngine.setRules([expressionRule('smiling')])
-basicEngine.onExpression('P1', smiling({ smileType: null, smileTypeConfidence: undefined, uncertain: true }))
+basicEngine.onExpression('P1', smiling({ smileType: null, smileTypeConfidence: undefined, smileTypeTrusted: false }))
 basicEngine.tick(2000)
 assert.equal(applied.at(-1), 'rule-smiling', 'basic smiling rule should ignore subtype uncertainty')
 

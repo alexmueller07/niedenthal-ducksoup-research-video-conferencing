@@ -44,6 +44,7 @@ export class LiveEffects {
   private alpha = 1.0
   private semitones = 0
   private frameTimes: number[] = []
+  private loopStartedAtMs: number | null = null
   private testFaceTimer: ReturnType<typeof setInterval> | null = null
   private testFaceImg: HTMLImageElement | null = null
   private testAudioCtx: AudioContext | null = null
@@ -180,6 +181,7 @@ export class LiveEffects {
     let lastTs = -1
     const loop = () => {
       const ts = performance.now()
+      if (this.loopStartedAtMs === null) this.loopStartedAtMs = ts
       const monotonic = ts <= lastTs ? lastTs + 1 : ts
       lastTs = monotonic
       this.face.render(this.hiddenVideo, this.ctx, w, h, monotonic)
@@ -212,10 +214,23 @@ export class LiveEffects {
       alpha: this.alpha,
       voiceSemitones: this.semitones,
       faceFound: this.face.faceFound,
-      fps: this.frameTimes.length,
+      fps: this.currentFps(),
       cameraOn: !!this.camera && this.camera.getVideoTracks().some((t) => t.readyState === 'live'),
       expression: this.face.expression,
     }
+  }
+
+  /**
+   * Frames rendered in the last second. For about the first second after the
+   * render loop starts, that window isn't full yet, so the raw frame count
+   * under-reports — extrapolate from however much of the window is filled
+   * instead of reporting a misleadingly low number.
+   */
+  private currentFps(): number {
+    if (this.loopStartedAtMs === null) return 0
+    const uptimeMs = performance.now() - this.loopStartedAtMs
+    if (uptimeMs >= 1000) return this.frameTimes.length
+    return Math.round((this.frameTimes.length / Math.max(1, uptimeMs)) * 1000)
   }
 
   stop() {

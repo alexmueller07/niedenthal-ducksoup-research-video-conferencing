@@ -1557,7 +1557,7 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
       : ''
   const text =
     expression.label === 'smiling'
-      ? expression.smileType && !expression.uncertain
+      ? expression.smileType && expression.smileTypeTrusted
         ? `smiling · ${expression.smileType}${subtypeConfidence ? ` ${subtypeConfidence}` : ''}`
         : 'smiling · uncertain'
       : expression.label
@@ -1573,7 +1573,7 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
     expression.label === 'smiling'
       ? `smile-type confidence ${Math.round((expression.smileTypeConfidence ?? 0) * 100)}%`
       : '',
-    expression.uncertain ? 'subtype uncertain' : '',
+    expression.label === 'smiling' && expression.smileTypeTrusted === false ? 'subtype uncertain' : '',
     expression.classifierMode ? `classifier ${expression.classifierMode}` : '',
     expression.classifierVersion ? `version ${expression.classifierVersion}` : '',
   ]
@@ -1585,7 +1585,7 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
         'rounded-full px-2 py-0.5 font-medium backdrop-blur ' +
         (expression.label === 'neutral'
           ? 'bg-gray-700/50 text-gray-300'
-          : expression.uncertain
+          : expression.label === 'smiling' && expression.smileTypeTrusted === false
             ? 'bg-amber-600/25 text-amber-100'
             : 'bg-sky-600/30 text-sky-200')
       }

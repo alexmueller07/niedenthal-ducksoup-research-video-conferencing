@@ -265,7 +265,7 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 | `relAsymmetry` | `asymmetry / max(0.3, max(smileL, smileR))` |
 | `eyeConstriction` | mean(`eyeSquintL`,`eyeSquintR`,`cheekSquintL`,`cheekSquintR`) — logged only, not used to classify |
 
-All features are EMA-smoothed (τ = 220 ms) before thresholding.
+All features are EMA-smoothed (τ = 220 ms) before thresholding. Every one of the raw MediaPipe scores that feed these formulas (`mouthSmileLeft/Right`, `mouthFrownLeft/Right`, `mouthPressLeft/Right`, `mouthUpperUpLeft/Right`, `jawOpen`, `mouthLowerDownLeft/Right`, `eyeSquintLeft/Right`, `cheekSquintLeft/Right` — 15 in all) is individually smoothed and streamed to `effect_state_<seat>.csv` as its own `raw_*` column (§8.3), so a researcher can see the ingredients behind the label instead of only the aggregate. **These are MediaPipe's own facial-movement scores, not OpenFace/FACS Action Units** — this app doesn't run OpenFace, so they shouldn't be cited as FACS-coded AU data.
 
 ### 4.2 Thresholds (`DETECTION_TUNING`, `faceMorph.ts:85–102`)
 
@@ -284,7 +284,7 @@ All features are EMA-smoothed (τ = 220 ms) before thresholding.
 
 1. **Label** (hysteresis): once smiling, stays smiling while smile ≥ `smileOff`; frowning requires `frown ≥ frownOn` **and** `smile < frownSmileGate`.
 2. **Smile sub-type** (only while smiling): `openness ≥ 0.20` → **reward**; else `relAsymmetry ≥ 0.12` → **dominance**; else → **affiliative**.
-3. **Confidence**: label confidence, smile-type confidence, classifier mode/version, and an `uncertain` flag are published alongside the label. A smiling frame with weak sub-type evidence is still a basic smile, but its sub-type is withheld or marked uncertain.
+3. **Confidence**: label confidence, smile-type confidence, classifier mode/version, and a `smileTypeTrusted` flag are published alongside the label. A smiling frame with weak sub-type evidence is still a basic smile, but its sub-type is withheld and `smileTypeTrusted` is `false`.
 4. **Debounce**: a candidate must hold ≥350 ms before being published.
 
 ### 4.4 Framing and calibration
@@ -298,7 +298,7 @@ Sub-types follow the lab's smile-typology framework (cited in-code as Martin et 
 
 ### 4.5 `ExpressionState`
 
-`main/protocol.ts:60–72`: `{ label, smileType, smile, frown, asymmetry, eyeConstriction, lipPress, openness, labelConfidence, smileTypeConfidence, uncertain, classifierMode, classifierVersion }`. Streamed to the dashboard and fed to the rule engine at up to 5 Hz (change-gated); label/sub-type changes are logged as `expression_changed`. Basic "smiling" rules fire on uncertain smiles; sub-type rules require a confident, non-uncertain smile type.
+`main/protocol.ts`: `{ label, smileType, smile, frown, asymmetry, eyeConstriction, lipPress, openness, labelConfidence, smileTypeConfidence, smileTypeTrusted, classifierMode, classifierVersion, raw* (15 fields, see §4.1) }`. Streamed to the dashboard and fed to the rule engine at up to 5 Hz (change-gated); label/sub-type changes are logged as `expression_changed`. Basic "smiling" rules fire regardless of `smileTypeTrusted`; sub-type rules require `smileTypeTrusted === true`.
 
 ---
 
@@ -385,6 +385,7 @@ Default root `Documents/NiedenthalLab/video-call-sessions` (selectable via folde
 
 ```
 session_<YYYY-MM-DDTHH-MM-SS>/
+├── README.txt               # plain-English column/convention reference
 ├── events.csv               # every discrete event
 ├── effect_state_P1.csv      # 1 Hz applied-state telemetry for P1 (ground truth)
 ├── effect_state_P2.csv      # 1 Hz applied-state telemetry for P2 (ground truth)
@@ -396,12 +397,13 @@ session_<YYYY-MM-DDTHH-MM-SS>/
     └── researcher_mic.mp4      (…_part2, _part3 on restart/reconnect)
 ```
 
-CSVs use append write-streams so rows hit disk as they happen; recording chunks flush every 1 s. A crash mid-session loses at most the OS buffer.
+CSVs use append write-streams so rows hit disk as they happen; recording chunks flush every 1 s. A crash mid-session loses at most the OS buffer. `README.txt` (`main/logger.ts`, `README_CONTENT`) is written once per session so the column/convention reference travels with the actual data, not just with this doc.
 
 Every CSV follows the same conventions:
 - Column headers are plain English (e.g. `time`, not `ts_iso`), grouped left to right as **who/when → what happened → data-quality detail**, so the files are readable without a data dictionary.
 - `time` (and `started_at`/`stopped_at`) is your computer's own local clock, written like `Aug 18, 2026 3:46:51.175 PM` — not UTC, not ISO 8601.
 - `elapsed_ms` (and `elapsed_start_ms`/`elapsed_stop_ms`) is milliseconds since the session began, on the same clock across every file in the session, so a row in one file can be matched to a moment in another (or inside a recording) by comparing these numbers directly.
+- `effect_state_<seat>.csv` also has `conversation_elapsed_ms`: milliseconds since the researcher started the *live conversation* specifically (blank while still in the waiting room), anchored to the same `sessionStartedAt` moment used to start recordings — so this number doubles as the row's approximate timestamp inside the recorded video, with no subtraction needed.
 
 ### 8.2 `events.csv`
 
@@ -431,9 +433,13 @@ A per-row sequence number is still sent to the live dashboard feed (for React li
 
 One file per participant seat instead of one shared file, so each person's data stands alone and never needs to be filtered out of a mixed file.
 
-Header: `pair_id, participant_id, partner_id, seat, time, elapsed_ms, phase, self_face_change, self_voice_change, partner_face_change, partner_voice_change, expression, smile_type, expression_confidence, smile_type_confidence, uncertain, face_detected, camera_on, frames_per_second`.
+Header: `pair_id, participant_id, partner_id, seat, time, elapsed_ms, conversation_elapsed_ms, phase, self_face_change, self_voice_change, partner_face_change, partner_voice_change, expression, smile_type, expression_confidence, smile_type_confidence, smile_type_trusted, raw_mouth_smile_left, raw_mouth_smile_right, raw_mouth_frown_left, raw_mouth_frown_right, raw_lip_press_left, raw_lip_press_right, raw_upper_lip_raise_left, raw_upper_lip_raise_right, raw_jaw_open, raw_lower_lip_drop_left, raw_lower_lip_drop_right, raw_eye_squint_left, raw_eye_squint_right, raw_cheek_squint_left, raw_cheek_squint_right, face_detected, camera_on, frames_per_second`.
 
 Written once per second from each participant's own telemetry — the authoritative record of what was actually applied and shown, independent of what was commanded. `self_face_change`/`self_voice_change` are this person's own applied morph (this is the old `alpha`/`voice_semitones`, renamed). `partner_face_change`/`partner_voice_change` are the *other* seat's applied morph at that same moment (pulled from the partner's last known telemetry — blank if the partner isn't connected yet), so a single row lets you compare self vs. partner without joining files. `pair_id` and `partner_id` come from `Identity.dyadId` and the other seat's `participantId`.
+
+`smile_type_trusted` replaces the old `uncertain` column (renamed *and* inverted — `true` now means "trust this reading," removing the double-negative); it's blank whenever the person isn't smiling, since it has nothing to describe in that case.
+
+`raw_mouth_smile_left` through `raw_cheek_squint_right` are the 15 individual MediaPipe facial-movement scores behind the `expression`/`smile_type` label — see §4.1 for exactly which formula uses which raw score, and why they aren't OpenFace/FACS Action Units.
 
 `detection_mode`/`detection_version` are **not** columns here — they never change during a session, so repeating them on every row was pure clutter. They're captured once per seat instead and written into `session.json`'s `detection` field (see §8.4).
 

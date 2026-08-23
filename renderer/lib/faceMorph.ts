@@ -299,30 +299,39 @@ export class FaceMorphProcessor {
       return next
     }
 
+    // Every raw MediaPipe facial-movement score is smoothed individually first
+    // (kept around for the raw_* telemetry columns), then combined below into
+    // the same smile/frown/openness/etc. features as before — EMA is linear,
+    // so smoothing-then-combining gives identical results to the old
+    // combine-then-smooth approach.
     const smileL = ema('smileL', g('mouthSmileLeft'))
     const smileR = ema('smileR', g('mouthSmileRight'))
     const smile = (smileL + smileR) / 2
-    const frown = ema('frown', (g('mouthFrownLeft') + g('mouthFrownRight')) / 2)
+    const frownL = ema('frownL', g('mouthFrownLeft'))
+    const frownR = ema('frownR', g('mouthFrownRight'))
+    const frown = (frownL + frownR) / 2
     const pressL = ema('pressL', g('mouthPressLeft'))
     const pressR = ema('pressR', g('mouthPressRight'))
     const lipPress = (pressL + pressR) / 2
+    const upperUpL = ema('upperUpL', g('mouthUpperUpLeft'))
+    const upperUpR = ema('upperUpR', g('mouthUpperUpRight'))
+    const jawOpen = ema('jawOpen', g('jawOpen'))
+    const lowerDownL = ema('lowerDownL', g('mouthLowerDownLeft'))
+    const lowerDownR = ema('lowerDownR', g('mouthLowerDownRight'))
     // Openness: how much the smile bares teeth (the reward-smile separator).
-    const openness = ema(
-      'open',
-      (g('mouthUpperUpLeft') + g('mouthUpperUpRight')) / 2 +
-        g('jawOpen') * 0.8 +
-        ((g('mouthLowerDownLeft') + g('mouthLowerDownRight')) / 2) * 0.8,
-    )
+    const openness =
+      (upperUpL + upperUpR) / 2 + jawOpen * 0.8 + ((lowerDownL + lowerDownR) / 2) * 0.8
     // Combined smile + lip-press asymmetry, relative to how strong the smile
     // is (the dominance-smile separator).
     const asymmetry = Math.abs(smileL - smileR) + Math.abs(pressL - pressR)
     const relAsymmetry = asymmetry / Math.max(0.3, Math.max(smileL, smileR))
+    const eyeSquintL = ema('eyeSquintL', g('eyeSquintLeft'))
+    const eyeSquintR = ema('eyeSquintR', g('eyeSquintRight'))
+    const cheekSquintL = ema('cheekSquintL', g('cheekSquintLeft'))
+    const cheekSquintR = ema('cheekSquintR', g('cheekSquintRight'))
     // Kept for logging/telemetry even though it no longer drives the
     // classifier (unreliable on lab webcams — see calibration note above).
-    const eyeConstriction = ema(
-      'eye',
-      (g('eyeSquintLeft') + g('eyeSquintRight') + g('cheekSquintLeft') + g('cheekSquintRight')) / 4,
-    )
+    const eyeConstriction = (eyeSquintL + eyeSquintR + cheekSquintL + cheekSquintR) / 4
 
     // Label with hysteresis: harder to enter a state than to stay in it. A
     // frown needs the smile signal gone (a relaxed face can score smile ≈ 0.5).
@@ -341,14 +350,14 @@ export class FaceMorphProcessor {
     const labelConfidence = this.labelConfidence(label, smile, frown)
     let smileType: SmileType | null = null
     let smileTypeConfidence: number | undefined
-    let uncertain = false
+    let subtypeUntrustworthy = false
     if (label === 'smiling') {
       const subtype = this.classifySmileSubtype(openness, relAsymmetry, smile)
       smileTypeConfidence = subtype.confidence
       if (subtype.confidence >= T.minPublishedSubtypeConfidence) {
         smileType = subtype.type
       } else {
-        uncertain = true
+        subtypeUntrustworthy = true
       }
     }
 
@@ -377,11 +386,27 @@ export class FaceMorphProcessor {
       labelConfidence: round2(labelConfidence),
       smileTypeConfidence:
         this.publishedLabel === 'smiling' && this.publishedType ? round2(smileTypeConfidence ?? 0) : undefined,
-      uncertain:
-        this.publishedLabel === 'smiling' &&
-        (uncertain || this.publishedType === null || (smileTypeConfidence ?? 0) <= 0),
+      smileTypeTrusted:
+        this.publishedLabel === 'smiling'
+          ? !subtypeUntrustworthy && this.publishedType !== null && (smileTypeConfidence ?? 0) > 0
+          : undefined,
       classifierMode: CLASSIFIER_MODE,
       classifierVersion: CLASSIFIER_VERSION,
+      rawMouthSmileLeft: round2(smileL),
+      rawMouthSmileRight: round2(smileR),
+      rawMouthFrownLeft: round2(frownL),
+      rawMouthFrownRight: round2(frownR),
+      rawLipPressLeft: round2(pressL),
+      rawLipPressRight: round2(pressR),
+      rawUpperLipRaiseLeft: round2(upperUpL),
+      rawUpperLipRaiseRight: round2(upperUpR),
+      rawJawOpen: round2(jawOpen),
+      rawLowerLipDropLeft: round2(lowerDownL),
+      rawLowerLipDropRight: round2(lowerDownR),
+      rawEyeSquintLeft: round2(eyeSquintL),
+      rawEyeSquintRight: round2(eyeSquintR),
+      rawCheekSquintLeft: round2(cheekSquintL),
+      rawCheekSquintRight: round2(cheekSquintR),
     }
   }
 

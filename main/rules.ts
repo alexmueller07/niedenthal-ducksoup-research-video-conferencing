@@ -77,7 +77,7 @@ function confidentSubtype(state: ExpressionState, type: ExpressionState['smileTy
   return (
     state.label === 'smiling' &&
     state.smileType === type &&
-    state.uncertain !== true &&
+    state.smileTypeTrusted === true &&
     (state.smileTypeConfidence ?? 0) >= SUBTYPE_RULE_CONFIDENCE_THRESHOLD
   )
 }

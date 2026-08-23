@@ -164,7 +164,7 @@ export default function DashboardPage() {
   }
   const expressionText =
     expression?.label === 'smiling'
-      ? expression.smileType && !expression.uncertain
+      ? expression.smileType && expression.smileTypeTrusted
         ? `smiling · ${expression.smileType}`
         : 'smiling · uncertain'
       : expression?.label ?? 'waiting'
@@ -273,7 +273,9 @@ export default function DashboardPage() {
             </div>
 
             <div className="ops">
-              <div className={`detect ${expression?.uncertain ? 'uncertain' : ''}`}>
+              <div
+                className={`detect ${expression?.label === 'smiling' && expression.smileTypeTrusted === false ? 'uncertain' : ''}`}
+              >
                 <div>
                   <span className="detect-label">Detected expression</span>
                   <span className="detect-value">{expressionText}</span>
