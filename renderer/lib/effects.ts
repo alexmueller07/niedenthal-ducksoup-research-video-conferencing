@@ -41,7 +41,7 @@ export class LiveEffects {
   private ctx: CanvasRenderingContext2D
   private raf: number | null = null
 
-  private alpha = 1.0
+  private alpha = 0
   private semitones = 0
   private frameTimes: number[] = []
   private loopStartedAtMs: number | null = null

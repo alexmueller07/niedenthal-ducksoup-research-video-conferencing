@@ -113,9 +113,9 @@ If no face is found, the last expression is held for 1 s, then decays to neutral
 
 A triangular mesh warp of the mouth region, controlled by parameter **alpha (α)**:
 
-- **α = 1.0** → neutral.
-- **α > 1** → more smiling (corners out and up).
-- **α < 1** → toward a frown (corners down and slightly in, plus a lower-lip pout).
+- **α = 0** → neutral.
+- **α > 0** → more smiling (corners out and up).
+- **α < 0** → toward a frown (corners down and slightly in, plus a lower-lip pout).
 
 Everything scales with **mouth width W** (distance between landmarks 61 and 291), so the effect is invariant to face distance from camera.
 
@@ -124,8 +124,8 @@ Everything scales with **mouth width W** (distance between landmarks 61 and 291)
 | Constant | Value | Meaning |
 |---|---|---|
 | `SMILE_ANGLE_RAD` | 25° | Corner travel direction for a smile (mostly outward, some up) |
-| `SMILE_GAIN` | 0.17 | Corner travel per unit `(α−1)`, in mouth-widths |
-| `FROWN_GAIN` | 0.13 | Corner-down travel per unit `(1−α)`, in mouth-widths |
+| `SMILE_GAIN` | 0.17 | Corner travel per unit `α`, in mouth-widths |
+| `FROWN_GAIN` | 0.13 | Corner-down travel per unit `−α`, in mouth-widths |
 | `FROWN_INWARD` | 0.25 | Fraction of frown travel applied inward |
 | `FROWN_POUT` | 0.5 | Lower-lip-centre drop relative to corner drop |
 | `ALPHA_TWEEN_TAU_MS` | 350 ms | Time constant of the smoothing tween |
@@ -136,7 +136,7 @@ Other geometric constants: `sigmaY = 0.6·W` (vertical falloff), `poutY = center
 
 #### Displacement field
 
-Let `s = (α_current − 1) · yawScale`, `mag = |s| · W`. For a mesh node at `(sx, sy)` with normalized ROI coords `(u, v)`:
+Let `s = α_current · yawScale`, `mag = |s| · W`. For a mesh node at `(sx, sy)` with normalized ROI coords `(u, v)`:
 
 - `xn = (sx − centerX) / (W/2)` — horizontal position, ±1 at a corner
 - `vy = exp(−(sy − centerY)² / (2·sigmaY²))` — vertical falloff about the mouth line
@@ -163,21 +163,21 @@ dy     += mag · FROWN_GAIN · FROWN_POUT · centerW · vb · win
 
 Each of the 192 triangles is affine-mapped from source to displaced destination and drawn from the raw frame (`drawTriangle`, `faceMorph.ts:447–505`), so the warp tracks the actual mouth and does nothing when no face is present.
 
-**Nominal corner travel** (at the mouth corner, ignoring window/falloff attenuation): smile = `0.17·|α−1|` mouth-widths (`0.1541` horizontal, `0.0719` vertical); frown = `0.13·|α−1|` mouth-widths (`0.0325` inward, pout peaking at `0.065`).
+**Nominal corner travel** (at the mouth corner, ignoring window/falloff attenuation): smile = `0.17·|α|` mouth-widths (`0.1541` horizontal, `0.0719` vertical); frown = `0.13·|α|` mouth-widths (`0.0325` inward, pout peaking at `0.065`).
 
 #### Per-condition displacement
 
-| Preset | α | `|α−1|` | Corner travel | Horizontal | Vertical | Extra |
+| Preset | α | `|α|` | Corner travel | Horizontal | Vertical | Extra |
 |---|---|---|---|---|---|---|
-| Neutral / Sham | 1.00 | 0 | — | — | — | none |
-| Smile + (subtle) | 1.35 | 0.35 | 0.0595 W | 0.0539 W out | +0.0251 W up | — |
-| Smile + (strong) | 1.90 | 0.90 | 0.1530 W | 0.1387 W out | +0.0647 W up | — |
-| Lower voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice −2 st |
-| Higher voice | 1.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice +2 st |
-| Frown (subtle) | 0.60 | 0.40 | 0.0520 W | 0.0130 W in | −0.0520 W down | pout 0.0260 W |
-| Frown (strong) | 0.10 | 0.90 | 0.1170 W | 0.0293 W in | −0.1170 W down | pout 0.0585 W |
+| Neutral / Sham | 0.00 | 0 | — | — | — | none |
+| Smile + (subtle) | 0.35 | 0.35 | 0.0595 W | 0.0539 W out | +0.0251 W up | — |
+| Smile + (strong) | 0.90 | 0.90 | 0.1530 W | 0.1387 W out | +0.0647 W up | — |
+| Lower voice | 0.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice −2 st |
+| Higher voice | 0.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice +2 st |
+| Frown (subtle) | −0.40 | 0.40 | 0.0520 W | 0.0130 W in | −0.0520 W down | pout 0.0260 W |
+| Frown (strong) | −0.90 | 0.90 | 0.1170 W | 0.0293 W in | −0.1170 W down | pout 0.0585 W |
 
-The dashboard's manual sliders allow α ∈ [−1, 3] (step 0.05); the legacy capture station allows α ∈ [−2, 5] (step 0.1). Presets are the intended experimental conditions; free sliders are for calibration.
+The dashboard's manual sliders allow α ∈ [−2, 2] (step 0.05); the legacy capture station allows α ∈ [−2, 5] (step 0.1, unchanged — still uses the old 1 = neutral convention, see §12). Presets are the intended experimental conditions; free sliders are for calibration.
 
 At a mouth spanning ~150 px, "Smile + (strong)" moves each corner ≈23 px (≈21 out, ≈10 up). Exact figure scales with the participant's face size in frame.
 
@@ -226,7 +226,7 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 
 - `n = 0` → bypass.
 - Dashboard slider: −12…+12 st (step 1); legacy capture station: −8…+8 st. Values beyond ±12 have no additional effect (clamped internally).
-- Presets: "Lower voice" = −2 st, "Higher voice" = +2 st (both with α = 1.25). All other presets = 0 st.
+- Presets: "Lower voice" = −2 st, "Higher voice" = +2 st (both with α = 0.25). All other presets = 0 st.
 - Reference: pitch ratio ≈ `2^(n/12)`; +2 st ≈ 1.122×, −2 st ≈ 0.891×, ±12 st = 2×/0.5×.
 
 ### 3.5 Modification presets
@@ -235,13 +235,13 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 
 | ID | Label | α | Voice (st) | Control? | Description |
 |---|---|---|---|---|---|
-| `neutral` | Neutral / Sham | 1.0 | 0 | yes | Full pipeline runs identically; face and voice unchanged. |
-| `smile-subtle` | Smile + (subtle) | 1.35 | 0 | no | Mildly increases smile intensity, often below conscious detection. |
-| `smile-strong` | Smile + (strong) | 1.9 | 0 | no | Clearly increases smile intensity. |
-| `frown-subtle` | Frown (subtle) | 0.6 | 0 | no | Mildly dampens the smile toward neutral/negative. |
-| `frown-strong` | Frown (strong) | 0.1 | 0 | no | Clearly shifts the mouth toward a frown. |
-| `warm-voice` | Lower voice | 1.25 | −2 | no | Subtle smile lift + slightly lower voice. |
-| `bright-voice` | Higher voice | 1.25 | +2 | no | Subtle smile lift + slightly higher voice. |
+| `neutral` | Neutral / Sham | 0 | 0 | yes | Full pipeline runs identically; face and voice unchanged. |
+| `smile-subtle` | Smile + (subtle) | 0.35 | 0 | no | Mildly increases smile intensity, often below conscious detection. |
+| `smile-strong` | Smile + (strong) | 0.9 | 0 | no | Clearly increases smile intensity. |
+| `frown-subtle` | Frown (subtle) | −0.4 | 0 | no | Mildly dampens the smile toward neutral/negative. |
+| `frown-strong` | Frown (strong) | −0.9 | 0 | no | Clearly shifts the mouth toward a frown. |
+| `warm-voice` | Lower voice | 0.25 | −2 | no | Subtle smile lift + slightly lower voice. |
+| `bright-voice` | Higher voice | 0.25 | +2 | no | Subtle smile lift + slightly higher voice. |
 
 `DEFAULT_PRESET_ID = 'neutral'`. The sham/control condition runs the identical pipeline (detection, canvas, audio graph all live) but leaves parameters unchanged, so it differs from a real condition only in parameter values, not processing artifacts or latency.
 
@@ -501,12 +501,12 @@ Dev: `npm run dev` (Nextron) runs Next.js on port 8888 + Electron; `startupDelay
 | Constant | Value |
 |---|---|
 | Smile corner angle | 25° above horizontal |
-| `SMILE_GAIN` | 0.17 mouth-widths per unit `|α−1|` |
-| `FROWN_GAIN` | 0.13 mouth-widths per unit `|α−1|` |
+| `SMILE_GAIN` | 0.17 mouth-widths per unit `|α|` |
+| `FROWN_GAIN` | 0.13 mouth-widths per unit `|α|` |
 | Frown inward fraction | 0.25 |
 | Frown pout fraction | 0.5 |
 | Alpha tween τ | 350 ms |
-| Warp skip threshold | `|α−1| < 0.02` |
+| Warp skip threshold | `|α| < 0.02` |
 | Tween snap threshold | `|α−α_target| < 0.004` |
 | Yaw full/off symmetry | 0.65 / 0.35 |
 | Mesh resolution | 12 × 8 (117 nodes / 192 triangles) |
@@ -561,7 +561,7 @@ Dev: `npm run dev` (Nextron) runs Next.js on port 8888 + Electron; `startupDelay
 
 | Control | Range | Step | Neutral |
 |---|---|---|---|
-| Smile α (dashboard) | −1…3 | 0.05 | 1 |
+| Smile α (dashboard) | −2…2 | 0.05 | 0 |
 | Voice pitch (dashboard) | −12…+12 st | 1 | 0 |
 | Smile α (legacy capture) | −2…5 | 0.1 | 1 |
 | Voice pitch (legacy capture) | −8…+8 st | 1 | 0 |
@@ -581,6 +581,7 @@ Things to know before citing or relying on this software in a study.
 4. **Detection latency**: ~5 Hz sampling, 220 ms EMA smoothing, 350 ms debounce — expression onset is reported with up to ~0.5–0.7 s latency. Interpret rule "hold" durations accordingly.
 5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
+7. **The two alpha conventions differ.** The three-seat call app (this document, `main/presets.ts`, `EffectState.alpha`) uses `0 = neutral`. The legacy single-machine capture station (`renderer/pages/dashboard.tsx`, `renderer/lib/capture.ts`) still uses the older `1 = neutral` convention, left unchanged so its output stays compatible with the separate PPS questionnaire app that reads it. Don't compare an alpha number from one tool directly against the other without adjusting for this.
 
 ---
 

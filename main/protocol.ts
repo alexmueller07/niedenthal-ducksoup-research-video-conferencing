@@ -35,13 +35,13 @@ export const EMPTY_IDENTITY: Identity = {
 
 /** The full modification state applied to one participant's outgoing stream. */
 export interface EffectState {
-  /** Smile morph alpha. 1 = neutral, >1 lifts the smile, <1 dampens it. */
+  /** Smile morph alpha. 0 = neutral, >0 lifts the smile, <0 dampens it. */
   alpha: number
   /** Voice pitch shift in semitones. 0 = neutral. */
   voiceSemitones: number
 }
 
-export const NEUTRAL_EFFECTS: EffectState = { alpha: 1, voiceSemitones: 0 }
+export const NEUTRAL_EFFECTS: EffectState = { alpha: 0, voiceSemitones: 0 }
 
 // ---- Expression detection ----
 //

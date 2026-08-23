@@ -1057,7 +1057,7 @@ function ParticipantPanel({
     Math.abs(telemetry.voiceSemitones - effects.voiceSemitones) < 0.51
 
   const modified =
-    Math.abs(effects.alpha - 1) >= 0.02 || Math.abs(effects.voiceSemitones) >= 0.5
+    Math.abs(effects.alpha) >= 0.02 || Math.abs(effects.voiceSemitones) >= 0.5
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
@@ -1183,12 +1183,12 @@ function ParticipantPanel({
       <div className="space-y-3 p-4">
         <EffectSlider
           label="Smile"
-          hint={effects.alpha > 1.02 ? 'lifted' : effects.alpha < 0.98 ? 'dampened' : 'neutral'}
-          min={-1}
-          max={3}
+          hint={effects.alpha > 0.02 ? 'lifted' : effects.alpha < -0.02 ? 'dampened' : 'neutral'}
+          min={-2}
+          max={2}
           step={0.05}
           value={effects.alpha}
-          neutral={1}
+          neutral={0}
           format={(v) => `α ${v.toFixed(2)}`}
           onChange={(v) => onEffect('alpha', v)}
           onCommit={(v) => onEffect('alpha', v, true)}

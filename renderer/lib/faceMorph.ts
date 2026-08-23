@@ -54,8 +54,8 @@ const RIGHT_FACE_EDGE = 454
 
 // ---- Morph tuning (calibrate with Randy; all displacements scale with mouth width) ----
 const SMILE_ANGLE_RAD = (25 * Math.PI) / 180 // corners move out+up at ~25° above horizontal
-const SMILE_GAIN = 0.17 // total corner travel per unit of (alpha - 1)
-const FROWN_GAIN = 0.13 // corner-down travel per unit of (1 - alpha)
+const SMILE_GAIN = 0.17 // total corner travel per unit of alpha
+const FROWN_GAIN = 0.13 // corner-down travel per unit of -alpha
 const FROWN_INWARD = 0.25 // slight inward pull of the corners while frowning
 const FROWN_POUT = 0.5 // lower-lip-centre drop relative to corner drop
 const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
@@ -110,8 +110,8 @@ export class FaceMorphProcessor {
   private landmarker: FaceLandmarker | null = null
   private src: HTMLCanvasElement // holds the raw frame for sampling
   private srcCtx: CanvasRenderingContext2D
-  private alphaTarget = 1.0
-  private alphaCurrent = 1.0
+  private alphaTarget = 0
+  private alphaCurrent = 0
   private lastTweenTs: number | null = null
   private cols = 12
   private rows = 8
@@ -227,7 +227,7 @@ export class FaceMorphProcessor {
 
     this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null)
 
-    if (Math.abs(this.alphaCurrent - 1) < 0.02) return false
+    if (Math.abs(this.alphaCurrent) < 0.02) return false
 
     const lm = faces[0]
     const toPx = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height })
@@ -273,7 +273,7 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, (this.alphaCurrent - 1) * yawScale)
+    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, this.alphaCurrent * yawScale)
     return true
   }
 
@@ -453,7 +453,7 @@ export class FaceMorphProcessor {
   // ---- Warp ----
 
   /**
-   * Mesh-warp the ROI. `strength` is (alpha − 1) after yaw attenuation:
+   * Mesh-warp the ROI. `strength` is alpha after yaw attenuation:
    * positive → smile (corners out+up), negative → frown (parabolic, pout).
    */
   private warp(

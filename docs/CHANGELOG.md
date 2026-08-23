@@ -21,6 +21,19 @@
 
 * **Date:** 23-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Make 0 mean "no change" for the face/voice numbers, instead of 1
+
+* **Previous behavior:**
+The face-change number used 1 to mean "no change," with higher or lower numbers meaning more smiling or more frowning. This didn't match the voice-pitch number, which already used 0 for "no change."
+* **New behavior:**
+The face-change number now also uses 0 for "no change," matching the voice number. This only applies to the new three-person call app — the older single-computer tool still uses 1, since it feeds a separate outside program.
+* **Why this matters:**
+Both numbers now follow the same "0 = no change" rule, which is easier to remember and matches what most people expect.
+
+---
+
+* **Date:** 23-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Split the combined date-and-time column into two columns
 
 * **Previous behavior:**

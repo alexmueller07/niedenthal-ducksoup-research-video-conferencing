@@ -59,7 +59,7 @@ export interface EffectStateInput {
   phase: string
   /** Epoch ms the researcher started the live conversation, or null/undefined if not live yet. */
   liveStartedAtMs?: number | null
-  /** How much this participant's own face was changed (1 = no change). */
+  /** How much this participant's own face was changed (0 = no change). */
   selfAlpha: number
   /** How much this participant's own voice pitch was changed. */
   selfVoiceSemitones: number
@@ -166,8 +166,8 @@ look up its conversation_elapsed_ms directly instead of subtracting times.
 
 Face and voice change numbers
 ------------------------------
-self_face_change / partner_face_change: 1 = normal (no change). Higher than
-1 = more smiling. Lower than 1 = more frowning.
+self_face_change / partner_face_change: 0 = normal (no change). Higher than
+0 = more smiling. Lower than 0 = more frowning.
 self_voice_change / partner_voice_change: 0 = normal (no change). Positive
 = pitched up. Negative = pitched down.
 "self" is this file's own participant; "partner" is what was being done to

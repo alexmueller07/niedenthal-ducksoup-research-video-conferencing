@@ -10,14 +10,14 @@
 // its effect values; the renderer re-exports from renderer/lib/presets.ts.
 //
 // Intensities were tamped down after the 2026-07 lab demo — the RAs reported the
-// original values ("subtle" 1.6, "strong" 2.4, frown −0.5) read as too strong
+// original values ("subtle" 0.6, "strong" 1.4, frown −1.5) read as too strong
 // and often uncanny. These are starting points to calibrate with Randy.
 
 export interface ModificationPreset {
   id: string
   label: string
   description: string
-  /** Smile intensity. 1.0 neutral, >1 more smile, <1 toward a frown. */
+  /** Smile intensity. 0 neutral, >0 more smile, <0 toward a frown. */
   alpha: number
   /** Voice pitch shift in semitones. 0 = neutral. */
   voiceSemitones: number
@@ -30,7 +30,7 @@ export const PRESETS: ModificationPreset[] = [
     id: 'neutral',
     label: 'Neutral / Sham',
     description: 'Control condition. Pipeline runs identically but face and voice are unchanged.',
-    alpha: 1.0,
+    alpha: 0,
     voiceSemitones: 0,
     isControl: true,
   },
@@ -38,42 +38,42 @@ export const PRESETS: ModificationPreset[] = [
     id: 'smile-subtle',
     label: 'Smile + (subtle)',
     description: 'Mildly increases smile intensity. Often below conscious detection.',
-    alpha: 1.35,
+    alpha: 0.35,
     voiceSemitones: 0,
   },
   {
     id: 'smile-strong',
     label: 'Smile + (strong)',
     description: 'Clearly increases smile intensity.',
-    alpha: 1.9,
+    alpha: 0.9,
     voiceSemitones: 0,
   },
   {
     id: 'frown-subtle',
     label: 'Frown (subtle)',
     description: 'Mildly dampens the smile toward neutral/negative.',
-    alpha: 0.6,
+    alpha: -0.4,
     voiceSemitones: 0,
   },
   {
     id: 'frown-strong',
     label: 'Frown (strong)',
     description: 'Clearly shifts the mouth toward a frown.',
-    alpha: 0.1,
+    alpha: -0.9,
     voiceSemitones: 0,
   },
   {
     id: 'warm-voice',
     label: 'Lower voice',
     description: 'Subtle smile lift paired with a slightly lower voice.',
-    alpha: 1.25,
+    alpha: 0.25,
     voiceSemitones: -2,
   },
   {
     id: 'bright-voice',
     label: 'Higher voice',
     description: 'Subtle smile lift paired with a slightly higher voice.',
-    alpha: 1.25,
+    alpha: 0.25,
     voiceSemitones: 2,
   },
 ]
