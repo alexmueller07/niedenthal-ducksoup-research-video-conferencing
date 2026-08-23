@@ -21,6 +21,19 @@
 
 * **Date:** 23-08-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Split the combined date-and-time column into two columns
+
+* **Previous behavior:**
+Every timestamp was written into a single column, mixing the date and the time of day together in one cell.
+* **New behavior:**
+The date and time are now two separate columns everywhere.
+* **Why this matters:**
+Makes it easy to sort or filter by date and by time separately.
+
+---
+
+* **Date:** 23-08-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Add video-matched timing, raw face readings, a clearer confidence column, and a session guide
 
 * **Previous behavior:**

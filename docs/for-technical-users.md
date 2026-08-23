@@ -401,13 +401,13 @@ CSVs use append write-streams so rows hit disk as they happen; recording chunks 
 
 Every CSV follows the same conventions:
 - Column headers are plain English (e.g. `time`, not `ts_iso`), grouped left to right as **who/when → what happened → data-quality detail**, so the files are readable without a data dictionary.
-- `time` (and `started_at`/`stopped_at`) is your computer's own local clock, written like `Aug 18, 2026 3:46:51.175 PM` — not UTC, not ISO 8601.
+- `date`/`time` (and `started_date`/`started_time`/`stopped_date`/`stopped_time`) are your computer's own local clock, split into two columns, written like `Aug 18, 2026` and `3:46:51.175 PM` — not UTC, not ISO 8601.
 - `elapsed_ms` (and `elapsed_start_ms`/`elapsed_stop_ms`) is milliseconds since the session began, on the same clock across every file in the session, so a row in one file can be matched to a moment in another (or inside a recording) by comparing these numbers directly.
 - `effect_state_<seat>.csv` also has `conversation_elapsed_ms`: milliseconds since the researcher started the *live conversation* specifically (blank while still in the waiting room), anchored to the same `sessionStartedAt` moment used to start recordings — so this number doubles as the row's approximate timestamp inside the recorded video, with no subtraction needed.
 
 ### 8.2 `events.csv`
 
-Header: `seat, name, role, time, elapsed_ms, event, target, parameter, value, details` (`details` is CSV-escaped JSON).
+Header: `seat, name, role, date, time, elapsed_ms, event, target, parameter, value, details` (`details` is CSV-escaped JSON).
 
 Event names are plain English on purpose — this column is read by researchers, not just developers.
 
@@ -433,7 +433,7 @@ A per-row sequence number is still sent to the live dashboard feed (for React li
 
 One file per participant seat instead of one shared file, so each person's data stands alone and never needs to be filtered out of a mixed file.
 
-Header: `pair_id, participant_id, partner_id, seat, time, elapsed_ms, conversation_elapsed_ms, phase, self_face_change, self_voice_change, partner_face_change, partner_voice_change, expression, smile_type, expression_confidence, smile_type_confidence, smile_type_trusted, raw_mouth_smile_left, raw_mouth_smile_right, raw_mouth_frown_left, raw_mouth_frown_right, raw_lip_press_left, raw_lip_press_right, raw_upper_lip_raise_left, raw_upper_lip_raise_right, raw_jaw_open, raw_lower_lip_drop_left, raw_lower_lip_drop_right, raw_eye_squint_left, raw_eye_squint_right, raw_cheek_squint_left, raw_cheek_squint_right, face_detected, camera_on, frames_per_second`.
+Header: `pair_id, participant_id, partner_id, seat, date, time, elapsed_ms, conversation_elapsed_ms, phase, self_face_change, self_voice_change, partner_face_change, partner_voice_change, expression, smile_type, expression_confidence, smile_type_confidence, smile_type_trusted, raw_mouth_smile_left, raw_mouth_smile_right, raw_mouth_frown_left, raw_mouth_frown_right, raw_lip_press_left, raw_lip_press_right, raw_upper_lip_raise_left, raw_upper_lip_raise_right, raw_jaw_open, raw_lower_lip_drop_left, raw_lower_lip_drop_right, raw_eye_squint_left, raw_eye_squint_right, raw_cheek_squint_left, raw_cheek_squint_right, face_detected, camera_on, frames_per_second`.
 
 Written once per second from each participant's own telemetry — the authoritative record of what was actually applied and shown, independent of what was commanded. `self_face_change`/`self_voice_change` are this person's own applied morph (this is the old `alpha`/`voice_semitones`, renamed). `partner_face_change`/`partner_voice_change` are the *other* seat's applied morph at that same moment (pulled from the partner's last known telemetry — blank if the partner isn't connected yet), so a single row lets you compare self vs. partner without joining files. `pair_id` and `partner_id` come from `Identity.dyadId` and the other seat's `participantId`.
 
@@ -447,7 +447,7 @@ Written once per second from each participant's own telemetry — the authoritat
 
 One row per saved recording (each participant's clean track, altered track, and the researcher mic), written once the recording stops — so if the app crashes mid-recording, that row is missing here but the start is still in `events.csv`.
 
-Header: `seat, participant_id, type, started_at, stopped_at, elapsed_start_ms, elapsed_stop_ms, duration_sec, file_path, file_size_mb`. `type` is `clean`, `altered`, or `mic`. `recording_name` isn't a separate column — `seat` + `participant_id` + `type` already identify the recording, and `file_path` gives the actual filename.
+Header: `seat, participant_id, type, started_date, started_time, stopped_date, stopped_time, elapsed_start_ms, elapsed_stop_ms, duration_sec, file_path, file_size_mb`. `type` is `clean`, `altered`, or `mic`. `recording_name` isn't a separate column — `seat` + `participant_id` + `type` already identify the recording, and `file_path` gives the actual filename.
 
 ### 8.4 Manifests
 

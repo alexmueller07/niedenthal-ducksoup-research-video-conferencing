@@ -111,11 +111,11 @@ export interface RecordingStopInput {
   bytes?: number
 }
 
-const EVENT_HEADER = 'seat,name,role,time,elapsed_ms,event,target,parameter,value,details\n'
+const EVENT_HEADER = 'seat,name,role,date,time,elapsed_ms,event,target,parameter,value,details\n'
 const STATE_HEADER =
-  'pair_id,participant_id,partner_id,seat,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
+  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
 const RECORDINGS_HEADER =
-  'seat,participant_id,type,started_at,stopped_at,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
+  'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
 const MONTHS = [
   'Jan',
@@ -150,8 +150,9 @@ session.json             Summary written when the session ends (who was in
 
 Times
 -----
-"time" (and started_at/stopped_at) is your computer's own local clock, e.g.
-"Aug 18, 2026 3:46:51.175 PM" — not UTC.
+"date" and "time" (and started_date/started_time, stopped_date/stopped_time)
+are your computer's own local clock, e.g. "Aug 18, 2026" and
+"3:46:51.175 PM" — not UTC.
 
 "elapsed_ms" is milliseconds since the whole session began (including any
 time spent in the waiting room before the conversation started).
@@ -201,19 +202,22 @@ first second right after the pipeline starts up (the one-second average
 hasn't filled up yet) — that's expected, not a fault.
 `
 
-/** Your computer's own local time, e.g. "Aug 18, 2026 3:46:51.175 PM". Not UTC. */
-function formatLocalTime(epochMs: number): string {
+/** Your computer's own local date, e.g. "Aug 18, 2026". Not UTC. */
+function formatLocalDate(epochMs: number): string {
   const d = new Date(epochMs)
-  const month = MONTHS[d.getMonth()]
-  const day = d.getDate()
-  const year = d.getFullYear()
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
+/** Your computer's own local time of day, e.g. "3:46:51.175 PM". Not UTC. */
+function formatLocalTimeOfDay(epochMs: number): string {
+  const d = new Date(epochMs)
   let hours = d.getHours()
   const ampm = hours >= 12 ? 'PM' : 'AM'
   hours = hours % 12 || 12
   const minutes = String(d.getMinutes()).padStart(2, '0')
   const seconds = String(d.getSeconds()).padStart(2, '0')
   const millis = String(d.getMilliseconds()).padStart(3, '0')
-  return `${month} ${day}, ${year} ${hours}:${minutes}:${seconds}.${millis} ${ampm}`
+  return `${hours}:${minutes}:${seconds}.${millis} ${ampm}`
 }
 
 function csvField(v: unknown): string {
@@ -296,7 +300,8 @@ export class SessionLogger {
           csvField(row.actorSlot),
           csvField(row.actorName),
           csvField(row.actorRole),
-          csvField(formatLocalTime(now)),
+          csvField(formatLocalDate(now)),
+          csvField(formatLocalTimeOfDay(now)),
           row.tRelMs,
           csvField(row.event),
           csvField(row.target),
@@ -344,7 +349,8 @@ export class SessionLogger {
         csvField(input.participantId),
         csvField(input.partnerId ?? ''),
         csvField(input.slot),
-        csvField(formatLocalTime(now)),
+        csvField(formatLocalDate(now)),
+        csvField(formatLocalTimeOfDay(now)),
         now - this.startedAtMs,
         conversationElapsedMs,
         csvField(input.phase),
@@ -410,8 +416,10 @@ export class SessionLogger {
         csvField(pending.slot),
         csvField(pending.participantId),
         csvField(pending.kind),
-        csvField(formatLocalTime(pending.startedAtMs)),
-        csvField(formatLocalTime(now)),
+        csvField(formatLocalDate(pending.startedAtMs)),
+        csvField(formatLocalTimeOfDay(pending.startedAtMs)),
+        csvField(formatLocalDate(now)),
+        csvField(formatLocalTimeOfDay(now)),
         pending.startedElapsedMs,
         stoppedElapsedMs,
         Math.round(durationMs / 100) / 10,
