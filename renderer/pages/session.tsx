@@ -11,11 +11,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { LiveEffects } from '../lib/effects'
+import {
+  CALIBRATION_COLLECT_MS,
+  CALIBRATION_PREP_MS,
+  CALIBRATION_PROMPTS,
+  CALIBRATION_SAMPLE_MS,
+  summarizeCalibrationStep,
+  type CalibrationSample,
+} from '../lib/calibration'
 import { SignalClient, SignalStatus, normalizeServerUrl } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { APP_VERSION, DEFAULT_PORT } from '../lib/protocol'
 import type {
   ClientMessage,
+  CalibrationQualityFlag,
+  CalibrationStep,
   Identity,
   Phase,
   RosterState,
@@ -36,6 +46,17 @@ interface BootConfig {
 interface BannerState {
   text: string
   key: number
+}
+
+interface SetupCheckState {
+  title: string
+  instruction: string
+  step: CalibrationStep | 'done'
+  index: number
+  total: number
+  phase: 'prepare' | 'collecting' | 'complete' | 'needs-retake' | 'done'
+  progress: number
+  qualityFlags: CalibrationQualityFlag[]
 }
 
 // Example faces available in test mode (sign-in access code "test"). Starts on
@@ -66,6 +87,7 @@ export default function ParticipantSession() {
   const [escapeShake, setEscapeShake] = useState(0)
   const [testFaceMode, setTestFaceMode] = useState(false)
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
+  const [setupCheck, setSetupCheck] = useState<SetupCheckState | null>(null)
   // Hide the cursor only in the real Electron kiosk. In a plain browser tab
   // (dev/testing) a hidden cursor is just an annoyance with no lockdown value.
   const [browserMode, setBrowserMode] = useState(false)
@@ -78,6 +100,7 @@ export default function ParticipantSession() {
   const effectsReadyRef = useRef(false)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootedRef = useRef(false)
+  const setupRunRef = useRef(0)
 
   const partnerVideoRef = useRef<HTMLVideoElement | null>(null)
   const selfVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -292,6 +315,9 @@ export default function ParticipantSession() {
           )
           return
         }
+        case 'calibration-start':
+          startSetupCheck(msg.requestId, msg.steps)
+          return
         case 'phase':
           setPhase(msg.phase)
           return
@@ -303,6 +329,112 @@ export default function ParticipantSession() {
         default:
           return
       }
+    }
+
+    function startSetupCheck(requestId: string, steps: CalibrationStep[]) {
+      const runId = setupRunRef.current + 1
+      setupRunRef.current = runId
+      void runSetupCheck(requestId, steps, runId)
+    }
+
+    async function runSetupCheck(requestId: string, steps: CalibrationStep[], runId: number) {
+      for (let i = 0; i < steps.length; i++) {
+        if (setupRunRef.current !== runId) return
+        const step = steps[i]
+        const prompt = CALIBRATION_PROMPTS[step]
+        setSetupCheck({
+          title: prompt.title,
+          instruction: prompt.instruction,
+          step,
+          index: i + 1,
+          total: steps.length,
+          phase: 'prepare',
+          progress: 0,
+          qualityFlags: [],
+        })
+        sendEvent('calibration_prompt_shown', {
+          param: 'step',
+          value: step,
+          detail: { requestId, step, index: i + 1, total: steps.length },
+        })
+        await sleep(CALIBRATION_PREP_MS)
+        if (setupRunRef.current !== runId) return
+
+        const result = await collectSetupStep(requestId, step, runId, i + 1, steps.length)
+        if (!result || setupRunRef.current !== runId) return
+
+        client.send({ type: 'calibration-result', result })
+
+        setSetupCheck({
+          title: prompt.title,
+          instruction:
+            result.status === 'needs-retake'
+              ? 'Setup check recorded. Please wait for the researcher.'
+              : 'Recorded. Please hold for the next check.',
+          step,
+          index: i + 1,
+          total: steps.length,
+          phase: result.status,
+          progress: 1,
+          qualityFlags: result.qualityFlags,
+        })
+        await sleep(result.status === 'needs-retake' ? 1200 : 650)
+      }
+
+      if (setupRunRef.current !== runId) return
+      setSetupCheck({
+        title: 'Video setup check',
+        instruction: 'Setup check complete. Please wait for the researcher to begin.',
+        step: 'done',
+        index: steps.length,
+        total: steps.length,
+        phase: 'done',
+        progress: 1,
+        qualityFlags: [],
+      })
+      await sleep(1800)
+      if (setupRunRef.current === runId) setSetupCheck(null)
+    }
+
+    function collectSetupStep(
+      requestId: string,
+      step: CalibrationStep,
+      runId: number,
+      index: number,
+      total: number,
+    ) {
+      const samples: CalibrationSample[] = []
+      const started = performance.now()
+      const prompt = CALIBRATION_PROMPTS[step]
+      return new Promise<ReturnType<typeof summarizeCalibrationStep> | null>((resolve) => {
+        const timer = setInterval(() => {
+          if (setupRunRef.current !== runId) {
+            clearInterval(timer)
+            resolve(null)
+            return
+          }
+          const fx = effectsRef.current
+          samples.push({
+            expression: fx?.currentExpression() ?? null,
+            telemetry: fx?.telemetry() ?? null,
+          })
+          const progress = Math.min(1, (performance.now() - started) / CALIBRATION_COLLECT_MS)
+          setSetupCheck({
+            title: prompt.title,
+            instruction: prompt.instruction,
+            step,
+            index,
+            total,
+            phase: 'collecting',
+            progress,
+            qualityFlags: [],
+          })
+          if (progress >= 1) {
+            clearInterval(timer)
+            resolve(summarizeCalibrationStep(requestId, step, samples))
+          }
+        }, CALIBRATION_SAMPLE_MS)
+      })
     }
 
     client.connect()
@@ -403,6 +535,7 @@ export default function ParticipantSession() {
       window.removeEventListener('keydown', onKeyDown, true)
       offEscape()
       if (bannerTimer.current) clearTimeout(bannerTimer.current)
+      setupRunRef.current += 1
       for (const link of linksRef.current.values()) link.close()
       linksRef.current.clear()
       client.close()
@@ -550,6 +683,8 @@ export default function ParticipantSession() {
         </div>
       )}
 
+      {phase === 'waiting' && setupCheck && <SetupCheckOverlay setup={setupCheck} />}
+
       {/* ---- Ended ---- */}
       {phase === 'ended' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
@@ -694,6 +829,10 @@ export default function ParticipantSession() {
   )
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function Spinner() {
   return (
     <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-sky-400" />
@@ -708,6 +847,50 @@ function StatusDot({ ok, label }: { ok: boolean; label: string }) {
       />
       {label}
     </span>
+  )
+}
+
+function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
+  const statusText =
+    setup.phase === 'collecting'
+      ? 'Recording setup sample'
+      : setup.phase === 'complete'
+        ? 'Step recorded'
+        : setup.phase === 'needs-retake'
+          ? 'Setup check recorded'
+          : setup.phase === 'done'
+            ? 'Complete'
+            : 'Get ready'
+
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-950/50 px-6 backdrop-blur-sm">
+      <div className="w-full max-w-[520px] rounded-2xl border border-sky-500/25 bg-gray-900/95 p-6 text-center shadow-2xl ring-1 ring-white/10">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-sky-300" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1M4 16v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1M7 12h10" />
+          </svg>
+        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
+          {statusText}
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-white">{setup.title}</h2>
+        <p className="mt-3 text-base leading-relaxed text-gray-200">{setup.instruction}</p>
+        <div className="mt-6">
+          <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-gray-500">
+            <span>
+              Step {setup.index} of {setup.total}
+            </span>
+            <span>{Math.round(setup.progress * 100)}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-gray-800">
+            <div
+              className="h-full rounded-full bg-sky-400 transition-[width] duration-100"
+              style={{ width: `${Math.max(8, Math.round(setup.progress * 100))}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

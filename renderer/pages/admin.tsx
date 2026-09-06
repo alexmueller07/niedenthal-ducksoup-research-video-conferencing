@@ -15,6 +15,7 @@ import { useRouter } from 'next/router'
 import { SignalClient, SignalStatus } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { PRESETS } from '../lib/presets'
+import { CALIBRATION_PROMPTS, CALIBRATION_STEPS } from '../lib/calibration'
 import { pickRecorderFormat } from '../lib/recording'
 import {
   APP_VERSION,
@@ -23,6 +24,9 @@ import {
 } from '../lib/protocol'
 import type {
   AutomationRule,
+  CalibrationQualityFlag,
+  CalibrationStep,
+  CalibrationStepResult,
   EffectState,
   ExpressionState,
   Identity,
@@ -66,9 +70,43 @@ interface BannerSent {
   at: string
 }
 
+type CalibrationUiStatus = 'idle' | 'running' | 'needs-retake' | 'complete' | 'accepted'
+
+interface CalibrationSlotState {
+  status: CalibrationUiStatus
+  currentStep: CalibrationStep | null
+  results: Partial<Record<CalibrationStep, CalibrationStepResult>>
+  acceptedAt: string | null
+}
+
 const EMPTY_STREAMS: Record<PSlot, SlotStreams> = {
   P1: { altered: null, clean: null },
   P2: { altered: null, clean: null },
+}
+
+const QUALITY_FLAG_LABELS: Record<CalibrationQualityFlag, string> = {
+  insufficient_samples: 'Too few samples',
+  face_not_visible: 'Face not visible',
+  not_relaxed: 'Retake relaxed face',
+  teeth_detected: 'Teeth/open mouth',
+  weak_smile: 'Smile too subtle',
+  weak_frown: 'Frown too subtle',
+}
+
+function emptyCalibrationSlot(): CalibrationSlotState {
+  return {
+    status: 'idle',
+    currentStep: null,
+    results: {},
+    acceptedAt: null,
+  }
+}
+
+function initialCalibrationState(): Record<PSlot, CalibrationSlotState> {
+  return {
+    P1: emptyCalibrationSlot(),
+    P2: emptyCalibrationSlot(),
+  }
 }
 
 export default function AdminDashboard() {
@@ -96,6 +134,8 @@ export default function AdminDashboard() {
   const [bannerText, setBannerText] = useState('')
   const [bannerDuration, setBannerDuration] = useState(8)
   const [bannersSent, setBannersSent] = useState<BannerSent[]>([])
+  const [calibration, setCalibration] =
+    useState<Record<PSlot, CalibrationSlotState>>(initialCalibrationState)
   const [recState, setRecState] = useState<Record<string, RecState>>({})
   const [nowTick, setNowTick] = useState(Date.now())
   const [endConfirm, setEndConfirm] = useState(false)
@@ -250,6 +290,11 @@ export default function AdminDashboard() {
             case 'expression':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
                 setExpressions((prev) => ({ ...prev, [msg.slot]: msg.data }))
+              }
+              return
+            case 'calibration-result':
+              if (msg.slot === 'P1' || msg.slot === 'P2') {
+                receiveCalibrationResult(msg.slot, msg.result)
               }
               return
             case 'rules':
@@ -496,6 +541,60 @@ export default function AdminDashboard() {
       ...prev.slice(0, 19),
     ])
     if (text === undefined) setBannerText('')
+  }
+
+  function receiveCalibrationResult(slot: PSlot, result: CalibrationStepResult) {
+    setCalibration((prev) => {
+      const current = prev[slot]
+      const results = { ...current.results, [result.step]: result }
+      const hasRetake = CALIBRATION_STEPS.some((step) => results[step]?.status === 'needs-retake')
+      const hasAll = CALIBRATION_STEPS.every((step) => results[step]?.status === 'complete')
+      const status: CalibrationUiStatus = hasRetake ? 'needs-retake' : hasAll ? 'complete' : 'running'
+      return {
+        ...prev,
+        [slot]: {
+          ...current,
+          status,
+          currentStep: result.step,
+          results,
+          acceptedAt: null,
+        },
+      }
+    })
+  }
+
+  function requestCalibration(target: PSlot | 'both', steps: CalibrationStep[]) {
+    const slots = target === 'both' ? PSLOTS : [target]
+    setCalibration((prev) => {
+      const next = { ...prev }
+      for (const slot of slots) {
+        const fullRun = steps.length > 1
+        next[slot] = {
+          status: 'running',
+          currentStep: steps[0] ?? null,
+          results: fullRun ? {} : { ...prev[slot].results },
+          acceptedAt: null,
+        }
+      }
+      return next
+    })
+    clientRef.current?.send({ type: 'calibration-start', target, steps })
+  }
+
+  function acceptCalibration(slot: PSlot) {
+    const state = calibration[slot]
+    if (!calibrationReady(state)) return
+    const acceptedAt = new Date().toISOString()
+    setCalibration((prev) => ({
+      ...prev,
+      [slot]: { ...prev[slot], status: 'accepted', acceptedAt },
+    }))
+    clientRef.current?.send({
+      type: 'client-event',
+      event: 'calibration_applied',
+      target: slot,
+      detail: { acceptedAt, results: state.results },
+    })
   }
 
   function setMic(live: boolean, mode: 'toggle' | 'hold') {
@@ -833,6 +932,22 @@ export default function AdminDashboard() {
             )}
           </Card>
 
+          <CalibrationCard
+            phase={phase}
+            calibration={calibration}
+            connected={{
+              P1: !!roster?.slots.P1,
+              P2: !!roster?.slots.P2,
+            }}
+            names={{
+              P1: roster?.slots.P1?.identity.name || 'Participant 1',
+              P2: roster?.slots.P2?.identity.name || 'Participant 2',
+            }}
+            onRun={(target) => requestCalibration(target, CALIBRATION_STEPS)}
+            onRetake={(slot, step) => requestCalibration(slot, [step])}
+            onAccept={acceptCalibration}
+          />
+
           {/* Automation rules */}
           <RulesCard
             rules={rules}
@@ -973,6 +1088,219 @@ export default function AdminDashboard() {
       )}
     </div>
   )
+}
+
+// ===== Waiting-room setup check =====
+
+interface CalibrationCardProps {
+  phase: Phase
+  calibration: Record<PSlot, CalibrationSlotState>
+  connected: Record<PSlot, boolean>
+  names: Record<PSlot, string>
+  onRun: (target: PSlot | 'both') => void
+  onRetake: (slot: PSlot, step: CalibrationStep) => void
+  onAccept: (slot: PSlot) => void
+}
+
+function CalibrationCard({
+  phase,
+  calibration,
+  connected,
+  names,
+  onRun,
+  onRetake,
+  onAccept,
+}: CalibrationCardProps) {
+  const waiting = phase === 'waiting'
+  const bothConnected = PSLOTS.every((slot) => connected[slot])
+
+  return (
+    <Card
+      title="Video setup check"
+      subtitle="Run before starting. Participants see neutral setup prompts."
+    >
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onRun('both')}
+          disabled={!waiting || !bothConnected}
+          className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold transition enabled:hover:bg-sky-500 disabled:opacity-40"
+        >
+          Run both
+        </button>
+        {PSLOTS.map((slot) => (
+          <button
+            key={slot}
+            type="button"
+            onClick={() => onRun(slot)}
+            disabled={!waiting || !connected[slot]}
+            className="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-200 transition enabled:hover:bg-gray-700 disabled:opacity-40"
+          >
+            Run {slot}
+          </button>
+        ))}
+      </div>
+      {!waiting && (
+        <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          Setup checks are available only in the waiting room.
+        </p>
+      )}
+      <div className="mt-3 space-y-3">
+        {PSLOTS.map((slot) => (
+          <CalibrationSlotRow
+            key={slot}
+            slot={slot}
+            name={names[slot]}
+            connected={connected[slot]}
+            state={calibration[slot]}
+            onRetake={onRetake}
+            onAccept={onAccept}
+          />
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function CalibrationSlotRow({
+  slot,
+  name,
+  connected,
+  state,
+  onRetake,
+  onAccept,
+}: {
+  slot: PSlot
+  name: string
+  connected: boolean
+  state: CalibrationSlotState
+  onRetake: (slot: PSlot, step: CalibrationStep) => void
+  onAccept: (slot: PSlot) => void
+}) {
+  const ready = calibrationReady(state) && state.status !== 'accepted'
+  const flags = CALIBRATION_STEPS.flatMap((step) => state.results[step]?.qualityFlags ?? [])
+  const uniqueFlags = Array.from(new Set(flags))
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-950/45 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-gray-100">
+            {slot} · {name}
+          </p>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            {connected ? calibrationStatusText(state) : 'Waiting for participant'}
+          </p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${calibrationStatusClass(state.status, connected)}`}>
+          {connected ? state.status.replace('-', ' ') : 'offline'}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        {CALIBRATION_STEPS.map((step) => (
+          <StepPill key={step} step={step} result={state.results[step]} />
+        ))}
+      </div>
+
+      {uniqueFlags.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {uniqueFlags.map((flag) => (
+            <span
+              key={flag}
+              className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-200 ring-1 ring-red-500/25"
+            >
+              {QUALITY_FLAG_LABELS[flag]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-[10.5px] text-gray-500">
+        {CALIBRATION_STEPS.map((step) => {
+          const result = state.results[step]
+          return (
+            <div key={step} className="rounded-lg bg-gray-900/80 px-2 py-1.5">
+              <p className="font-medium text-gray-400">{CALIBRATION_PROMPTS[step].shortLabel}</p>
+              <p>smile {metric(result, 'smileMean')}</p>
+              <p>frown {metric(result, 'frownMean')}</p>
+              <p>open {metric(result, 'opennessMax')}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {CALIBRATION_STEPS.map((step) => (
+          <button
+            key={step}
+            type="button"
+            onClick={() => onRetake(slot, step)}
+            disabled={!connected}
+            className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-[11px] font-medium text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
+          >
+            Retake {CALIBRATION_PROMPTS[step].shortLabel}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onAccept(slot)}
+          disabled={!ready}
+          className="ml-auto rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition enabled:hover:bg-emerald-500 disabled:opacity-40"
+        >
+          {state.status === 'accepted' ? 'Accepted' : 'Accept values'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function StepPill({
+  step,
+  result,
+}: {
+  step: CalibrationStep
+  result: CalibrationStepResult | undefined
+}) {
+  const label = CALIBRATION_PROMPTS[step].shortLabel
+  const style = !result
+    ? 'bg-gray-800 text-gray-500 ring-gray-700'
+    : result.status === 'complete'
+      ? 'bg-emerald-600/20 text-emerald-300 ring-emerald-500/30'
+      : 'bg-red-600/20 text-red-200 ring-red-500/30'
+  return (
+    <span className={`rounded-full px-2 py-1 text-center text-[10px] font-semibold ring-1 ${style}`}>
+      {label}
+    </span>
+  )
+}
+
+function calibrationReady(state: CalibrationSlotState): boolean {
+  return CALIBRATION_STEPS.every((step) => state.results[step]?.status === 'complete')
+}
+
+function calibrationStatusText(state: CalibrationSlotState): string {
+  if (state.status === 'idle') return 'Not run yet'
+  if (state.status === 'running') return state.currentStep ? `Checking ${CALIBRATION_PROMPTS[state.currentStep].shortLabel.toLowerCase()}` : 'Checking'
+  if (state.status === 'needs-retake') return 'Retake recommended before accepting'
+  if (state.status === 'complete') return 'All setup values recorded'
+  return state.acceptedAt ? `Accepted ${new Date(state.acceptedAt).toLocaleTimeString()}` : 'Accepted'
+}
+
+function calibrationStatusClass(status: CalibrationUiStatus, connected: boolean): string {
+  if (!connected) return 'bg-gray-800 text-gray-500 ring-gray-700'
+  if (status === 'accepted') return 'bg-emerald-600/25 text-emerald-200 ring-emerald-500/35'
+  if (status === 'complete') return 'bg-sky-600/25 text-sky-200 ring-sky-500/35'
+  if (status === 'needs-retake') return 'bg-red-600/25 text-red-200 ring-red-500/35'
+  if (status === 'running') return 'bg-amber-600/25 text-amber-200 ring-amber-500/35'
+  return 'bg-gray-800 text-gray-400 ring-gray-700'
+}
+
+function metric(
+  result: CalibrationStepResult | undefined,
+  key: keyof CalibrationStepResult['metrics'],
+): string {
+  return typeof result?.metrics[key] === 'number' ? result.metrics[key].toFixed(2) : '--'
 }
 
 // ===== Participant panel =====
@@ -1696,6 +2024,7 @@ function eventColor(event: string): string {
   if (event.startsWith('session')) return 'text-emerald-300'
   if (event.includes('disconnect') || event.includes('error') || event.includes('timeout'))
     return 'text-red-300'
+  if (event.startsWith('calibration')) return 'text-cyan-300'
   if (event.startsWith('admin_mic') || event === 'banner_sent') return 'text-sky-300'
   if (event.startsWith('escape') || event.startsWith('window')) return 'text-amber-300'
   return 'text-gray-300'

@@ -107,6 +107,39 @@ export interface Telemetry extends EffectState {
 
 export type PSlot = 'P1' | 'P2'
 
+// ---- Waiting-room setup check ----
+
+export type CalibrationStep = 'neutral' | 'smile' | 'frown'
+export type CalibrationTarget = PSlot | 'both'
+export type CalibrationStepStatus = 'complete' | 'needs-retake'
+export type CalibrationQualityFlag =
+  | 'insufficient_samples'
+  | 'face_not_visible'
+  | 'not_relaxed'
+  | 'teeth_detected'
+  | 'weak_smile'
+  | 'weak_frown'
+
+export interface CalibrationMetrics {
+  smileMean: number
+  smileMax: number
+  frownMean: number
+  frownMax: number
+  opennessMean: number
+  opennessMax: number
+  faceVisibleRatio: number
+}
+
+export interface CalibrationStepResult {
+  requestId: string
+  step: CalibrationStep
+  status: CalibrationStepStatus
+  samples: number
+  capturedAt: string
+  metrics: CalibrationMetrics
+  qualityFlags: CalibrationQualityFlag[]
+}
+
 export type RuleExpression =
   | 'smiling'
   | 'reward-smile'
@@ -196,6 +229,8 @@ export type ClientMessage =
   | { type: 'set-effect'; slot: SlotId; param: keyof EffectState; value: number }
   | { type: 'apply-preset'; slot: SlotId; presetId: string; effects: EffectState }
   | { type: 'banner'; text: string; durationSec: number }
+  | { type: 'calibration-start'; target: CalibrationTarget; steps: CalibrationStep[] }
+  | { type: 'calibration-result'; result: CalibrationStepResult }
   | { type: 'set-phase'; phase: Phase }
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
@@ -232,6 +267,8 @@ export type ServerMessage =
   | { type: 'effect-command'; effects: EffectState; cause: string }
   | { type: 'identity-assigned'; identity: Identity }
   | { type: 'banner'; text: string; durationSec: number }
+  | { type: 'calibration-start'; requestId: string; steps: CalibrationStep[] }
+  | { type: 'calibration-result'; slot: SlotId; result: CalibrationStepResult }
   | { type: 'phase'; phase: Phase; sessionStartedAt: string | null }
   | { type: 'peer-left'; slot: SlotId }
   | { type: 'telemetry'; slot: SlotId; data: Telemetry }
