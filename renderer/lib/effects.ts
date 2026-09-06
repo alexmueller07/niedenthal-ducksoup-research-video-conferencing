@@ -13,7 +13,7 @@
 
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
-import type { ExpressionState, Telemetry } from './protocol'
+import type { ExpressionCalibrationProfile, ExpressionState, Telemetry } from './protocol'
 
 export interface EffectsStatus {
   camera: boolean
@@ -202,6 +202,10 @@ export class LiveEffects {
   setSemitones(semitones: number) {
     this.semitones = semitones
     this.voice?.setSemitones(semitones)
+  }
+
+  setCalibrationProfile(profile: ExpressionCalibrationProfile | null) {
+    this.face.setCalibrationProfile(profile)
   }
 
   /** Latest REAL-face expression from the detector (null until a face is seen). */

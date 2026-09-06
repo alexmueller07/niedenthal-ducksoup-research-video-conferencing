@@ -72,6 +72,19 @@ export interface ExpressionState {
   lipPress: number
   /** Mouth openness (teeth showing): upper-lip raise + jaw open + lower-lip drop. */
   openness: number
+  /** Landmark-derived, scale-normalized geometry for auditing face-shape effects. */
+  faceShape?: FaceShapeMetrics
+  /**
+   * Participant-relative expression values, 0..1, once the setup check has
+   * been accepted. Raw blendshape values above remain unchanged for audit.
+   */
+  normalizedSmile?: number
+  normalizedFrown?: number
+  normalizedOpenness?: number
+  smileMargin?: number
+  frownMargin?: number
+  normalizationApplied?: boolean
+  normalizationVersion?: string
   /** Confidence that the top-level label is correct, 0..1. */
   labelConfidence?: number
   /** Confidence that `smileType` is correct, 0..1. Omitted when no subtype is trusted. */
@@ -103,6 +116,19 @@ export interface ExpressionState {
   rawCheekSquintRight: number
 }
 
+export interface FaceShapeMetrics {
+  /** Mouth-corner distance divided by cheek-to-cheek face width. */
+  mouthWidthToFaceWidth: number
+  /** Mouth-corner distance divided by outer-eye distance. */
+  mouthWidthToEyeSpan: number
+  /** Inner-lip vertical opening divided by mouth-corner distance. */
+  mouthOpenRatio: number
+  /** Mouth-corner vertical mismatch divided by mouth width. */
+  mouthCornerTilt: number
+  /** Nose-to-cheek left/right symmetry; near 1 is frontal, near 0 is profile. */
+  yawSymmetry: number
+}
+
 /** 1 Hz applied-state report from each participant machine (ground truth). */
 export interface Telemetry extends EffectState {
   faceFound: boolean
@@ -125,6 +151,60 @@ export interface Telemetry extends EffectState {
 // Rules only run while the session phase is 'live'.
 
 export type PSlot = 'P1' | 'P2'
+
+// ---- Waiting-room setup check ----
+
+export type CalibrationStep = 'neutral' | 'smile' | 'frown'
+export type CalibrationTarget = PSlot | 'both'
+export type CalibrationStepStatus = 'complete' | 'needs-retake'
+export type CalibrationQualityFlag =
+  | 'insufficient_samples'
+  | 'face_not_visible'
+  | 'off_axis_face'
+  | 'not_relaxed'
+  | 'teeth_detected'
+  | 'weak_smile'
+  | 'weak_frown'
+
+export interface CalibrationMetrics {
+  smileMean: number
+  smileMax: number
+  frownMean: number
+  frownMax: number
+  opennessMean: number
+  opennessMax: number
+  faceVisibleRatio: number
+  mouthWidthToFaceWidthMean: number
+  mouthWidthToEyeSpanMean: number
+  mouthOpenRatioMean: number
+  mouthOpenRatioMax: number
+  mouthCornerTiltMean: number
+  yawSymmetryMean: number
+}
+
+export interface CalibrationStepResult {
+  requestId: string
+  step: CalibrationStep
+  status: CalibrationStepStatus
+  samples: number
+  capturedAt: string
+  metrics: CalibrationMetrics
+  qualityFlags: CalibrationQualityFlag[]
+}
+
+export interface ExpressionCalibrationProfile {
+  version: string
+  acceptedAt: string
+  steps: Record<CalibrationStep, CalibrationMetrics>
+  thresholds: {
+    smileOn: number
+    smileOff: number
+    frownOn: number
+    frownOff: number
+    rewardOpenness: number
+    rewardMouthOpenRatio: number
+  }
+}
 
 export type RuleExpression =
   | 'smiling'
@@ -215,6 +295,9 @@ export type ClientMessage =
   | { type: 'set-effect'; slot: SlotId; param: keyof EffectState; value: number }
   | { type: 'apply-preset'; slot: SlotId; presetId: string; effects: EffectState }
   | { type: 'banner'; text: string; durationSec: number }
+  | { type: 'calibration-start'; target: CalibrationTarget; steps: CalibrationStep[] }
+  | { type: 'calibration-result'; result: CalibrationStepResult }
+  | { type: 'calibration-apply'; target: PSlot; profile: ExpressionCalibrationProfile }
   | { type: 'set-phase'; phase: Phase }
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
@@ -251,6 +334,9 @@ export type ServerMessage =
   | { type: 'effect-command'; effects: EffectState; cause: string }
   | { type: 'identity-assigned'; identity: Identity }
   | { type: 'banner'; text: string; durationSec: number }
+  | { type: 'calibration-start'; requestId: string; steps: CalibrationStep[] }
+  | { type: 'calibration-result'; slot: SlotId; result: CalibrationStepResult }
+  | { type: 'calibration-profile'; profile: ExpressionCalibrationProfile }
   | { type: 'phase'; phase: Phase; sessionStartedAt: string | null }
   | { type: 'peer-left'; slot: SlotId }
   | { type: 'telemetry'; slot: SlotId; data: Telemetry }
@@ -309,6 +395,25 @@ export function normalizeExpressionState(input: unknown): ExpressionState | null
     eyeConstriction: clamp01(input.eyeConstriction),
     lipPress: clamp01(input.lipPress),
     openness: clamp01(input.openness),
+    faceShape: normalizeFaceShapeMetrics(input.faceShape),
+    normalizedSmile:
+      typeof input.normalizedSmile === 'undefined' ? undefined : clamp01(input.normalizedSmile),
+    normalizedFrown:
+      typeof input.normalizedFrown === 'undefined' ? undefined : clamp01(input.normalizedFrown),
+    normalizedOpenness:
+      typeof input.normalizedOpenness === 'undefined' ? undefined : clamp01(input.normalizedOpenness),
+    smileMargin:
+      typeof input.smileMargin === 'undefined' ? undefined : clampSigned(input.smileMargin),
+    frownMargin:
+      typeof input.frownMargin === 'undefined' ? undefined : clampSigned(input.frownMargin),
+    normalizationApplied:
+      typeof input.normalizationApplied === 'undefined'
+        ? undefined
+        : input.normalizationApplied === true,
+    normalizationVersion:
+      typeof input.normalizationVersion === 'string'
+        ? input.normalizationVersion.replace(/[^\w.+-]/g, '').slice(0, 64)
+        : undefined,
     labelConfidence:
       typeof input.labelConfidence === 'undefined' ? undefined : clamp01(input.labelConfidence),
     smileTypeConfidence,
@@ -362,7 +467,23 @@ function isClassifierMode(v: unknown): v is ClassifierMode {
   return v === 'basic' || v === 'heuristic-subtype' || v === 'model-subtype'
 }
 
+function normalizeFaceShapeMetrics(input: unknown): FaceShapeMetrics | undefined {
+  if (!isRecord(input)) return undefined
+  return {
+    mouthWidthToFaceWidth: clamp01(input.mouthWidthToFaceWidth),
+    mouthWidthToEyeSpan: clamp01(input.mouthWidthToEyeSpan),
+    mouthOpenRatio: clamp01(input.mouthOpenRatio),
+    mouthCornerTilt: clamp01(input.mouthCornerTilt),
+    yawSymmetry: clamp01(input.yawSymmetry),
+  }
+}
+
 function clamp01(v: unknown): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : 0
   return Math.min(1, Math.max(0, Math.round(n * 100) / 100))
+}
+
+function clampSigned(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : 0
+  return Math.min(1, Math.max(-1, Math.round(n * 100) / 100))
 }

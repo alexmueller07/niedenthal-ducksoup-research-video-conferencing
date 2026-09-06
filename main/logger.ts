@@ -76,6 +76,13 @@ export interface EffectStateInput {
   labelConfidence?: number
   smileTypeConfidence?: number
   smileTypeTrusted?: boolean
+  normalizedSmile?: number
+  normalizedFrown?: number
+  normalizedOpenness?: number
+  smileMargin?: number
+  frownMargin?: number
+  normalizationApplied?: boolean
+  normalizationVersion?: string
   classifierMode?: string
   classifierVersion?: string
   /** Raw MediaPipe facial-movement scores (0..1) behind the expression label — not OpenFace/FACS AUs. */
@@ -113,7 +120,7 @@ export interface RecordingStopInput {
 
 const EVENT_HEADER = 'seat,name,role,date,time,elapsed_ms,event,target,parameter,value,details\n'
 const STATE_HEADER =
-  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
+  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,normalized_smile,normalized_frown,normalized_openness,smile_margin,frown_margin,normalization_applied,normalization_version,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
 const RECORDINGS_HEADER =
   'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
@@ -183,6 +190,14 @@ or dominance), each with a confidence score from 0 to 1.
 smile_type_trusted: true if the smile_type reading above should be trusted,
 false if it's a low-confidence guess, blank if the person isn't smiling
 (smile_type doesn't apply).
+
+normalized_smile / normalized_frown / normalized_openness /
+smile_margin / frown_margin: this participant's raw expression readings
+compared against their own waiting-room setup baseline, instead of a
+one-size-fits-all threshold. Blank if this participant didn't go through a
+setup check that session (normalization_applied will be false/blank in
+that case). normalization_version identifies which normalization formula
+produced these values.
 
 raw_* columns: the individual facial-movement readings the app actually
 measures (0 to 1 each) — the "ingredients" that expression/smile_type/etc.
@@ -363,6 +378,13 @@ export class SessionLogger {
         csvField(input.labelConfidence ?? ''),
         csvField(input.smileTypeConfidence ?? ''),
         csvField(input.smileTypeTrusted ?? ''),
+        csvField(input.normalizedSmile ?? ''),
+        csvField(input.normalizedFrown ?? ''),
+        csvField(input.normalizedOpenness ?? ''),
+        csvField(input.smileMargin ?? ''),
+        csvField(input.frownMargin ?? ''),
+        csvField(input.normalizationApplied ?? ''),
+        csvField(input.normalizationVersion ?? ''),
         input.rawMouthSmileLeft ?? '',
         input.rawMouthSmileRight ?? '',
         input.rawMouthFrownLeft ?? '',

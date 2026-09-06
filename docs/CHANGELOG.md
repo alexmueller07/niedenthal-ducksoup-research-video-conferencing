@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 06-09-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Add session-only face-shape normalization after setup check
+
+* **Previous behavior:**
+The waiting-room setup check could collect and accept neutral, closed-mouth smile, and frown values, but those accepted values only stayed in the researcher UI/log. The live expression detector still used the same global thresholds for every participant.
+* **New behavior:**
+Accepted setup values now build a session-only face-shape normalization profile for that participant. The participant machine receives the profile, compares future smile/frown/open-mouth readings against that participant's own baseline, and writes normalized values plus margins to `effect_state.csv`.
+* **Why this matters:**
+This makes expression detection less dependent on one-size-fits-all thresholds. Participants with different resting expressions, mouth sizes, camera angles, or face proportions can be judged against their own setup values, while the app keeps raw values for audit.
+
+---
+
 * **Date:** 23-08-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Make 0 mean "no change" for the face/voice numbers, instead of 1

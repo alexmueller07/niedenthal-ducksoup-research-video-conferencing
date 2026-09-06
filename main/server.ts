@@ -15,6 +15,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import os from 'os'
 import type {
+  CalibrationStep,
   ClientMessage,
   EffectState,
   ExpressionState,
@@ -334,6 +335,13 @@ export class SessionServer {
           labelConfidence: telemetry.expression?.labelConfidence,
           smileTypeConfidence: telemetry.expression?.smileTypeConfidence,
           smileTypeTrusted: telemetry.expression?.smileTypeTrusted,
+          normalizedSmile: telemetry.expression?.normalizedSmile,
+          normalizedFrown: telemetry.expression?.normalizedFrown,
+          normalizedOpenness: telemetry.expression?.normalizedOpenness,
+          smileMargin: telemetry.expression?.smileMargin,
+          frownMargin: telemetry.expression?.frownMargin,
+          normalizationApplied: telemetry.expression?.normalizationApplied,
+          normalizationVersion: telemetry.expression?.normalizationVersion,
           classifierMode: telemetry.expression?.classifierMode,
           classifierVersion: telemetry.expression?.classifierVersion,
           rawMouthSmileLeft: telemetry.expression?.rawMouthSmileLeft,
@@ -399,6 +407,26 @@ export class SessionServer {
         return
       }
       // ---- Admin-only commands ----
+      case 'calibration-result': {
+        if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
+        const admin = this.bySlot('ADMIN')
+        if (admin) {
+          this.send(admin.ws, { type: 'calibration-result', slot: ctx.slot, result: msg.result })
+        }
+        this.log({
+          event:
+            msg.result.status === 'needs-retake'
+              ? 'calibration_retake_recommended'
+              : 'calibration_step_completed',
+          actorRole: ctx.role,
+          actorSlot: ctx.slot,
+          actorName: ctx.identity.name,
+          param: 'step',
+          value: msg.result.step,
+          detail: msg.result,
+        })
+        return
+      }
       case 'set-identity': {
         if (!this.requireAdmin(ctx, msg.type)) return
         const target = this.bySlot(msg.slot)
@@ -478,6 +506,60 @@ export class SessionServer {
           param: 'durationSec',
           value: msg.durationSec,
           detail: { text: msg.text },
+        })
+        return
+      }
+      case 'calibration-start': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        const steps = normalizeCalibrationSteps(msg.steps)
+        const slots = msg.target === 'both' ? (['P1', 'P2'] as const) : ([msg.target] as const)
+
+        if (this.phase !== 'waiting') {
+          this.log({
+            event: 'calibration_rejected',
+            actorRole: 'admin',
+            actorSlot: 'ADMIN',
+            actorName: ctx.identity.name,
+            target: msg.target,
+            param: 'phase',
+            value: this.phase,
+            detail: { reason: 'Calibration can only run in the waiting room.', steps },
+          })
+          return
+        }
+
+        for (const slot of slots) {
+          const target = this.bySlot(slot)
+          const requestId = `cal_${Date.now()}_${slot}_${Math.random().toString(36).slice(2, 8)}`
+          if (target) {
+            this.send(target.ws, { type: 'calibration-start', requestId, steps })
+          }
+          this.log({
+            event: 'calibration_started',
+            actorRole: 'admin',
+            actorSlot: 'ADMIN',
+            actorName: ctx.identity.name,
+            target: slot,
+            param: 'steps',
+            value: steps.join('|'),
+            detail: { requestId, steps, targetConnected: !!target },
+          })
+        }
+        return
+      }
+      case 'calibration-apply': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        const target = this.bySlot(msg.target)
+        if (target) {
+          this.send(target.ws, { type: 'calibration-profile', profile: msg.profile })
+        }
+        this.log({
+          event: 'calibration_applied',
+          actorRole: 'admin',
+          actorSlot: 'ADMIN',
+          actorName: ctx.identity.name,
+          target: msg.target,
+          detail: { ...msg.profile, targetConnected: !!target },
         })
         return
       }
@@ -641,4 +723,12 @@ function stripEmpty(identity: Identity): Partial<Identity> {
     if (typeof v === 'string' && v.trim() !== '') out[k] = v.trim()
   }
   return out
+}
+
+function normalizeCalibrationSteps(input: unknown): CalibrationStep[] {
+  const allowed: CalibrationStep[] = ['neutral', 'smile', 'frown']
+  const steps = Array.isArray(input)
+    ? input.filter((step): step is CalibrationStep => allowed.includes(step))
+    : []
+  return steps.length > 0 ? steps : allowed
 }

@@ -29,7 +29,14 @@
 //   affiliative — everything else (often with a lip-press component)
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
-import type { ExpressionLabel, ExpressionState, SmileType } from './protocol'
+import { normalizeExpressionFeatures } from './calibration'
+import type {
+  ExpressionCalibrationProfile,
+  ExpressionLabel,
+  ExpressionState,
+  FaceShapeMetrics,
+  SmileType,
+} from './protocol'
 
 // Vendored locally (renderer/public/mediapipe/) so a session starts fast and
 // works offline. The CDN is only a fallback if the local assets are missing.
@@ -47,6 +54,10 @@ const LIP_INDICES = [
 ]
 const LEFT_CORNER = 61
 const RIGHT_CORNER = 291
+const UPPER_INNER_LIP = 13
+const LOWER_INNER_LIP = 14
+const LEFT_OUTER_EYE = 33
+const RIGHT_OUTER_EYE = 263
 // Yaw estimation: nose tip vs. the two face-oval cheek extremes.
 const NOSE_TIP = 1
 const LEFT_FACE_EDGE = 234
@@ -64,6 +75,7 @@ const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
 const CLASSIFIER_MODE = 'heuristic-subtype' as const
 const CLASSIFIER_VERSION = 'heuristic-contract-v1'
+const NORMALIZED_CLASSIFIER_VERSION = 'heuristic-contract-v2-face-shape-normalized'
 
 // ---- Detection tuning ----
 //
@@ -126,6 +138,7 @@ export class FaceMorphProcessor {
   private candidateSince = 0
   private lastExpression: ExpressionState | null = null
   private lastFaceTs = 0
+  private calibrationProfile: ExpressionCalibrationProfile | null = null
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -157,6 +170,11 @@ export class FaceMorphProcessor {
   /** Set the morph target; the render loop eases toward it (smooth transitions). */
   setAlpha(alpha: number) {
     this.alphaTarget = alpha
+  }
+
+  /** Apply a session-only participant baseline from the waiting-room setup check. */
+  setCalibrationProfile(profile: ExpressionCalibrationProfile | null) {
+    this.calibrationProfile = profile
   }
 
   get ready() {
@@ -218,19 +236,20 @@ export class FaceMorphProcessor {
       // A briefly lost face (hand wave, look-away) keeps the last expression;
       // after a second we decay to neutral so rules do not hold forever.
       if (this.lastExpression && tsMs - this.lastFaceTs > 1000) {
-        this.updateExpressionFromRaw(tsMs, null)
+        this.updateExpressionFromRaw(tsMs, null, null)
       }
       return false
     }
     this.lastFaceFound = true
     this.lastFaceTs = tsMs
 
-    this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null)
-
-    if (Math.abs(this.alphaCurrent) < 0.02) return false
-
     const lm = faces[0]
     const toPx = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height })
+    const faceShape = this.computeFaceShape(toPx)
+
+    this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null, faceShape)
+
+    if (Math.abs(this.alphaCurrent) < 0.02) return false
 
     // Mouth geometry.
     const lc = toPx(LEFT_CORNER)
@@ -282,6 +301,7 @@ export class FaceMorphProcessor {
   private updateExpressionFromRaw(
     tsMs: number,
     categories: Array<{ categoryName: string; score: number }> | null,
+    faceShape: FaceShapeMetrics | null,
   ) {
     // Raw scores (0 when the face is lost → everything decays to neutral).
     const raw: Record<string, number> = {}
@@ -331,28 +351,62 @@ export class FaceMorphProcessor {
     const cheekSquintR = ema('cheekSquintR', g('cheekSquintRight'))
     // Kept for logging/telemetry even though it no longer drives the
     // classifier (unreliable on lab webcams — see calibration note above).
-    const eyeConstriction = (eyeSquintL + eyeSquintR + cheekSquintL + cheekSquintR) / 4
+    const eyeConstriction = ema(
+      'eye',
+      (g('eyeSquintLeft') + g('eyeSquintRight') + g('cheekSquintLeft') + g('cheekSquintRight')) / 4,
+    )
+    const smoothedFaceShape = faceShape
+      ? {
+          mouthWidthToFaceWidth: round2(ema('shapeMouthFace', faceShape.mouthWidthToFaceWidth)),
+          mouthWidthToEyeSpan: round2(ema('shapeMouthEye', faceShape.mouthWidthToEyeSpan)),
+          mouthOpenRatio: round2(ema('shapeOpenRatio', faceShape.mouthOpenRatio)),
+          mouthCornerTilt: round2(ema('shapeCornerTilt', faceShape.mouthCornerTilt)),
+          yawSymmetry: round2(ema('shapeYawSymmetry', faceShape.yawSymmetry)),
+        }
+      : undefined
+    const rawExpression = {
+      smile,
+      frown,
+      openness,
+      faceShape: smoothedFaceShape,
+    }
+    const normalized = this.calibrationProfile
+      ? normalizeExpressionFeatures(rawExpression, this.calibrationProfile)
+      : null
+    const labelSmile = normalized?.normalizedSmile ?? smile
+    const labelFrown = normalized?.normalizedFrown ?? frown
+    const rewardOpenness = normalized?.normalizedOpenness ?? openness
 
     // Label with hysteresis: harder to enter a state than to stay in it. A
     // frown needs the smile signal gone (a relaxed face can score smile ≈ 0.5).
     const T = DETECTION_TUNING
+    const smileOn = this.calibrationProfile?.thresholds.smileOn ?? T.smileOn
+    const smileOff = this.calibrationProfile?.thresholds.smileOff ?? T.smileOff
+    const frownOn = this.calibrationProfile?.thresholds.frownOn ?? T.frownOn
+    const frownOff = this.calibrationProfile?.thresholds.frownOff ?? T.frownOff
+    const frownSmileGate = this.calibrationProfile ? 0.62 : T.frownSmileGate
     const frowning = (on: boolean) =>
-      frown >= (on ? T.frownOn : T.frownOff) && smile < T.frownSmileGate
+      labelFrown >= (on ? frownOn : frownOff) && labelSmile < frownSmileGate
     let label: ExpressionLabel = this.publishedLabel
     if (this.publishedLabel === 'smiling') {
-      label = smile >= T.smileOff ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
+      label = labelSmile >= smileOff ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
     } else if (this.publishedLabel === 'frowning') {
-      label = frowning(false) ? 'frowning' : smile >= T.smileOn ? 'smiling' : 'neutral'
+      label = frowning(false) ? 'frowning' : labelSmile >= smileOn ? 'smiling' : 'neutral'
     } else {
-      label = smile >= T.smileOn ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
+      label = labelSmile >= smileOn ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
     }
 
-    const labelConfidence = this.labelConfidence(label, smile, frown)
+    const labelConfidence = this.labelConfidence(label, labelSmile, labelFrown, {
+      smileOn,
+      smileOff,
+      frownOn,
+      frownOff,
+    })
     let smileType: SmileType | null = null
     let smileTypeConfidence: number | undefined
     let subtypeUntrustworthy = false
     if (label === 'smiling') {
-      const subtype = this.classifySmileSubtype(openness, relAsymmetry, smile)
+      const subtype = this.classifySmileSubtype(rewardOpenness, relAsymmetry, labelSmile)
       smileTypeConfidence = subtype.confidence
       if (subtype.confidence >= T.minPublishedSubtypeConfidence) {
         smileType = subtype.type
@@ -383,6 +437,14 @@ export class FaceMorphProcessor {
       eyeConstriction: round2(eyeConstriction),
       lipPress: round2(lipPress),
       openness: round2(openness),
+      faceShape: smoothedFaceShape,
+      normalizedSmile: normalized?.normalizedSmile,
+      normalizedFrown: normalized?.normalizedFrown,
+      normalizedOpenness: normalized?.normalizedOpenness,
+      smileMargin: normalized?.smileMargin,
+      frownMargin: normalized?.frownMargin,
+      normalizationApplied: !!normalized,
+      normalizationVersion: this.calibrationProfile?.version,
       labelConfidence: round2(labelConfidence),
       smileTypeConfidence:
         this.publishedLabel === 'smiling' && this.publishedType ? round2(smileTypeConfidence ?? 0) : undefined,
@@ -391,7 +453,7 @@ export class FaceMorphProcessor {
           ? !subtypeUntrustworthy && this.publishedType !== null && (smileTypeConfidence ?? 0) > 0
           : undefined,
       classifierMode: CLASSIFIER_MODE,
-      classifierVersion: CLASSIFIER_VERSION,
+      classifierVersion: normalized ? NORMALIZED_CLASSIFIER_VERSION : CLASSIFIER_VERSION,
       rawMouthSmileLeft: round2(smileL),
       rawMouthSmileRight: round2(smileR),
       rawMouthFrownLeft: round2(frownL),
@@ -410,16 +472,29 @@ export class FaceMorphProcessor {
     }
   }
 
-  private labelConfidence(label: ExpressionLabel, smile: number, frown: number): number {
-    const T = DETECTION_TUNING
+  private labelConfidence(
+    label: ExpressionLabel,
+    smile: number,
+    frown: number,
+    thresholds = {
+      smileOn: DETECTION_TUNING.smileOn,
+      smileOff: DETECTION_TUNING.smileOff,
+      frownOn: DETECTION_TUNING.frownOn,
+      frownOff: DETECTION_TUNING.frownOff,
+    },
+  ): number {
     if (label === 'smiling') {
-      return clamp01((smile - T.smileOff) / Math.max(0.01, T.smileOn - T.smileOff))
+      return clamp01(
+        (smile - thresholds.smileOff) / Math.max(0.01, thresholds.smileOn - thresholds.smileOff),
+      )
     }
     if (label === 'frowning') {
-      return clamp01((frown - T.frownOff) / Math.max(0.01, T.frownOn - T.frownOff))
+      return clamp01(
+        (frown - thresholds.frownOff) / Math.max(0.01, thresholds.frownOn - thresholds.frownOff),
+      )
     }
-    const smilePressure = smile / Math.max(0.01, T.smileOn)
-    const frownPressure = frown / Math.max(0.01, T.frownOn)
+    const smilePressure = smile / Math.max(0.01, thresholds.smileOn)
+    const frownPressure = frown / Math.max(0.01, thresholds.frownOn)
     return clamp01(1 - Math.max(smilePressure, frownPressure))
   }
 
@@ -447,6 +522,33 @@ export class FaceMorphProcessor {
     return {
       type: 'affiliative',
       confidence: clamp01(0.62 + smileStrength * 0.18 - nearOtherSubtype * 0.25),
+    }
+  }
+
+  private computeFaceShape(toPx: (i: number) => Pt): FaceShapeMetrics {
+    const lc = toPx(LEFT_CORNER)
+    const rc = toPx(RIGHT_CORNER)
+    const upperLip = toPx(UPPER_INNER_LIP)
+    const lowerLip = toPx(LOWER_INNER_LIP)
+    const lEye = toPx(LEFT_OUTER_EYE)
+    const rEye = toPx(RIGHT_OUTER_EYE)
+    const nose = toPx(NOSE_TIP)
+    const lEdge = toPx(LEFT_FACE_EDGE)
+    const rEdge = toPx(RIGHT_FACE_EDGE)
+
+    const mouthWidth = distance(lc, rc)
+    const faceWidth = distance(lEdge, rEdge)
+    const eyeSpan = distance(lEye, rEye)
+    const mouthOpen = Math.abs(lowerLip.y - upperLip.y)
+    const dl = Math.abs(nose.x - lEdge.x)
+    const dr = Math.abs(rEdge.x - nose.x)
+
+    return {
+      mouthWidthToFaceWidth: safeRatio(mouthWidth, faceWidth),
+      mouthWidthToEyeSpan: safeRatio(mouthWidth, eyeSpan),
+      mouthOpenRatio: safeRatio(mouthOpen, mouthWidth),
+      mouthCornerTilt: safeRatio(Math.abs(lc.y - rc.y), mouthWidth),
+      yawSymmetry: Math.min(dl, dr) / Math.max(1e-3, Math.max(dl, dr)),
     }
   }
 
@@ -600,4 +702,15 @@ function clamp01(v: number): number {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
+}
+
+function distance(a: Pt, b: Pt): number {
+  return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function safeRatio(numerator: number, denominator: number): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 1e-6) {
+    return 0
+  }
+  return numerator / denominator
 }

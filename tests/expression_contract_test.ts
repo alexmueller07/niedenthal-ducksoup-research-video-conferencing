@@ -77,6 +77,14 @@ assert.deepEqual(
     eyeConstriction: 0.5,
     lipPress: 0.2,
     openness: 0.3,
+    faceShape: undefined,
+    normalizedSmile: undefined,
+    normalizedFrown: undefined,
+    normalizedOpenness: undefined,
+    smileMargin: undefined,
+    frownMargin: undefined,
+    normalizationApplied: undefined,
+    normalizationVersion: undefined,
     labelConfidence: undefined,
     smileTypeConfidence: undefined,
     smileTypeTrusted: undefined,
@@ -98,6 +106,36 @@ assert.deepEqual(
     rawCheekSquintLeft: 0,
     rawCheekSquintRight: 0,
   },
+)
+
+assert.deepEqual(
+  normalizeExpressionState({
+    label: 'smiling',
+    smileType: 'affiliative',
+    smile: 0.7,
+    frown: 0.1,
+    asymmetry: 0.03,
+    eyeConstriction: 0.2,
+    lipPress: 0.1,
+    openness: 0.04,
+    faceShape: {
+      mouthWidthToFaceWidth: 0.39,
+      mouthWidthToEyeSpan: 0.72,
+      mouthOpenRatio: 0.05,
+      mouthCornerTilt: 0.01,
+      yawSymmetry: 0.86,
+    },
+    normalizedSmile: 0.88,
+    normalizedFrown: 0.02,
+    normalizedOpenness: 0.1,
+    smileMargin: 0.3,
+    frownMargin: -0.48,
+    normalizationApplied: true,
+    normalizationVersion: 'face-shape-normalization-v1',
+    labelConfidence: 0.9,
+    smileTypeConfidence: 0.7,
+  })?.normalizationApplied,
+  true,
 )
 
 const effects: Record<'P1' | 'P2', EffectState> = {
