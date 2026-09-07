@@ -31,17 +31,17 @@ export const CALIBRATION_PROMPTS: Record<
 > = {
   neutral: {
     title: 'Video setup check',
-    instruction: 'Please look at the center of the screen and relax your face.',
+    instruction: 'Take a moment, look at the center of the screen, and relax your face.',
     shortLabel: 'Neutral',
   },
   smile: {
     title: 'Video setup check',
-    instruction: 'Please give a small closed-mouth smile.',
+    instruction: 'When you are ready, give a small closed-mouth smile.',
     shortLabel: 'Closed-mouth smile',
   },
   frown: {
     title: 'Video setup check',
-    instruction: 'Please make a small frown.',
+    instruction: 'When you are ready, make a small frown.',
     shortLabel: 'Frown',
   },
 }
@@ -51,11 +51,55 @@ export interface CalibrationSample {
   telemetry: Telemetry | null
 }
 
-export const CALIBRATION_PREP_MS = 900
-export const CALIBRATION_COLLECT_MS = 1800
+export const CALIBRATION_PREP_MS = 1500
+export const CALIBRATION_COLLECT_MS = 2400
 export const CALIBRATION_SAMPLE_MS = 100
+export const CALIBRATION_READY_TIMEOUT_MS = 10000
 export const CALIBRATION_MAX_AUTO_RETRIES = 2
-export const CALIBRATION_RETRY_PAUSE_MS = 1100
+export const CALIBRATION_RETRY_PAUSE_MS = 1400
+
+export type CalibrationReadinessStatus =
+  | 'ready'
+  | 'waiting-for-face'
+  | 'waiting-for-relaxed-face'
+  | 'waiting-for-smile'
+  | 'waiting-for-frown'
+
+export interface CalibrationReadiness {
+  ready: boolean
+  status: CalibrationReadinessStatus
+}
+
+export function calibrationStepReadiness(
+  step: CalibrationStep,
+  sample: CalibrationSample,
+): CalibrationReadiness {
+  const expression = sample.expression
+  const faceVisible = sample.telemetry?.faceFound || expression !== null
+  if (!faceVisible || !expression) return { ready: false, status: 'waiting-for-face' }
+
+  if (step === 'neutral') {
+    const mouthOpenRatio = expression.faceShape?.mouthOpenRatio ?? 0
+    const relaxed =
+      expression.smile < 0.65 &&
+      expression.frown < 0.05 &&
+      expression.openness < 0.16 &&
+      mouthOpenRatio < 0.09
+    return relaxed
+      ? { ready: true, status: 'ready' }
+      : { ready: false, status: 'waiting-for-relaxed-face' }
+  }
+
+  if (step === 'smile') {
+    return expression.smile >= 0.48
+      ? { ready: true, status: 'ready' }
+      : { ready: false, status: 'waiting-for-smile' }
+  }
+
+  return expression.frown >= 0.018
+    ? { ready: true, status: 'ready' }
+    : { ready: false, status: 'waiting-for-frown' }
+}
 
 export function calibrationRetryInstruction(
   step: CalibrationStep,

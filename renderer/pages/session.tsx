@@ -16,8 +16,10 @@ import {
   CALIBRATION_MAX_AUTO_RETRIES,
   CALIBRATION_PREP_MS,
   CALIBRATION_PROMPTS,
+  CALIBRATION_READY_TIMEOUT_MS,
   CALIBRATION_RETRY_PAUSE_MS,
   CALIBRATION_SAMPLE_MS,
+  calibrationStepReadiness,
   calibrationRetryInstruction,
   summarizeCalibrationStep,
   type CalibrationSample,
@@ -59,7 +61,15 @@ interface SetupCheckState {
   total: number
   attempt: number
   maxAttempts: number
-  phase: 'prepare' | 'collecting' | 'complete' | 'needs-retake' | 'retrying' | 'paused' | 'done'
+  phase:
+    | 'prepare'
+    | 'waiting'
+    | 'collecting'
+    | 'complete'
+    | 'needs-retake'
+    | 'retrying'
+    | 'paused'
+    | 'done'
   progress: number
   qualityFlags: CalibrationQualityFlag[]
 }
@@ -491,8 +501,10 @@ export default function ParticipantSession() {
       attempt: number,
       maxAttempts: number,
     ) {
-      const samples: CalibrationSample[] = []
+      const observedSamples: CalibrationSample[] = []
+      let heldSamples: CalibrationSample[] = []
       const started = performance.now()
+      let readyStarted: number | null = null
       const prompt = CALIBRATION_PROMPTS[step]
       return new Promise<ReturnType<typeof summarizeCalibrationStep> | null>((resolve) => {
         const timer = setInterval(() => {
@@ -501,12 +513,44 @@ export default function ParticipantSession() {
             resolve(null)
             return
           }
+          const now = performance.now()
           const fx = effectsRef.current
-          samples.push({
+          const sample: CalibrationSample = {
             expression: fx?.currentExpression() ?? null,
             telemetry: fx?.telemetry() ?? null,
-          })
-          const progress = Math.min(1, (performance.now() - started) / CALIBRATION_COLLECT_MS)
+          }
+          observedSamples.push(sample)
+
+          const readiness = calibrationStepReadiness(step, sample)
+          if (!readiness.ready) {
+            readyStarted = null
+            heldSamples = []
+            setSetupCheck({
+              title: prompt.title,
+              instruction: prompt.instruction,
+              step,
+              index,
+              total,
+              attempt,
+              maxAttempts,
+              phase: 'waiting',
+              progress: 0,
+              qualityFlags: [],
+            })
+            if (now - started >= CALIBRATION_READY_TIMEOUT_MS) {
+              clearInterval(timer)
+              resolve(summarizeCalibrationStep(requestId, step, observedSamples))
+            }
+            return
+          }
+
+          if (readyStarted === null) {
+            readyStarted = now
+            heldSamples = []
+          }
+          heldSamples.push(sample)
+
+          const progress = Math.min(1, (now - readyStarted) / CALIBRATION_COLLECT_MS)
           setSetupCheck({
             title: prompt.title,
             instruction: prompt.instruction,
@@ -521,7 +565,7 @@ export default function ParticipantSession() {
           })
           if (progress >= 1) {
             clearInterval(timer)
-            resolve(summarizeCalibrationStep(requestId, step, samples))
+            resolve(summarizeCalibrationStep(requestId, step, heldSamples))
           }
         }, CALIBRATION_SAMPLE_MS)
       })
@@ -943,7 +987,7 @@ function StatusDot({ ok, label }: { ok: boolean; label: string }) {
 function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
   const statusText =
     setup.phase === 'collecting'
-      ? 'Recording setup sample'
+      ? 'Hold steady'
       : setup.phase === 'complete'
         ? 'Step recorded'
         : setup.phase === 'needs-retake'
@@ -954,20 +998,33 @@ function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
               ? 'Researcher check needed'
               : setup.phase === 'done'
                 ? 'Complete'
-                : 'Get ready'
+                : setup.phase === 'waiting'
+                  ? 'Ready when you are'
+                  : 'Get ready'
   const isRetrying = setup.phase === 'retrying'
   const isPaused = setup.phase === 'paused'
+  const isComplete = setup.phase === 'complete' || setup.phase === 'done'
   const accentClass = isPaused
     ? 'border-amber-500/35 ring-amber-500/20'
+    : isComplete
+      ? 'border-emerald-500/35 ring-emerald-500/20'
     : isRetrying
       ? 'border-sky-400/35 ring-sky-400/20'
       : 'border-sky-500/25 ring-white/10'
   const iconClass = isPaused
     ? 'bg-amber-500/15 ring-amber-400/35'
+    : isComplete
+      ? 'bg-emerald-500/15 ring-emerald-400/35'
     : isRetrying
       ? 'bg-sky-500/20 ring-sky-400/40'
       : 'bg-sky-600/20 ring-sky-500/40'
-  const statusClass = isPaused ? 'text-amber-200' : 'text-sky-300'
+  const statusClass = isPaused
+    ? 'text-amber-200'
+    : isComplete
+      ? 'text-emerald-200'
+      : 'text-sky-300'
+  const barClass = isComplete ? 'bg-emerald-400' : setup.phase === 'waiting' ? 'bg-sky-500/70' : 'bg-sky-400'
+  const progressText = setup.phase === 'waiting' ? 'Ready' : `${Math.round(setup.progress * 100)}%`
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-950/50 px-6 backdrop-blur-sm">
@@ -988,12 +1045,12 @@ function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
             {setup.step !== 'done' && setup.maxAttempts > 1 ? (
               <span>Attempt {setup.attempt} of {setup.maxAttempts}</span>
             ) : null}
-            <span>{Math.round(setup.progress * 100)}%</span>
+            <span>{progressText}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-gray-800">
             <div
-              className="h-full rounded-full bg-sky-400 transition-[width] duration-100"
-              style={{ width: `${Math.max(8, Math.round(setup.progress * 100))}%` }}
+              className={`h-full rounded-full transition-[width] duration-150 ${barClass}`}
+              style={{ width: setup.phase === 'waiting' ? '8%' : `${Math.max(8, Math.round(setup.progress * 100))}%` }}
             />
           </div>
         </div>

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import {
   CALIBRATION_MAX_AUTO_RETRIES,
+  CALIBRATION_READY_TIMEOUT_MS,
   CALIBRATION_RETRY_PAUSE_MS,
   buildExpressionCalibrationProfile,
+  calibrationStepReadiness,
   calibrationRetryInstruction,
   normalizeExpressionFeatures,
   summarizeCalibrationStep,
@@ -50,6 +52,17 @@ function samples(state: ExpressionState, count = 18): CalibrationSample[] {
 const neutral = summarizeCalibrationStep('req_1', 'neutral', samples(expression()))
 assert.equal(neutral.status, 'complete')
 assert.deepEqual(neutral.qualityFlags, [])
+assert.deepEqual(calibrationStepReadiness('neutral', samples(expression(), 1)[0]), {
+  ready: true,
+  status: 'ready',
+})
+assert.deepEqual(
+  calibrationStepReadiness(
+    'neutral',
+    samples(expression({ label: 'smiling', smile: 0.8 }), 1)[0],
+  ),
+  { ready: false, status: 'waiting-for-relaxed-face' },
+)
 
 const teethSmile = summarizeCalibrationStep(
   'req_2',
@@ -59,6 +72,10 @@ const teethSmile = summarizeCalibrationStep(
 assert.equal(teethSmile.status, 'needs-retake')
 assert.ok(teethSmile.qualityFlags.includes('teeth_detected'))
 assert.match(calibrationRetryInstruction('smile', teethSmile.qualityFlags), /lips closed/)
+assert.deepEqual(calibrationStepReadiness('smile', samples(expression({ smile: 0.72 }), 1)[0]), {
+  ready: true,
+  status: 'ready',
+})
 
 const closedSmile = summarizeCalibrationStep(
   'req_3',
@@ -72,6 +89,10 @@ const weakFrown = summarizeCalibrationStep('req_4', 'frown', samples(expression(
 assert.equal(weakFrown.status, 'needs-retake')
 assert.ok(weakFrown.qualityFlags.includes('weak_frown'))
 assert.match(calibrationRetryInstruction('frown', weakFrown.qualityFlags), /small frown/)
+assert.deepEqual(calibrationStepReadiness('frown', samples(expression({ frown: 0.12 }), 1)[0]), {
+  ready: true,
+  status: 'ready',
+})
 
 const noFace = summarizeCalibrationStep(
   'req_5',
@@ -102,6 +123,7 @@ assert.match(calibrationRetryInstruction('smile', weakSmile.qualityFlags), /smil
 
 assert.equal(CALIBRATION_MAX_AUTO_RETRIES, 2)
 assert.ok(CALIBRATION_RETRY_PAUSE_MS >= 1000)
+assert.ok(CALIBRATION_READY_TIMEOUT_MS >= 8000)
 
 function completed(
   step: CalibrationStepResult['step'],

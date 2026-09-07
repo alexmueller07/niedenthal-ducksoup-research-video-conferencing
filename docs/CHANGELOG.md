@@ -21,6 +21,19 @@
 
 * **Date:** 07-09-2026
 * **Author:** Ismam Ferdous
+* **Changes Made:** Make setup checks wait for participant readiness
+
+* **Previous behavior:**
+The waiting-room setup check started filling the progress bar almost immediately, so participants could feel rushed and the app could finish a sample before the participant had clearly made the requested face.
+* **New behavior:**
+Each setup step now gives participants more time and waits for the requested face before filling the progress bar. The bar fills only while the participant holds the correct general expression, completed steps turn green, and failed captures still retry automatically on the same step.
+* **Why this matters:**
+This makes calibration calmer and more accurate. Participants have time to read the prompt, the app collects cleaner face-specific values, and RAs should need fewer manual retakes during testing.
+
+---
+
+* **Date:** 07-09-2026
+* **Author:** Ismam Ferdous
 * **Changes Made:** Retry failed setup checks automatically
 
 * **Previous behavior:**
