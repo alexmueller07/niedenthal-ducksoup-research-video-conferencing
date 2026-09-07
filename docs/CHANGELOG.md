@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 07-09-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Retry failed setup checks automatically
+
+* **Previous behavior:**
+If a participant's waiting-room setup check failed because their face was not visible, they were off-axis, the closed-mouth smile showed teeth, or the expression was too weak, the failed result was sent to the researcher and the flow relied on manual retake handling.
+* **New behavior:**
+The participant screen now retries the same failed setup step automatically before moving on. If the step succeeds on retry, only the clean result is sent forward. If it keeps failing after the retry limit, the participant remains paused on that step and the researcher can review it.
+* **Why this matters:**
+This reduces researcher interruption, prevents bad calibration values from being accepted too easily, and keeps the setup process smoother for pilot testing.
+
+---
+
 * **Date:** 06-09-2026
 * **Author:** Ismam Ferdous
 * **Changes Made:** Add session-only face-shape normalization after setup check

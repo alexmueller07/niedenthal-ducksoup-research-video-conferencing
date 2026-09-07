@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import {
+  CALIBRATION_MAX_AUTO_RETRIES,
+  CALIBRATION_RETRY_PAUSE_MS,
   buildExpressionCalibrationProfile,
+  calibrationRetryInstruction,
   normalizeExpressionFeatures,
   summarizeCalibrationStep,
   type CalibrationSample,
@@ -55,6 +58,7 @@ const teethSmile = summarizeCalibrationStep(
 )
 assert.equal(teethSmile.status, 'needs-retake')
 assert.ok(teethSmile.qualityFlags.includes('teeth_detected'))
+assert.match(calibrationRetryInstruction('smile', teethSmile.qualityFlags), /lips closed/)
 
 const closedSmile = summarizeCalibrationStep(
   'req_3',
@@ -67,6 +71,7 @@ assert.deepEqual(closedSmile.qualityFlags, [])
 const weakFrown = summarizeCalibrationStep('req_4', 'frown', samples(expression({ frown: 0.005 })))
 assert.equal(weakFrown.status, 'needs-retake')
 assert.ok(weakFrown.qualityFlags.includes('weak_frown'))
+assert.match(calibrationRetryInstruction('frown', weakFrown.qualityFlags), /small frown/)
 
 const noFace = summarizeCalibrationStep(
   'req_5',
@@ -75,6 +80,7 @@ const noFace = summarizeCalibrationStep(
 )
 assert.equal(noFace.status, 'needs-retake')
 assert.ok(noFace.qualityFlags.includes('face_not_visible'))
+assert.match(calibrationRetryInstruction('neutral', noFace.qualityFlags), /stay centered/)
 
 const angled = summarizeCalibrationStep(
   'req_6',
@@ -83,6 +89,19 @@ const angled = summarizeCalibrationStep(
 )
 assert.equal(angled.status, 'needs-retake')
 assert.ok(angled.qualityFlags.includes('off_axis_face'))
+assert.match(calibrationRetryInstruction('neutral', angled.qualityFlags), /face the screen/)
+
+const weakSmile = summarizeCalibrationStep(
+  'req_7',
+  'smile',
+  samples(expression({ label: 'neutral', smile: 0.2, openness: 0.05 })),
+)
+assert.equal(weakSmile.status, 'needs-retake')
+assert.ok(weakSmile.qualityFlags.includes('weak_smile'))
+assert.match(calibrationRetryInstruction('smile', weakSmile.qualityFlags), /smile a little clearer/)
+
+assert.equal(CALIBRATION_MAX_AUTO_RETRIES, 2)
+assert.ok(CALIBRATION_RETRY_PAUSE_MS >= 1000)
 
 function completed(
   step: CalibrationStepResult['step'],

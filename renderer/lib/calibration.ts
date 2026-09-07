@@ -54,6 +54,36 @@ export interface CalibrationSample {
 export const CALIBRATION_PREP_MS = 900
 export const CALIBRATION_COLLECT_MS = 1800
 export const CALIBRATION_SAMPLE_MS = 100
+export const CALIBRATION_MAX_AUTO_RETRIES = 2
+export const CALIBRATION_RETRY_PAUSE_MS = 1100
+
+export function calibrationRetryInstruction(
+  step: CalibrationStep,
+  qualityFlags: CalibrationQualityFlag[],
+): string {
+  if (
+    qualityFlags.includes('face_not_visible') ||
+    qualityFlags.includes('insufficient_samples')
+  ) {
+    return 'Please stay centered and keep your face visible. We will try this setup check again.'
+  }
+  if (qualityFlags.includes('off_axis_face')) {
+    return 'Please face the screen directly. We will try this setup check again.'
+  }
+  if (qualityFlags.includes('teeth_detected')) {
+    return 'Please keep your lips closed for this setup smile. We will try this check again.'
+  }
+  if (qualityFlags.includes('weak_smile')) {
+    return 'Please make the small closed-mouth smile a little clearer. We will try this check again.'
+  }
+  if (qualityFlags.includes('weak_frown')) {
+    return 'Please make the small frown a little clearer. We will try this check again.'
+  }
+  if (qualityFlags.includes('not_relaxed')) {
+    return 'Please relax your face and look at the center of the screen. We will try this check again.'
+  }
+  return `Please repeat the ${CALIBRATION_PROMPTS[step].shortLabel.toLowerCase()} check.`
+}
 
 export function summarizeCalibrationStep(
   requestId: string,

@@ -13,9 +13,12 @@ import { useRouter } from 'next/router'
 import { LiveEffects } from '../lib/effects'
 import {
   CALIBRATION_COLLECT_MS,
+  CALIBRATION_MAX_AUTO_RETRIES,
   CALIBRATION_PREP_MS,
   CALIBRATION_PROMPTS,
+  CALIBRATION_RETRY_PAUSE_MS,
   CALIBRATION_SAMPLE_MS,
+  calibrationRetryInstruction,
   summarizeCalibrationStep,
   type CalibrationSample,
 } from '../lib/calibration'
@@ -54,7 +57,9 @@ interface SetupCheckState {
   step: CalibrationStep | 'done'
   index: number
   total: number
-  phase: 'prepare' | 'collecting' | 'complete' | 'needs-retake' | 'done'
+  attempt: number
+  maxAttempts: number
+  phase: 'prepare' | 'collecting' | 'complete' | 'needs-retake' | 'retrying' | 'paused' | 'done'
   progress: number
   qualityFlags: CalibrationQualityFlag[]
 }
@@ -353,47 +358,111 @@ export default function ParticipantSession() {
     }
 
     async function runSetupCheck(requestId: string, steps: CalibrationStep[], runId: number) {
+      const maxAttempts = CALIBRATION_MAX_AUTO_RETRIES + 1
       for (let i = 0; i < steps.length; i++) {
         if (setupRunRef.current !== runId) return
         const step = steps[i]
         const prompt = CALIBRATION_PROMPTS[step]
-        setSetupCheck({
-          title: prompt.title,
-          instruction: prompt.instruction,
-          step,
-          index: i + 1,
-          total: steps.length,
-          phase: 'prepare',
-          progress: 0,
-          qualityFlags: [],
-        })
-        sendEvent('calibration_prompt_shown', {
-          param: 'step',
-          value: step,
-          detail: { requestId, step, index: i + 1, total: steps.length },
-        })
-        await sleep(CALIBRATION_PREP_MS)
-        if (setupRunRef.current !== runId) return
+        const index = i + 1
 
-        const result = await collectSetupStep(requestId, step, runId, i + 1, steps.length)
-        if (!result || setupRunRef.current !== runId) return
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          if (setupRunRef.current !== runId) return
+          setSetupCheck({
+            title: prompt.title,
+            instruction: prompt.instruction,
+            step,
+            index,
+            total: steps.length,
+            attempt,
+            maxAttempts,
+            phase: 'prepare',
+            progress: 0,
+            qualityFlags: [],
+          })
+          sendEvent('calibration_prompt_shown', {
+            param: 'step',
+            value: step,
+            detail: { requestId, step, index, total: steps.length, attempt, maxAttempts },
+          })
+          await sleep(CALIBRATION_PREP_MS)
+          if (setupRunRef.current !== runId) return
 
-        client.send({ type: 'calibration-result', result })
+          const result = await collectSetupStep(
+            requestId,
+            step,
+            runId,
+            index,
+            steps.length,
+            attempt,
+            maxAttempts,
+          )
+          if (!result || setupRunRef.current !== runId) return
 
-        setSetupCheck({
-          title: prompt.title,
-          instruction:
-            result.status === 'needs-retake'
-              ? 'Setup check recorded. Please wait for the researcher.'
-              : 'Recorded. Please hold for the next check.',
-          step,
-          index: i + 1,
-          total: steps.length,
-          phase: result.status,
-          progress: 1,
-          qualityFlags: result.qualityFlags,
-        })
-        await sleep(result.status === 'needs-retake' ? 1200 : 650)
+          if (result.status === 'complete') {
+            client.send({ type: 'calibration-result', result })
+            setSetupCheck({
+              title: prompt.title,
+              instruction: 'Recorded. Please hold for the next check.',
+              step,
+              index,
+              total: steps.length,
+              attempt,
+              maxAttempts,
+              phase: 'complete',
+              progress: 1,
+              qualityFlags: result.qualityFlags,
+            })
+            await sleep(650)
+            break
+          }
+
+          if (attempt < maxAttempts) {
+            sendEvent('calibration_auto_retake', {
+              param: 'step',
+              value: step,
+              detail: {
+                requestId,
+                step,
+                index,
+                total: steps.length,
+                attempt,
+                nextAttempt: attempt + 1,
+                maxAttempts,
+                qualityFlags: result.qualityFlags,
+                metrics: result.metrics,
+              },
+            })
+            setSetupCheck({
+              title: prompt.title,
+              instruction: calibrationRetryInstruction(step, result.qualityFlags),
+              step,
+              index,
+              total: steps.length,
+              attempt: attempt + 1,
+              maxAttempts,
+              phase: 'retrying',
+              progress: 1,
+              qualityFlags: result.qualityFlags,
+            })
+            await sleep(CALIBRATION_RETRY_PAUSE_MS)
+            continue
+          }
+
+          client.send({ type: 'calibration-result', result })
+          setSetupCheck({
+            title: prompt.title,
+            instruction: 'Please wait while the researcher checks your setup.',
+            step,
+            index,
+            total: steps.length,
+            attempt,
+            maxAttempts,
+            phase: 'paused',
+            progress: 1,
+            qualityFlags: result.qualityFlags,
+          })
+          return
+        }
       }
 
       if (setupRunRef.current !== runId) return
@@ -403,6 +472,8 @@ export default function ParticipantSession() {
         step: 'done',
         index: steps.length,
         total: steps.length,
+        attempt: 1,
+        maxAttempts: 1,
         phase: 'done',
         progress: 1,
         qualityFlags: [],
@@ -417,6 +488,8 @@ export default function ParticipantSession() {
       runId: number,
       index: number,
       total: number,
+      attempt: number,
+      maxAttempts: number,
     ) {
       const samples: CalibrationSample[] = []
       const started = performance.now()
@@ -440,6 +513,8 @@ export default function ParticipantSession() {
             step,
             index,
             total,
+            attempt,
+            maxAttempts,
             phase: 'collecting',
             progress,
             qualityFlags: [],
@@ -873,28 +948,46 @@ function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
         ? 'Step recorded'
         : setup.phase === 'needs-retake'
           ? 'Setup check recorded'
-          : setup.phase === 'done'
-            ? 'Complete'
-            : 'Get ready'
+          : setup.phase === 'retrying'
+            ? 'Trying once more'
+            : setup.phase === 'paused'
+              ? 'Researcher check needed'
+              : setup.phase === 'done'
+                ? 'Complete'
+                : 'Get ready'
+  const isRetrying = setup.phase === 'retrying'
+  const isPaused = setup.phase === 'paused'
+  const accentClass = isPaused
+    ? 'border-amber-500/35 ring-amber-500/20'
+    : isRetrying
+      ? 'border-sky-400/35 ring-sky-400/20'
+      : 'border-sky-500/25 ring-white/10'
+  const iconClass = isPaused
+    ? 'bg-amber-500/15 ring-amber-400/35'
+    : isRetrying
+      ? 'bg-sky-500/20 ring-sky-400/40'
+      : 'bg-sky-600/20 ring-sky-500/40'
+  const statusClass = isPaused ? 'text-amber-200' : 'text-sky-300'
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-950/50 px-6 backdrop-blur-sm">
-      <div className="w-full max-w-[520px] rounded-2xl border border-sky-500/25 bg-gray-900/95 p-6 text-center shadow-2xl ring-1 ring-white/10">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
-          <svg viewBox="0 0 24 24" className="h-6 w-6 text-sky-300" fill="none" stroke="currentColor" strokeWidth="2">
+      <div className={`w-full max-w-[520px] rounded-2xl border bg-gray-900/95 p-6 text-center shadow-2xl ring-1 ${accentClass}`}>
+        <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ${iconClass}`}>
+          <svg viewBox="0 0 24 24" className={`h-6 w-6 ${statusClass}`} fill="none" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1M4 16v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1M7 12h10" />
           </svg>
         </div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${statusClass}`}>
           {statusText}
         </p>
         <h2 className="mt-2 text-xl font-semibold text-white">{setup.title}</h2>
         <p className="mt-3 text-base leading-relaxed text-gray-200">{setup.instruction}</p>
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-gray-500">
-            <span>
-              Step {setup.index} of {setup.total}
-            </span>
+            <span>Step {setup.index} of {setup.total}</span>
+            {setup.step !== 'done' && setup.maxAttempts > 1 ? (
+              <span>Attempt {setup.attempt} of {setup.maxAttempts}</span>
+            ) : null}
             <span>{Math.round(setup.progress * 100)}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-gray-800">
