@@ -1,18 +1,34 @@
-// CaptureStation: the self-contained capture engine.
+// CaptureStation: the self-contained, single-person capture engine.
 //
-// Owns the camera, runs the facial morph (canvas) and voice shift (Web Audio),
-// renders the participant-facing "altered" view, and records both the clean and
-// altered streams. It works in a plain browser (records download to disk) and in
-// Electron (records save to a structured session folder via window.ipc).
+// Owns the camera, runs the facial morph (canvas), renders the participant-
+// facing "altered" view, and records both the clean and altered streams. On
+// start, it also runs an automatic neutral/smile/frown setup check (see
+// runCalibration below) before recording begins, so detection is judged
+// against this person's own baseline rather than generic thresholds. It works
+// in a plain browser (records download to disk) and in Electron (records save
+// to a structured session folder via window.ipc).
 //
 // Deliberately no cross-window IPC bus: one page owns everything, which is
 // simpler and does not crash outside Electron.
 
 import { FaceMorphProcessor } from './faceMorph'
-import { VoiceProcessor } from './voice'
 import { getPreset } from './presets'
 import { pickRecorderFormat, type RecorderFormat } from './recording'
-import type { ExpressionState } from './protocol'
+import {
+  CALIBRATION_STEPS,
+  CALIBRATION_PROMPTS,
+  CALIBRATION_PREP_MS,
+  CALIBRATION_COLLECT_MS,
+  CALIBRATION_SAMPLE_MS,
+  CALIBRATION_READY_TIMEOUT_MS,
+  CALIBRATION_MAX_AUTO_RETRIES,
+  CALIBRATION_RETRY_PAUSE_MS,
+  calibrationStepReadiness,
+  summarizeCalibrationStep,
+  buildExpressionCalibrationProfile,
+  type CalibrationSample,
+} from './calibration'
+import type { ExpressionState, CalibrationStep, CalibrationStepResult, Telemetry } from './protocol'
 import type {
   ConnectionStatus,
   RecordingFile,
@@ -33,6 +49,12 @@ export interface CaptureCallbacks {
   onSaved: (manifest: SessionManifest) => void
   onFaceState?: (found: boolean) => void
   onExpression?: (state: ExpressionState) => void
+  /** Progress text during the automatic setup-check calibration, or null when not calibrating. */
+  onCalibrationStatus?: (text: string | null) => void
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function hasIpc(): boolean {
@@ -49,7 +71,6 @@ export class CaptureStation {
   private camera: MediaStream | null = null
   private alteredStream: MediaStream | null = null
   private face = new FaceMorphProcessor()
-  private voice: VoiceProcessor | null = null
   private raf: number | null = null
 
   private alteredRecorder: MediaRecorder | null = null
@@ -62,8 +83,7 @@ export class CaptureStation {
   private startedAt: string | null = null
 
   private config: SessionConfig | null = null
-  private alpha = 1.0
-  private voiceSemitones = 0
+  private alpha = 0
   private overlay = false
   private lastExpressionKey = ''
 
@@ -96,15 +116,10 @@ export class CaptureStation {
     this.config = config
     const p = getPreset(config.presetId)
     this.setAlpha(p.alpha)
-    this.setVoiceSemitones(p.voiceSemitones)
   }
   setAlpha(alpha: number) {
     this.alpha = alpha
     this.face.setAlpha(alpha)
-  }
-  setVoiceSemitones(semitones: number) {
-    this.voiceSemitones = semitones
-    this.voice?.setSemitones(semitones)
   }
   setOverlay(on: boolean) {
     this.overlay = on
@@ -146,25 +161,98 @@ export class CaptureStation {
     this.alteredCanvas.width = w
     this.alteredCanvas.height = h
 
-    // Voice graph from the mic.
-    try {
-      this.voice = new VoiceProcessor(new MediaStream(this.camera.getAudioTracks()))
-      await this.voice.resume()
-      this.voice.setSemitones(this.voiceSemitones)
-      this.log('Voice processor ready', 'success')
-    } catch (err) {
-      this.log(`Voice processor unavailable: ${err}`, 'warn')
-    }
-
-    // Altered stream = morphed canvas video + pitch-shifted audio (fallback: raw).
+    // Altered stream = morphed canvas video + raw mic audio.
     const canvasStream = this.alteredCanvas.captureStream(30)
-    const alteredAudio = this.voice?.outputStream.getAudioTracks() ?? this.camera.getAudioTracks()
-    this.alteredStream = new MediaStream([...canvasStream.getVideoTracks(), ...alteredAudio])
+    this.alteredStream = new MediaStream([...canvasStream.getVideoTracks(), ...this.camera.getAudioTracks()])
 
     this.startRenderLoop(w, h)
+
+    await this.runCalibration()
+
     this.connection = 'connected'
     this.emit()
     this.log('Capture station live', 'success')
+    this.startRecording()
+  }
+
+  /**
+   * Automatic neutral/smile/frown setup check, reusing the same pure logic the
+   * three-seat app's waiting room uses (renderer/lib/calibration.ts) — sampled
+   * directly from this.face.expression instead of over a websocket. There is no
+   * researcher here to rescue a stuck participant, so a step that keeps failing
+   * is skipped rather than blocked on: worse detection accuracy beats an app
+   * that never starts.
+   */
+  private async runCalibration() {
+    const results: Partial<Record<CalibrationStep, CalibrationStepResult>> = {}
+    for (const step of CALIBRATION_STEPS) {
+      const prompt = CALIBRATION_PROMPTS[step]
+      const maxAttempts = CALIBRATION_MAX_AUTO_RETRIES + 1
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        this.cb.onCalibrationStatus?.(`Setting up: ${prompt.instruction}`)
+        await sleep(CALIBRATION_PREP_MS)
+        const result = await this.collectCalibrationStep(step)
+        if (result.status === 'complete') {
+          results[step] = result
+          break
+        }
+        if (attempt < maxAttempts) {
+          this.cb.onCalibrationStatus?.(`Setting up: let's try that again — ${prompt.instruction.toLowerCase()}`)
+          await sleep(CALIBRATION_RETRY_PAUSE_MS)
+          continue
+        }
+        this.log(`Setup check for "${step}" did not pass after retries — continuing without it`, 'warn')
+        results[step] = result
+      }
+    }
+    this.cb.onCalibrationStatus?.(null)
+
+    const profile = buildExpressionCalibrationProfile(results)
+    if (profile) {
+      this.face.setCalibrationProfile(profile)
+      this.log('Personal setup check applied', 'success')
+    } else {
+      this.log('Setup check incomplete — using default detection thresholds', 'warn')
+    }
+  }
+
+  /** Samples this.face.expression every CALIBRATION_SAMPLE_MS until ready+held, or times out. */
+  private collectCalibrationStep(step: CalibrationStep): Promise<CalibrationStepResult> {
+    return new Promise((resolve) => {
+      const requestId = `local_${Date.now()}`
+      const samples: CalibrationSample[] = []
+      let heldSamples: CalibrationSample[] = []
+      let readyStartedAt: number | null = null
+      const startedAt = performance.now()
+
+      const finish = (fromHeld: boolean) => {
+        clearInterval(interval)
+        resolve(summarizeCalibrationStep(requestId, step, fromHeld ? heldSamples : samples))
+      }
+
+      const interval = setInterval(() => {
+        const expression = this.face.expression
+        const sample: CalibrationSample = {
+          expression,
+          telemetry: expression ? ({ faceFound: true } as Telemetry) : null,
+        }
+        samples.push(sample)
+        const readiness = calibrationStepReadiness(step, sample)
+        const elapsed = performance.now() - startedAt
+
+        if (!readiness.ready) {
+          readyStartedAt = null
+          heldSamples = []
+          if (elapsed >= CALIBRATION_READY_TIMEOUT_MS) finish(false)
+          return
+        }
+
+        if (readyStartedAt === null) readyStartedAt = performance.now()
+        heldSamples.push(sample)
+        const heldMs = performance.now() - readyStartedAt
+        if (heldMs >= CALIBRATION_COLLECT_MS) finish(true)
+      }, CALIBRATION_SAMPLE_MS)
+    })
   }
 
   private startRenderLoop(w: number, h: number) {
@@ -297,32 +385,29 @@ export class CaptureStation {
 
     if (hasIpc() && cfg.saveRoot) {
       const ipc = (window as unknown as { ipc: { invoke: <T>(c: string, a?: unknown) => Promise<T> } }).ipc
-      const dir = await ipc.invoke<string>('session:create-dir', {
+      const { dir, label } = await ipc.invoke<{ dir: string; label: string }>('session:create-dir', {
         saveRoot: cfg.saveRoot,
-        studyId: cfg.studyId,
-        dyadId: cfg.dyadId,
-        participantId: cfg.participantId,
       })
       for (const [kind, blob] of pairs) {
-        const filename = `${cfg.dyadId}_${cfg.participantId}_${kind}.${this.recFormat.ext}`
+        const filename = `${kind}.${this.recFormat.ext}`
         const buffer = await blob.arrayBuffer()
         const path = await ipc.invoke<string>('session:save-recording', { dir, filename, buffer })
         files.push({ kind, filename, path, bytes: blob.size })
         this.log(`Saved ${kind}: ${(blob.size / 1048576).toFixed(1)} MB`, 'success')
       }
-      const manifest = this.buildManifest(cfg, preset, startedAt, stoppedAt, files)
+      const manifest = this.buildManifest(cfg, preset, startedAt, stoppedAt, files, label)
       const manifestPath = await ipc.invoke<string>('session:write-manifest', { dir, manifest })
       this.log(`Wrote manifest: ${manifestPath}`, 'success')
       this.cb.onSaved(manifest)
     } else {
       // Browser fallback: download both files.
       for (const [kind, blob] of pairs) {
-        const filename = `${cfg.dyadId || 'session'}_${cfg.participantId || 'p'}_${kind}.${this.recFormat.ext}`
+        const filename = `self-test_${kind}.${this.recFormat.ext}`
         this.download(blob, filename)
         files.push({ kind, filename, path: filename, bytes: blob.size })
         this.log(`Downloaded ${kind}: ${(blob.size / 1048576).toFixed(1)} MB`, 'success')
       }
-      this.cb.onSaved(this.buildManifest(cfg, preset, startedAt, stoppedAt, files))
+      this.cb.onSaved(this.buildManifest(cfg, preset, startedAt, stoppedAt, files, 'self test'))
     }
   }
 
@@ -332,15 +417,17 @@ export class CaptureStation {
     startedAt: string | null,
     stoppedAt: string,
     files: RecordingFile[],
+    sessionLabel: string,
   ): SessionManifest {
     return {
       schemaVersion: 1,
       app: APP_NAME,
       appVersion: APP_VERSION,
       createdAt: new Date().toISOString(),
+      sessionLabel,
       config: cfg,
       preset,
-      appliedParams: { alpha: this.alpha, voiceSemitones: this.voiceSemitones, overlay: this.overlay },
+      appliedParams: { alpha: this.alpha, overlay: this.overlay },
       startedAt,
       stoppedAt,
       durationSec: this.elapsed,
@@ -362,8 +449,6 @@ export class CaptureStation {
     if (this.raf !== null) cancelAnimationFrame(this.raf)
     this.raf = null
     this.face.close()
-    this.voice?.close()
-    this.voice = null
     this.camera?.getTracks().forEach((t) => t.stop())
     this.camera = null
     this.alteredStream = null

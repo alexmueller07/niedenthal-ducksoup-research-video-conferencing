@@ -199,6 +199,20 @@ setup check that session (normalization_applied will be false/blank in
 that case). normalization_version identifies which normalization formula
 produced these values.
 
+Where the setup check itself is recorded
+------------------------------------------
+Before the conversation, a participant can be asked to hold a relaxed face,
+a small smile, and a small frown for a few seconds each (the "video setup
+check") so the numbers above are judged against their own face instead of a
+generic cutoff. The result of each step — including the raw smile/frown/
+open/mouth/yaw readings the researcher saw on screen — is written to
+events.csv as its own row (event calibration_step_completed or
+calibration_retake_recommended, with the numbers packed into the "details"
+column as JSON). The moment the researcher accepts the values, another row
+(calibration_applied) logs the final accepted profile. From that point on,
+the normalized_* / smile_margin / frown_margin columns above reflect it for
+the rest of the session.
+
 raw_* columns: the individual facial-movement readings the app actually
 measures (0 to 1 each) — the "ingredients" that expression/smile_type/etc.
 are built from. These come from this app's face-tracking software

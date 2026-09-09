@@ -22,11 +22,6 @@ export type { ModificationPreset }
 
 /** Everything the experimenter sets before a capture station goes live. */
 export interface SessionConfig {
-  studyId: string
-  dyadId: string
-  participantId: string
-  partnerId: string
-  raName: string
   presetId: string
   /** Absolute path to the root folder where session folders are created (Electron). */
   saveRoot: string | null
@@ -49,10 +44,12 @@ export interface SessionManifest {
   app: string
   appVersion: string
   createdAt: string
+  /** The session folder's name, e.g. "self test 3". */
+  sessionLabel: string
   config: SessionConfig
   preset: ModificationPreset
   /** Final params actually used (preset may be live-adjusted). */
-  appliedParams: { alpha: number; voiceSemitones: number; overlay: boolean }
+  appliedParams: { alpha: number; overlay: boolean }
   startedAt: string | null
   stoppedAt: string | null
   durationSec: number

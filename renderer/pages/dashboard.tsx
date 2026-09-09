@@ -11,7 +11,10 @@ import type {
   SessionManifest,
 } from '../lib/types'
 
-type LogEntry = { ts: string; message: string; level: string }
+// This page is video-only, so presets whose only effect is a voice-pitch
+// change (e.g. "Lower voice" / "Higher voice") would silently do nothing here
+// while keeping a misleading label — leave them out of the picker.
+const VIDEO_PRESETS = PRESETS.filter((p) => p.voiceSemitones === 0)
 
 function ipc() {
   return typeof window !== 'undefined'
@@ -28,34 +31,23 @@ export default function DashboardPage() {
   const stationRef = useRef<CaptureStation | null>(null)
 
   const [config, setConfig] = useState<SessionConfig>({
-    studyId: 'PPS2026',
-    dyadId: '',
-    participantId: '',
-    partnerId: '',
-    raName: '',
     presetId: DEFAULT_PRESET_ID,
     saveRoot: null,
   })
   const preset = getPreset(config.presetId)
   const [alpha, setAlpha] = useState(preset.alpha)
-  const [voice, setVoice] = useState(preset.voiceSemitones)
-  const [overlay, setOverlay] = useState(false)
 
   const [connection, setConnection] = useState<ConnectionStatus>('disconnected')
   const [recording, setRecording] = useState<RecordingStatus>('idle')
   const [recTime, setRecTime] = useState(0)
   const [faceFound, setFaceFound] = useState(false)
   const [expression, setExpression] = useState<ExpressionState | null>(null)
-  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [calibrationStatus, setCalibrationStatus] = useState<string | null>(null)
   const [lastSaved, setLastSaved] = useState<SessionManifest | null>(null)
   // Determined after mount so the first client render matches the server-rendered
   // HTML (window.ipc only exists in Electron). Avoids a hydration mismatch.
   const [inElectron, setInElectron] = useState(false)
   useEffect(() => setInElectron(!!ipc()), [])
-
-  const addLog = useCallback((message: string, level = 'info') => {
-    setLogs((p) => [{ ts: new Date().toLocaleTimeString(), message, level }, ...p].slice(0, 80))
-  }, [])
 
   // Build the capture station once the DOM nodes exist.
   useEffect(() => {
@@ -65,25 +57,23 @@ export default function DashboardPage() {
         setConnection(c)
         setRecording(r)
       },
-      onLog: (m, l) => addLog(m, l),
+      onLog: () => {},
       onTime: (s) => setRecTime(s),
-      onSaved: (m) => {
-        setLastSaved(m)
-        addLog('Session saved', 'success')
-      },
+      onSaved: (m) => setLastSaved(m),
       onFaceState: (f) => setFaceFound(f),
       onExpression: (e) => setExpression(e),
+      onCalibrationStatus: (t) => setCalibrationStatus(t),
     })
     stationRef.current = station
     return () => station.stop()
-  }, [addLog])
+  }, [])
 
-  // Load persisted config (Electron only).
+  // Load persisted config (Electron only) — just the preset and output folder now.
   useEffect(() => {
     ipc()
       ?.invoke<SessionConfig | null>('config:get')
       .then((saved) => {
-        if (saved) setConfig((c) => ({ ...c, ...saved, dyadId: '', participantId: '', partnerId: '' }))
+        if (saved) setConfig((c) => ({ ...c, ...saved }))
       })
       .catch(() => {})
   }, [])
@@ -92,18 +82,11 @@ export default function DashboardPage() {
   useEffect(() => {
     stationRef.current?.setAlpha(alpha)
   }, [alpha])
-  useEffect(() => {
-    stationRef.current?.setVoiceSemitones(voice)
-  }, [voice])
-  useEffect(() => {
-    stationRef.current?.setOverlay(overlay)
-  }, [overlay])
 
   const applyPreset = (id: string) => {
     const p = getPreset(id)
     setConfig((c) => ({ ...c, presetId: id }))
     setAlpha(p.alpha)
-    setVoice(p.voiceSemitones)
   }
 
   const selectFolder = async () => {
@@ -111,40 +94,28 @@ export default function DashboardPage() {
     if (folder) setConfig((c) => ({ ...c, saveRoot: folder }))
   }
 
-  const startCapture = () => {
+  const start = () => {
     setExpression(null)
+    setLastSaved(null)
     stationRef.current?.setConfig(config)
     stationRef.current?.setAlpha(alpha)
-    stationRef.current?.setVoiceSemitones(voice)
     void stationRef.current?.start()
     ipc()?.invoke('config:set', config).catch(() => {})
   }
-  const stopCapture = () => {
+  const stop = useCallback(async () => {
+    await stationRef.current?.stopRecording()
     stationRef.current?.stop()
     setExpression(null)
-  }
-  const startRec = () => stationRef.current?.startRecording()
-  const stopRec = () => void stationRef.current?.stopRecording()
+    setCalibrationStatus(null)
+  }, [])
   const backHome = async () => {
     if (recording === 'saving') return
-    if (recording === 'recording') {
+    if (recording === 'recording' || connection === 'connected' || connection === 'connecting') {
       const ok = window.confirm(
-        'End session and return home? This will stop recording, save the videos, write the session manifest, and then return to the home screen.',
+        'Return home? This will stop the active session on this machine, saving the videos first if recording.',
       )
       if (!ok) return
-      await stationRef.current?.stopRecording()
-      stationRef.current?.stop()
-      setExpression(null)
-      void router.push('/')
-      return
-    }
-    if (connection === 'connected' || connection === 'connecting') {
-      const ok = window.confirm(
-        'Return home? This will stop the active capture session on this machine.',
-      )
-      if (!ok) return
-      stationRef.current?.stop()
-      setExpression(null)
+      await stop()
     }
     void router.push('/')
   }
@@ -153,15 +124,17 @@ export default function DashboardPage() {
     alteredWrapRef.current?.requestFullscreen?.().catch(() => {})
   }
 
-  const formValid = config.dyadId.trim() && config.participantId.trim() && config.raName.trim() && (!inElectron || config.saveRoot)
+  const formValid = !inElectron || !!config.saveRoot
   const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
-  const statusText: Record<ConnectionStatus, string> = {
-    disconnected: 'Idle',
-    connecting: 'Starting…',
-    connected: 'Live',
-    error: 'Error',
-  }
+  const busy = connection === 'connecting' || recording === 'recording' || recording === 'saving'
+  const startLabel =
+    connection === 'connecting'
+      ? calibrationStatus ?? 'Starting…'
+      : recording === 'saving'
+        ? 'Saving…'
+        : 'Start'
+
   const expressionText =
     expression?.label === 'smiling'
       ? expression.smileType && expression.smileTypeTrusted
@@ -176,7 +149,7 @@ export default function DashboardPage() {
   return (
     <>
       <Head>
-        <title>DuckSoup Capture Station</title>
+        <title>1-Person Test Station</title>
       </Head>
 
       <div className="app">
@@ -193,12 +166,12 @@ export default function DashboardPage() {
               {recording === 'saving' ? 'Saving…' : 'Back'}
             </button>
             <div className="title">
-              DuckSoup Capture Station
+              1-Person Test Station
             </div>
           </div>
           <div className="status">
             <span className={`dot ${connection}`} />
-            {statusText[connection]}
+            {connection === 'connecting' ? calibrationStatus ?? 'Starting…' : recording === 'recording' ? 'Recording' : connection === 'connected' ? 'Live' : connection === 'error' ? 'Error' : 'Idle'}
             {connection === 'connected' && (
               <span className={`face ${faceFound ? 'ok' : 'no'}`}>
                 {faceFound ? 'face tracked' : 'no face'}
@@ -211,27 +184,20 @@ export default function DashboardPage() {
           {/* Left controls */}
           <aside className="panel">
             <section>
-              <h2>Session</h2>
-              <div className="grid2">
-                <label>Study<input value={config.studyId} onChange={(e) => setConfig({ ...config, studyId: e.target.value })} /></label>
-                <label>RA<input value={config.raName} onChange={(e) => setConfig({ ...config, raName: e.target.value })} /></label>
-                <label>Dyad ID<input value={config.dyadId} onChange={(e) => setConfig({ ...config, dyadId: e.target.value })} /></label>
-                <label>Participant ID<input value={config.participantId} onChange={(e) => setConfig({ ...config, participantId: e.target.value })} /></label>
-                <label>Partner ID<input value={config.partnerId} onChange={(e) => setConfig({ ...config, partnerId: e.target.value })} /></label>
-              </div>
+              <h2>Output</h2>
               {inElectron ? (
                 <label className="folder">Output folder
                   <button className="ghost" onClick={selectFolder}>{config.saveRoot ? config.saveRoot : 'Select folder…'}</button>
                 </label>
               ) : (
-                <p className="note">Browser mode: recordings download to your Downloads folder. Run the desktop app for structured saving.</p>
+                <p className="note">Browser mode. Recordings download to your Downloads folder. Use the desktop app to save them into folders instead.</p>
               )}
             </section>
 
             <section>
               <h2>Modification condition</h2>
               <div className="presets">
-                {PRESETS.map((p) => (
+                {VIDEO_PRESETS.map((p) => (
                   <button key={p.id} className={`preset ${config.presetId === p.id ? 'active' : ''}`} onClick={() => applyPreset(p.id)}>
                     {p.label}
                   </button>
@@ -241,20 +207,9 @@ export default function DashboardPage() {
 
               <div className="slider">
                 <div className="slider-head"><span>Smile (face)</span><span className="val">{alpha.toFixed(2)}</span></div>
-                <input type="range" min={-2} max={5} step={0.1} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
+                <input type="range" min={-2} max={2} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
                 <div className="ticks"><span>Frown</span><span>Neutral</span><span>Smile</span></div>
               </div>
-
-              <div className="slider">
-                <div className="slider-head"><span>Voice pitch</span><span className="val">{voice > 0 ? '+' : ''}{voice} st</span></div>
-                <input type="range" min={-8} max={8} step={1} value={voice} onChange={(e) => setVoice(parseInt(e.target.value))} />
-                <div className="ticks"><span>Lower</span><span>Neutral</span><span>Higher</span></div>
-              </div>
-
-              <label className="check">
-                <input type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} />
-                Show tracking overlay
-              </label>
             </section>
           </aside>
 
@@ -286,34 +241,27 @@ export default function DashboardPage() {
                   {expression?.classifierVersion && <span>{expression.classifierVersion}</span>}
                 </div>
               </div>
-              {connection !== 'connected' ? (
-                <button className="primary" disabled={!formValid || connection === 'connecting'} onClick={startCapture}>
-                  {connection === 'connecting' ? 'Starting…' : 'Start capture'}
-                </button>
-              ) : (
-                <button className="secondary" onClick={stopCapture}>Stop capture</button>
-              )}
 
               {recording !== 'recording' ? (
-                <button className="record" disabled={connection !== 'connected' || recording === 'saving'} onClick={startRec}>
-                  {recording === 'saving' ? 'Saving…' : 'Start recording'}
+                <button className="primary" disabled={!formValid || busy} onClick={start}>
+                  {startLabel}
                 </button>
               ) : (
-                <button className="recording" onClick={stopRec}>
+                <button className="recording" onClick={() => void stop()}>
                   <span className="recdot" /> Stop · {fmt(recTime)}
                 </button>
               )}
             </div>
 
             {!formValid && (
-              <p className="warn">Enter Dyad ID, Participant ID, RA{inElectron ? ', and select an output folder' : ''} to start.</p>
+              <p className="warn">Select an output folder to start.</p>
             )}
 
             <section className="output">
               <h2>Output → questionnaire pipeline</h2>
               {lastSaved ? (
                 <div className="saved">
-                  <div className="saved-head">{lastSaved.config.dyadId} / p{lastSaved.config.participantId} · {lastSaved.preset.label} · {lastSaved.durationSec}s</div>
+                  <div className="saved-head">{lastSaved.sessionLabel} · {lastSaved.preset.label} · {lastSaved.durationSec}s</div>
                   {lastSaved.files.map((f) => (
                     <div key={f.kind} className="file">{f.kind}: {f.filename} ({(f.bytes / 1048576).toFixed(1)} MB)</div>
                   ))}
@@ -324,18 +272,8 @@ export default function DashboardPage() {
                   )}
                 </div>
               ) : (
-                <p className="note">Each session writes a clean video, an altered video, and a session.json manifest the questionnaire app reads.</p>
+                <p className="note">Each session saves a clean video, an altered video, and a session.json file.</p>
               )}
-            </section>
-
-            <section className="log">
-              <div className="log-head"><h2>Event log</h2><button className="link" onClick={() => setLogs([])}>Clear</button></div>
-              <div className="log-body">
-                {logs.length === 0 && <p className="note">No events yet.</p>}
-                {logs.map((l, i) => (
-                  <div key={i} className={`logline ${l.level}`}>[{l.ts}] {l.message}</div>
-                ))}
-              </div>
             </section>
           </main>
         </div>
@@ -367,11 +305,8 @@ export default function DashboardPage() {
         .panel section { margin-bottom: 24px; }
         h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #8b94a1; margin: 0 0 12px; font-weight: 600; }
 
-        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         label { display: block; font-size: 12px; color: #9aa3af; }
-        input[type='text'], input:not([type]) { width: 100%; margin-top: 4px; padding: 7px 9px; background: #1a1f27; border: 1px solid #2a313b; border-radius: 6px; color: #e4e7eb; font-size: 13px; }
-        input:focus { outline: none; border-color: #3b6fb0; }
-        .folder { margin-top: 12px; }
+        .folder { margin-top: 0; }
         .ghost { width: 100%; margin-top: 4px; text-align: left; padding: 7px 9px; background: #1a1f27; border: 1px solid #2a313b; border-radius: 6px; color: #c7ccd3; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ghost:hover { border-color: #3b6fb0; }
         .ghost.small { width: auto; margin-top: 10px; }
@@ -388,8 +323,6 @@ export default function DashboardPage() {
         .slider-head .val { font-variant-numeric: tabular-nums; color: #cfe0f5; }
         .slider input[type='range'] { width: 100%; accent-color: #3b6fb0; }
         .ticks { display: flex; justify-content: space-between; font-size: 10px; color: #5f6873; margin-top: 3px; }
-        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aab2bd; }
-        .check input { width: auto; }
 
         .main { flex: 1; padding: 16px 20px; overflow-y: auto; }
         .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -411,24 +344,13 @@ export default function DashboardPage() {
         .primary { background: #2f6fc0; color: #fff; }
         .primary:hover { background: #3a7cd0; }
         .primary:disabled { background: #2a323d; color: #6b7480; cursor: not-allowed; }
-        .secondary { background: #2a313b; color: #d7dbe0; border-color: #39424f; }
-        .record { background: #b14a44; color: #fff; }
-        .record:hover { background: #c2554f; }
-        .record:disabled { background: #2a323d; color: #6b7480; cursor: not-allowed; }
         .recording { background: #2a313b; color: #f0d2d0; border-color: #5a3a38; display: flex; align-items: center; gap: 8px; }
         .recdot { width: 9px; height: 9px; border-radius: 50%; background: #e0524b; }
         .warn { font-size: 12px; color: #d2a24a; margin: 4px 0; }
 
-        .output, .log { margin-top: 22px; border-top: 1px solid #232831; padding-top: 16px; }
+        .output { margin-top: 22px; border-top: 1px solid #232831; padding-top: 16px; }
         .saved-head { font-size: 13px; color: #cfe0f5; margin-bottom: 6px; }
         .file { font-size: 12px; color: #8b94a1; font-variant-numeric: tabular-nums; }
-        .log-head { display: flex; justify-content: space-between; align-items: center; }
-        .link { background: none; border: none; color: #6b7480; font-size: 11px; cursor: pointer; }
-        .log-body { max-height: 180px; overflow-y: auto; font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 11px; line-height: 1.6; }
-        .logline.error { color: #d98a85; }
-        .logline.warn { color: #d2a24a; }
-        .logline.success { color: #6fce9a; }
-        .logline.info { color: #8b94a1; }
       `}</style>
     </>
   )

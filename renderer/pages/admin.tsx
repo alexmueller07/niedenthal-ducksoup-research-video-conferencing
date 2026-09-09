@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { SignalClient, SignalStatus } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
-import { PRESETS } from '../lib/presets'
+import { PRESETS, getPreset } from '../lib/presets'
 import {
   buildExpressionCalibrationProfile,
   CALIBRATION_PROMPTS,
@@ -778,7 +778,7 @@ export default function AdminDashboard() {
                     ? 'Waiting for both participants to connect'
                     : bothReady
                       ? 'Both participants are ready'
-                      : 'Some readiness checks are still pending — you will be asked to confirm'
+                      : 'Not all checks have passed yet. You will be asked to confirm.'
                 }
               >
                 ▶ Start conversation
@@ -796,13 +796,13 @@ export default function AdminDashboard() {
             {phase === 'ended' && (
               <>
                 <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800">
-                  Session complete — data saved
+                  Session complete. Data saved.
                 </span>
                 <button
                   type="button"
                   onClick={() => restartSession('live')}
                   className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold transition hover:bg-emerald-500"
-                  title="Start the conversation again with a fresh clock. New recordings continue as _part2 files — nothing is overwritten."
+                  title="Restarts the clock. New recordings save as separate files. Nothing is overwritten."
                 >
                   ↻ Restart conversation
                 </button>
@@ -846,6 +846,11 @@ export default function AdminDashboard() {
               onEffect={(param, value, force) => sendEffect(slot, param, value, force)}
               onPreset={(id) => applyPreset(slot, id)}
               onIdentity={(identity) => setIdentity(slot, identity)}
+              phase={phase}
+              calibrationState={calibration[slot]}
+              onRunCalibration={() => requestCalibration(slot, CALIBRATION_STEPS)}
+              onRetakeCalibration={(step) => requestCalibration(slot, [step])}
+              onAcceptCalibration={() => acceptCalibration(slot)}
             />
           ))}
         </div>
@@ -869,7 +874,7 @@ export default function AdminDashboard() {
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
                 }
               >
-                {micToggled ? '🔴 Mic LIVE — click to mute' : '🎙 Unmute mic'}
+                {micToggled ? '🔴 Mic live, click to mute' : '🎙 Unmute mic'}
               </button>
               <button
                 type="button"
@@ -920,15 +925,18 @@ export default function AdminDashboard() {
                 placeholder="e.g. Five minutes remaining"
                 className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm outline-none focus:border-sky-500"
               />
-              <input
-                type="number"
-                min={1}
-                max={120}
-                value={bannerDuration}
-                onChange={(e) => setBannerDuration(Number(e.target.value) || 8)}
-                className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-center text-sm outline-none focus:border-sky-500"
-                title="Seconds shown"
-              />
+              <div className="flex shrink-0 items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={bannerDuration}
+                  onChange={(e) => setBannerDuration(Number(e.target.value) || 8)}
+                  className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-center text-sm outline-none [appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  title="Seconds shown"
+                />
+                <span className="text-xs text-gray-500">seconds</span>
+              </div>
               <button
                 type="button"
                 onClick={() => sendBanner()}
@@ -941,7 +949,7 @@ export default function AdminDashboard() {
               {[
                 'Five minutes remaining.',
                 'Please begin wrapping up your conversation.',
-                'One moment please — brief technical pause.',
+                'One moment please. Brief technical pause.',
               ].map((q) => (
                 <button
                   key={q}
@@ -965,22 +973,6 @@ export default function AdminDashboard() {
             )}
           </Card>
 
-          <CalibrationCard
-            phase={phase}
-            calibration={calibration}
-            connected={{
-              P1: !!roster?.slots.P1,
-              P2: !!roster?.slots.P2,
-            }}
-            names={{
-              P1: roster?.slots.P1?.identity.name || 'Participant 1',
-              P2: roster?.slots.P2?.identity.name || 'Participant 2',
-            }}
-            onRun={(target) => requestCalibration(target, CALIBRATION_STEPS)}
-            onRetake={(slot, step) => requestCalibration(slot, [step])}
-            onAccept={acceptCalibration}
-          />
-
           {/* Automation rules */}
           <RulesCard
             rules={rules}
@@ -996,17 +988,9 @@ export default function AdminDashboard() {
           {/* Recordings */}
           <Card
             title="Recordings"
-            subtitle={
-              hasIpc()
-                ? 'All streams record automatically while the session is live'
-                : 'Recording requires the desktop app'
-            }
+            subtitle={hasIpc() ? undefined : 'Recording requires the desktop app'}
           >
-            {Object.keys(recState).length === 0 ? (
-              <p className="text-xs text-gray-600">
-                Armed — starts when you start the conversation.
-              </p>
-            ) : (
+            {Object.keys(recState).length === 0 ? null : (
               <ul className="space-y-1.5">
                 {Object.entries(recState).map(([key, r]) => (
                   <li key={key} className="flex items-center justify-between text-xs">
@@ -1063,9 +1047,8 @@ export default function AdminDashboard() {
           <div className="w-[440px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
             <h2 className="text-base font-semibold">Start with pending checks?</h2>
             <p className="mt-2 text-sm text-gray-400">
-              Not every readiness check (camera · face model · voice) has reported green
-              yet. You can start anyway — video or audio may be missing for a participant
-              until their pipeline finishes.
+              Not every check (camera, face model, voice) is green yet. You can start
+              anyway, but a participant's video or audio may be missing until it finishes.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -1096,9 +1079,9 @@ export default function AdminDashboard() {
           <div className="w-[420px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
             <h2 className="text-base font-semibold">End the session?</h2>
             <p className="mt-2 text-sm text-gray-400">
-              Participants will see an &ldquo;ended&rdquo; screen, all recordings stop and
-              finalize, and the manifest is written. If needed you can restart the
-              conversation afterwards — recordings continue as separate files.
+              Participants will see an &ldquo;ended&rdquo; screen. Recordings stop and
+              save, and the manifest is written. You can restart afterward if needed;
+              new recordings save as separate files.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -1124,76 +1107,6 @@ export default function AdminDashboard() {
 }
 
 // ===== Waiting-room setup check =====
-
-interface CalibrationCardProps {
-  phase: Phase
-  calibration: Record<PSlot, CalibrationSlotState>
-  connected: Record<PSlot, boolean>
-  names: Record<PSlot, string>
-  onRun: (target: PSlot | 'both') => void
-  onRetake: (slot: PSlot, step: CalibrationStep) => void
-  onAccept: (slot: PSlot) => void
-}
-
-function CalibrationCard({
-  phase,
-  calibration,
-  connected,
-  names,
-  onRun,
-  onRetake,
-  onAccept,
-}: CalibrationCardProps) {
-  const waiting = phase === 'waiting'
-  const bothConnected = PSLOTS.every((slot) => connected[slot])
-
-  return (
-    <Card
-      title="Video setup check"
-      subtitle="Run before starting. Accepted values normalize each participant for this session."
-    >
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onRun('both')}
-          disabled={!waiting || !bothConnected}
-          className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold transition enabled:hover:bg-sky-500 disabled:opacity-40"
-        >
-          Run both
-        </button>
-        {PSLOTS.map((slot) => (
-          <button
-            key={slot}
-            type="button"
-            onClick={() => onRun(slot)}
-            disabled={!waiting || !connected[slot]}
-            className="rounded-lg bg-gray-800 px-3 py-2 text-xs font-medium text-gray-200 transition enabled:hover:bg-gray-700 disabled:opacity-40"
-          >
-            Run {slot}
-          </button>
-        ))}
-      </div>
-      {!waiting && (
-        <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-          Setup checks are available only in the waiting room.
-        </p>
-      )}
-      <div className="mt-3 space-y-3">
-        {PSLOTS.map((slot) => (
-          <CalibrationSlotRow
-            key={slot}
-            slot={slot}
-            name={names[slot]}
-            connected={connected[slot]}
-            state={calibration[slot]}
-            onRetake={onRetake}
-            onAccept={onAccept}
-          />
-        ))}
-      </div>
-    </Card>
-  )
-}
 
 function CalibrationSlotRow({
   slot,
@@ -1355,6 +1268,11 @@ interface PanelProps {
   onEffect: (param: keyof EffectState, value: number, force?: boolean) => void
   onPreset: (id: string) => void
   onIdentity: (identity: Identity) => void
+  phase: Phase
+  calibrationState: CalibrationSlotState
+  onRunCalibration: () => void
+  onRetakeCalibration: (step: CalibrationStep) => void
+  onAcceptCalibration: () => void
 }
 
 function ParticipantPanel({
@@ -1367,6 +1285,11 @@ function ParticipantPanel({
   onEffect,
   onPreset,
   onIdentity,
+  phase,
+  calibrationState,
+  onRunCalibration,
+  onRetakeCalibration,
+  onAcceptCalibration,
 }: PanelProps) {
   const [view, setView] = useState<Kind>('altered')
   const [volume, setVolume] = useState(0)
@@ -1505,7 +1428,7 @@ function ParticipantPanel({
         )}
         {/* Monitor volume */}
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 backdrop-blur">
-          <span className="text-[10px] text-gray-400" title="Monitor volume — use headphones to avoid audio leaking into the lab room">
+          <span className="text-[10px] text-gray-400" title="Monitor volume. Use headphones so audio doesn't leak into the lab room">
             🎧
           </span>
           <input
@@ -1552,24 +1475,61 @@ function ParticipantPanel({
           onChange={(v) => onEffect('voiceSemitones', v)}
           onCommit={(v) => onEffect('voiceSemitones', v, true)}
         />
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {PRESETS.map((p) => (
+        <div className="space-y-1.5 pt-1">
+          {[['neutral'], ['smile-subtle', 'smile-strong'], ['frown-subtle', 'frown-strong'], ['warm-voice', 'bright-voice']].map(
+            (ids, i) => (
+              <div key={i} className="flex flex-wrap gap-1.5">
+                {ids.map((id) => {
+                  const p = getPreset(id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      title={p.description}
+                      onClick={() => onPreset(p.id)}
+                      className={
+                        'rounded-full px-2.5 py-1 text-[11px] transition ' +
+                        (Math.abs(effects.alpha - p.alpha) < 0.011 &&
+                        effects.voiceSemitones === p.voiceSemitones
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
+                      }
+                    >
+                      {p.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ),
+          )}
+        </div>
+
+        {/* Video setup check */}
+        <div className="border-t border-gray-800 pt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-300">Video setup check</p>
             <button
-              key={p.id}
               type="button"
-              title={p.description}
-              onClick={() => onPreset(p.id)}
-              className={
-                'rounded-full px-2.5 py-1 text-[11px] transition ' +
-                (Math.abs(effects.alpha - p.alpha) < 0.011 &&
-                effects.voiceSemitones === p.voiceSemitones
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
-              }
+              onClick={onRunCalibration}
+              disabled={phase !== 'waiting' || !info}
+              className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold transition enabled:hover:bg-sky-500 disabled:opacity-40"
             >
-              {p.label}
+              Run
             </button>
-          ))}
+          </div>
+          {phase !== 'waiting' && (
+            <p className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+              Setup checks are available only in the waiting room.
+            </p>
+          )}
+          <CalibrationSlotRow
+            slot={slot}
+            name={info?.identity.name || (slot === 'P1' ? 'Participant 1' : 'Participant 2')}
+            connected={!!info}
+            state={calibrationState}
+            onRetake={(_slot, step) => onRetakeCalibration(step)}
+            onAccept={() => onAcceptCalibration()}
+          />
         </div>
       </div>
     </section>
@@ -1579,7 +1539,7 @@ function ParticipantPanel({
 // ===== Automation rules (no-code rule builder) =====
 //
 // Plain-language rows a non-programmer can read left to right:
-//   WHEN  Participant 1  is smiling  for 1 s   THEN  Participant 2  Smile + (subtle)   when it stops: back to previous
+//   WHEN  Participant 1  is smiling  for 1 s   THEN  Participant 2  Smile (subtle)   when it stops: back to previous
 //   AT    5:00                                 THEN  Participant 1  Frown (subtle)     revert after 30 s
 // Edits apply immediately (including mid-call); execution happens on the
 // session server and every firing is written to events.csv.
@@ -1666,7 +1626,7 @@ function RulesCard({
   return (
     <Card
       title="Automation rules"
-      subtitle="If-this-then-that, no code needed. Editable any time — even mid-conversation. Expression rules also run in the waiting room; timer rules count from conversation start."
+      subtitle="If this happens, then do that. No code needed. You can edit rules any time, even mid-conversation. Expression rules also run in the waiting room. Timer rules count from when the conversation starts."
     >
       {rules.length === 0 && (
         <p className="mb-2 text-xs text-gray-600">
@@ -1841,7 +1801,7 @@ function RulesCard({
                       min={1}
                       className={num}
                       value={rule.revertAfterSec ?? ''}
-                      placeholder="—"
+                      placeholder="never"
                       onChange={(e) =>
                         patch(rule.id, (r) => ({
                           ...r,
@@ -1919,7 +1879,7 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
     expression.classifierVersion ? `version ${expression.classifierVersion}` : '',
   ]
     .filter(Boolean)
-    .join(' — ')
+    .join(' · ')
   return (
     <span
       className={

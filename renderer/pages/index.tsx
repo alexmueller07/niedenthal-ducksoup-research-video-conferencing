@@ -246,7 +246,7 @@ export default function SignInPage() {
         <p className="mt-6 text-center text-[11px] text-gray-600">
           IRB 2020-1657 · For lab use only ·{' '}
           <a href="/dashboard" className="underline-offset-2 hover:text-gray-400 hover:underline">
-            capture station
+            1-person test station
           </a>
           {isMac && (
             <>

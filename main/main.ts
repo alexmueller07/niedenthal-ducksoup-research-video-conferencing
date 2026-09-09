@@ -401,26 +401,21 @@ ipcMain.handle('config:set', (_e, config) => {
   return true
 })
 
-function sanitize(part: string): string {
-  return String(part).replace(/[^A-Za-z0-9_-]/g, '_')
-}
-
-ipcMain.handle(
-  'session:create-dir',
-  async (_e, { saveRoot, studyId, dyadId, participantId }) => {
-    const fsp = await import('fs/promises')
-    if (!saveRoot) throw new Error('No save root selected')
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const dir = path.join(
-      saveRoot,
-      `study_${sanitize(studyId)}`,
-      `dyad_${sanitize(dyadId)}`,
-      `p_${sanitize(participantId)}_${stamp}`,
-    )
-    await fsp.mkdir(dir, { recursive: true })
-    return dir
-  },
-)
+ipcMain.handle('session:create-dir', async (_e, { saveRoot }: { saveRoot: string }) => {
+  const fsp = await import('fs/promises')
+  if (!saveRoot) throw new Error('No save root selected')
+  const entries = await fsp.readdir(saveRoot, { withFileTypes: true }).catch(() => [])
+  let nextN = 1
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const m = entry.name.match(/^self test (\d+)$/i)
+    if (m) nextN = Math.max(nextN, parseInt(m[1], 10) + 1)
+  }
+  const label = `self test ${nextN}`
+  const dir = path.join(saveRoot, label)
+  await fsp.mkdir(dir, { recursive: true })
+  return { dir, label }
+})
 
 ipcMain.handle(
   'session:save-recording',

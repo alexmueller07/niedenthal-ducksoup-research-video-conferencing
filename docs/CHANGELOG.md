@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 08-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Simplified the 1-person test tool and cleaned up the researcher screen
+
+* **Previous behavior:**
+The 1-person test tool (renamed from "capture station" to "1-Person Test Station") asked for study/RA/dyad/participant info before you could even test, had a voice slider even though it's video-only, let the smile slider go way past a sensible range, and didn't have the same face setup check the real 2-person sessions have. On the researcher screen, the setup check lived in its own separate box instead of next to each participant, had a confusing "run both" option, and some preset buttons were named inconsistently. A duration box also had distracting up/down arrows, and several places had leftover dashes and wordy text.
+* **New behavior:**
+The 1-person test tool now only asks for an output folder, saves each take into a plainly numbered folder ("self test 1", "self test 2", etc.), and runs the same automatic setup check as the real sessions before recording starts. The smile slider is capped to a sane range. On the researcher screen, each participant's setup check now sits right under their own preset buttons instead of a separate shared box, and preset buttons are grouped into clear rows (neutral, smile, frown, voice) with consistent naming. The setup check's numbers, and the fact that a participant got calibrated, are both written into the session files, and the per-session README now explains what those numbers mean with a real example. Cleaned up wording and removed stray dashes across both screens.
+* **Why this matters:**
+Makes it much faster to test the app by yourself without filling out study paperwork, keeps the smile effect from ever looking excessive, and makes the researcher screen easier to read and less error-prone during a real session.
+
+---
+
 * **Date:** 07-09-2026
 * **Author:** Ismam Ferdous
 * **Changes Made:** Make setup checks wait for participant readiness

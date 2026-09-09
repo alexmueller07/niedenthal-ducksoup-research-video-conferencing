@@ -170,16 +170,16 @@ Each of the 192 triangles is affine-mapped from source to displaced destination 
 | Preset | α | `|α|` | Corner travel | Horizontal | Vertical | Extra |
 |---|---|---|---|---|---|---|
 | Neutral / Sham | 0.00 | 0 | — | — | — | none |
-| Smile + (subtle) | 0.35 | 0.35 | 0.0595 W | 0.0539 W out | +0.0251 W up | — |
-| Smile + (strong) | 0.90 | 0.90 | 0.1530 W | 0.1387 W out | +0.0647 W up | — |
+| Smile (subtle) | 0.35 | 0.35 | 0.0595 W | 0.0539 W out | +0.0251 W up | — |
+| Smile (strong) | 0.90 | 0.90 | 0.1530 W | 0.1387 W out | +0.0647 W up | — |
 | Lower voice | 0.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice −2 st |
 | Higher voice | 0.25 | 0.25 | 0.0425 W | 0.0385 W out | +0.0180 W up | voice +2 st |
 | Frown (subtle) | −0.40 | 0.40 | 0.0520 W | 0.0130 W in | −0.0520 W down | pout 0.0260 W |
 | Frown (strong) | −0.90 | 0.90 | 0.1170 W | 0.0293 W in | −0.1170 W down | pout 0.0585 W |
 
-The dashboard's manual sliders allow α ∈ [−2, 2] (step 0.05); the legacy capture station allows α ∈ [−2, 5] (step 0.1, unchanged — still uses the old 1 = neutral convention, see §12). Presets are the intended experimental conditions; free sliders are for calibration.
+Both the dashboard and the 1-Person Test Station (`renderer/pages/dashboard.tsx`) allow α ∈ [−2, 2] (step 0.05), using the same `0 = neutral` convention — see §12. Presets are the intended experimental conditions; free sliders are for calibration.
 
-At a mouth spanning ~150 px, "Smile + (strong)" moves each corner ≈23 px (≈21 out, ≈10 up). Exact figure scales with the participant's face size in frame.
+At a mouth spanning ~150 px, "Smile (strong)" moves each corner ≈23 px (≈21 out, ≈10 up). Exact figure scales with the participant's face size in frame.
 
 #### Head-yaw attenuation
 
@@ -225,7 +225,7 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 ```
 
 - `n = 0` → bypass.
-- Dashboard slider: −12…+12 st (step 1); legacy capture station: −8…+8 st. Values beyond ±12 have no additional effect (clamped internally).
+- Dashboard slider: −12…+12 st (step 1). The 1-Person Test Station has no voice control — it's video-only. Values beyond ±12 have no additional effect (clamped internally).
 - Presets: "Lower voice" = −2 st, "Higher voice" = +2 st (both with α = 0.25). All other presets = 0 st.
 - Reference: pitch ratio ≈ `2^(n/12)`; +2 st ≈ 1.122×, −2 st ≈ 0.891×, ±12 st = 2×/0.5×.
 
@@ -236,8 +236,8 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 | ID | Label | α | Voice (st) | Control? | Description |
 |---|---|---|---|---|---|
 | `neutral` | Neutral / Sham | 0 | 0 | yes | Full pipeline runs identically; face and voice unchanged. |
-| `smile-subtle` | Smile + (subtle) | 0.35 | 0 | no | Mildly increases smile intensity, often below conscious detection. |
-| `smile-strong` | Smile + (strong) | 0.9 | 0 | no | Clearly increases smile intensity. |
+| `smile-subtle` | Smile (subtle) | 0.35 | 0 | no | Mildly increases smile intensity, often below conscious detection. |
+| `smile-strong` | Smile (strong) | 0.9 | 0 | no | Clearly increases smile intensity. |
 | `frown-subtle` | Frown (subtle) | −0.4 | 0 | no | Mildly dampens the smile toward neutral/negative. |
 | `frown-strong` | Frown (strong) | −0.9 | 0 | no | Clearly shifts the mouth toward a frown. |
 | `warm-voice` | Lower voice | 0.25 | −2 | no | Subtle smile lift + slightly lower voice. |
@@ -329,7 +329,7 @@ Trigger expressions: `smiling` (any type), `reward-smile`, `affiliative-smile`, 
 
 ### 5.3 Builder UI
 
-Plain-language rows, e.g. `WHEN [P1] [is smiling] for [1] s THEN [P2] gets [Smile + (subtle)] · when it stops: [back to how they were]`. Edits are debounced 400 ms; server echoes are ignored for 1.5 s while typing to avoid clobbering an in-progress edit. A "+ template: mirror smiles" button adds two reciprocal rules (each participant's genuine smile subtly lifts the partner's).
+Plain-language rows, e.g. `WHEN [P1] [is smiling] for [1] s THEN [P2] gets [Smile (subtle)] · when it stops: [back to how they were]`. Edits are debounced 400 ms; server echoes are ignored for 1.5 s while typing to avoid clobbering an in-progress edit. A "+ template: mirror smiles" button adds two reciprocal rules (each participant's genuine smile subtly lifts the partner's).
 
 ---
 
@@ -452,7 +452,7 @@ Header: `seat, participant_id, type, started_date, started_time, stopped_date, s
 ### 8.4 Manifests
 
 - **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, detection:{P1:{classifierMode, classifierVersion}, P2:{...}} }` → `session.json`. `detection` is added automatically by `SessionLogger.writeManifest` from whatever each seat's telemetry reported first, so callers don't need to supply it.
-- **Legacy capture station** (`renderer/lib/capture.ts:310–330`): `{ schemaVersion:1, app:'DuckSoup Experimenter Platform', appVersion:'2.0.0', ... }` — the format the PPS questionnaire app reads. **The two formats differ**; see §12.
+- **1-Person Test Station** (`renderer/lib/capture.ts`): `{ schemaVersion:1, app:'DuckSoup Experimenter Platform', appVersion:'2.0.0', ... }` — a simplified manifest for quick self-testing (no study/dyad/participant IDs), not the PPS questionnaire pipeline's real intake format; see §12.
 
 ### 8.5 Recording format
 
@@ -563,8 +563,7 @@ Dev: `npm run dev` (Nextron) runs Next.js on port 8888 + Electron; `startupDelay
 |---|---|---|---|
 | Smile α (dashboard) | −2…2 | 0.05 | 0 |
 | Voice pitch (dashboard) | −12…+12 st | 1 | 0 |
-| Smile α (legacy capture) | −2…5 | 0.1 | 1 |
-| Voice pitch (legacy capture) | −8…+8 st | 1 | 0 |
+| Smile α (1-Person Test Station) | −2…2 | 0.05 | 0 |
 | Rule hold time | 0…30 s | 0.5 | — |
 | Timer minute/second | 0–180 / 0–59 | 1 | — |
 | Monitor volume | 0…1 | 0.05 | 0 (muted) |
@@ -581,7 +580,7 @@ Things to know before citing or relying on this software in a study.
 4. **Detection latency**: ~5 Hz sampling, 220 ms EMA smoothing, 350 ms debounce — expression onset is reported with up to ~0.5–0.7 s latency. Interpret rule "hold" durations accordingly.
 5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
-7. **The two alpha conventions differ.** The three-seat call app (this document, `main/presets.ts`, `EffectState.alpha`) uses `0 = neutral`. The legacy single-machine capture station (`renderer/pages/dashboard.tsx`, `renderer/lib/capture.ts`) still uses the older `1 = neutral` convention, left unchanged so its output stays compatible with the separate PPS questionnaire app that reads it. Don't compare an alpha number from one tool directly against the other without adjusting for this.
+7. **The 1-Person Test Station is a testing tool, not for study data collection.** `renderer/pages/dashboard.tsx`/`renderer/lib/capture.ts` share the same `0 = neutral` alpha convention as the three-seat call app (this document, `main/presets.ts`, `EffectState.alpha`) — there is no alpha-convention mismatch to adjust for. It also now runs the same automatic neutral/smile/frown setup check as the three-seat app's waiting room (see `renderer/lib/calibration.ts`). Its `SessionManifest` is a simplified shape (no study/dyad/participant IDs) meant for quick self-testing, not the PPS questionnaire pipeline's real intake format.
 
 ---
 
@@ -591,7 +590,7 @@ Things to know before citing or relying on this software in a study.
 
 | File | Role |
 |---|---|
-| `main.ts` | App entry; kiosk lockdown; permissions; server start/stop IPC; streamed-recording IPC; folder picker; legacy capture IPC. |
+| `main.ts` | App entry; kiosk lockdown; permissions; server start/stop IPC; streamed-recording IPC; folder picker; 1-Person Test Station IPC. |
 | `server.ts` | `SessionServer`: seats, signaling relay, effect routing, phase, rule engine host, logging, LAN IP discovery. |
 | `rules.ts` | `RuleEngine`: expression/timer triggers, holds, reverts, release modes. |
 | `presets.ts` | Modification conditions, `getPreset`, `counterbalanceConditions`. |
@@ -608,7 +607,7 @@ Things to know before citing or relying on this software in a study.
 | `faceMorph.ts` | `FaceMorphProcessor`: MediaPipe detection, smile/frown mesh warp, expression classifier. |
 | `voice.ts` | `VoiceProcessor`: Web Audio delay-line pitch shifter. |
 | `effects.ts` | `LiveEffects`: participant outgoing pipeline (clean + altered streams); test-face stream. |
-| `capture.ts` | `CaptureStation`: legacy single-machine capture+record engine (dashboard mode). |
+| `capture.ts` | `CaptureStation`: single-machine, single-person capture+record engine, with an automatic setup-check calibration (dashboard mode / 1-Person Test Station). |
 | `rtc.ts` | `PeerLink`: one WebRTC connection, perfect negotiation. |
 | `signaling.ts` | `SignalClient`: resilient WebSocket + `normalizeServerUrl`. |
 | `recording.ts` | MP4/WebM recorder-format selection. |
