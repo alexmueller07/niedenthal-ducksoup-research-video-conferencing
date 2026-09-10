@@ -454,6 +454,7 @@ export class CaptureStation {
     this.alteredStream = null
     this.cleanVideo.srcObject = null
     this.hiddenVideo.srcObject = null
+    this.alteredCtx.clearRect(0, 0, this.alteredCanvas.width, this.alteredCanvas.height)
     this.connection = 'disconnected'
     this.emit()
     this.log('Stopped')

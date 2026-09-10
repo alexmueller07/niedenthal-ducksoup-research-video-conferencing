@@ -19,6 +19,27 @@
 
 ## Update History
 
+* **Date:** 09-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Coupled eye/brow movement into the face morph and capped the test slider
+
+* **Previous behavior:**
+The face morph only moved the mouth region when smiling or frowning, leaving the eyes, brows, and forehead completely neutral — this mismatch was the biggest source of the effect looking fake. Separately, the 1-person test tool's smile slider went up to +/-2.00, well past the +/-0.90 ceiling any real session preset actually uses, and stopping a recording left the last altered frame frozen on screen instead of going blank like the clean feed.
+* **New behavior:**
+Smiling now also gives a subtle cheek-raise near the eyes, and frowning gives a subtle inner-brow lower/furrow, both scaled to a fraction of the mouth's intensity so they read as "the eyes are in on it" without becoming their own effect. The test tool's slider is capped to +/-0.75, and stopping a recording now blanks both the clean and altered video panes.
+* **Why this matters:**
+Real smiles and frowns engage more than just the mouth, so coupling in the eye/brow region should meaningfully reduce the uncanny look RAs flagged. Capping the slider keeps manual testing honest to what a real session can produce, and blanking both panes on stop avoids a stale frame looking like a lingering glitch.
+
+---
+
+* **Date:** 09-09-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Improve calibrated face morph stability
+
+-----DELETED-----
+
+---
+
 * **Date:** 08-09-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Simplified the 1-person test tool and cleaned up the researcher screen

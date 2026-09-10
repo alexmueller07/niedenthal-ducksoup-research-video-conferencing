@@ -207,7 +207,7 @@ export default function DashboardPage() {
 
               <div className="slider">
                 <div className="slider-head"><span>Smile (face)</span><span className="val">{alpha.toFixed(2)}</span></div>
-                <input type="range" min={-2} max={2} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
+                <input type="range" min={-0.75} max={0.75} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
                 <div className="ticks"><span>Frown</span><span>Neutral</span><span>Smile</span></div>
               </div>
             </section>

@@ -62,6 +62,10 @@ const RIGHT_OUTER_EYE = 263
 const NOSE_TIP = 1
 const LEFT_FACE_EDGE = 234
 const RIGHT_FACE_EDGE = 454
+// Brow + under-eye/cheek landmarks used for the eye-region coupling below —
+// bounds a small ROI per eye, the same way LIP_INDICES bounds the mouth ROI.
+const LEFT_BROW_EYE_INDICES = [70, 63, 105, 66, 107, 33, 145, 153, 154, 155, 133]
+const RIGHT_BROW_EYE_INDICES = [336, 296, 334, 293, 300, 263, 374, 380, 381, 382, 362]
 
 // ---- Morph tuning (calibrate with Randy; all displacements scale with mouth width) ----
 const SMILE_ANGLE_RAD = (25 * Math.PI) / 180 // corners move out+up at ~25° above horizontal
@@ -70,6 +74,17 @@ const FROWN_GAIN = 0.13 // corner-down travel per unit of -alpha
 const FROWN_INWARD = 0.25 // slight inward pull of the corners while frowning
 const FROWN_POUT = 0.5 // lower-lip-centre drop relative to corner drop
 const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
+// Eye/brow coupling — a real smile engages orbicularis oculi (cheek raise,
+// AU6) and a real frown engages corrugator (inner-brow lowerer, AU4). Running
+// the mouth warp with the eyes left untouched is the single biggest uncanny
+// cue (RA feedback), so we nudge the eye region too, at a fraction of the
+// mouth's intensity — enough to read as "the eyes are in on it" without being
+// its own distinct effect.
+const EYE_COUPLING_SCALE = 0.28 // eye-region strength as a fraction of mouth strength
+const BROW_CHEEK_GAIN = 0.22 // cheek-raise / brow-lower travel per unit of (scaled) strength
+const FROWN_BROW_INWARD = 0.4 // slight inward pull of the brows while frowning (furrow)
+const EYE_ROI_COLS = 6
+const EYE_ROI_ROWS = 4
 // Below this left/right face-half symmetry the morph fades out (side profile).
 const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
@@ -292,7 +307,35 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, this.alphaCurrent * yawScale)
+    const strength = this.alphaCurrent * yawScale
+    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
+
+    const eyeStrength = strength * EYE_COUPLING_SCALE
+    if (Math.abs(eyeStrength) >= 0.01) {
+      for (const indices of [LEFT_BROW_EYE_INDICES, RIGHT_BROW_EYE_INDICES]) {
+        let eMinX = Infinity
+        let eMinY = Infinity
+        let eMaxX = -Infinity
+        let eMaxY = -Infinity
+        for (const i of indices) {
+          const p = toPx(i)
+          eMinX = Math.min(eMinX, p.x)
+          eMinY = Math.min(eMinY, p.y)
+          eMaxX = Math.max(eMaxX, p.x)
+          eMaxY = Math.max(eMaxY, p.y)
+        }
+        const ePadX = mouthWidth * 0.15
+        const ePadTop = mouthWidth * 0.2
+        const ePadBottom = mouthWidth * 0.3
+        const eyeRoi = {
+          x: Math.max(0, eMinX - ePadX),
+          y: Math.max(0, eMinY - ePadTop),
+          w: Math.min(width, eMaxX + ePadX) - Math.max(0, eMinX - ePadX),
+          h: Math.min(height, eMaxY + ePadBottom) - Math.max(0, eMinY - ePadTop),
+        }
+        this.warpEyeRegion(dstCtx, eyeRoi, mouthWidth, eyeStrength)
+      }
+    }
     return true
   }
 
@@ -566,9 +609,6 @@ export class FaceMorphProcessor {
     mouthWidth: number,
     strength: number,
   ) {
-    const { cols, rows } = this
-    const srcPts: Pt[] = []
-    const dstPts: Pt[] = []
     const sigmaY = mouthWidth * 0.6
     const smiling = strength > 0
     const mag = Math.abs(strength) * mouthWidth
@@ -576,6 +616,86 @@ export class FaceMorphProcessor {
     const poutY = centerY + mouthWidth * 0.22
     const poutSigma = mouthWidth * 0.35
 
+    this.meshWarp(ctx, roi, this.cols, this.rows, (sx, sy, u, v) => {
+      // Horizontal position relative to mouth center, normalised to corners.
+      const xn = (sx - centerX) / (mouthWidth / 2)
+      // Vertical gaussian falloff around the mouth line.
+      const vy = Math.exp(-((sy - centerY) ** 2) / (2 * sigmaY * sigmaY))
+      // Edge window → 0 at ROI border so the warp blends seamlessly.
+      const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
+      // Corner weight: strongest at the mouth corners (xn² → 1), ~0 mid-mouth.
+      const cornerW = Math.min(1.6, xn * xn) * vy * win
+
+      let dx = 0
+      let dy = 0
+      if (smiling) {
+        // Corners travel out+up at ~25° above horizontal — out first, then up
+        // (RA feedback: straight-vertical lift looked unnatural).
+        const d = mag * SMILE_GAIN * cornerW
+        dx = Math.sign(xn) * Math.cos(SMILE_ANGLE_RAD) * d
+        dy = -Math.sin(SMILE_ANGLE_RAD) * d
+      } else {
+        // Frown: outer nodes pull down and slightly inward…
+        const d = mag * FROWN_GAIN * cornerW
+        dx = -Math.sign(xn) * FROWN_INWARD * d
+        dy = d
+        // …while the centre of the lower lip drops a little → a parabolic
+        // mouth with a hint of protruding lower lip, not a straight shift.
+        const centerW = Math.max(0, 1 - xn * xn)
+        const vb = Math.exp(-((sy - poutY) ** 2) / (2 * poutSigma * poutSigma))
+        dy += mag * FROWN_GAIN * FROWN_POUT * centerW * vb * win
+      }
+      return { x: dx, y: dy }
+    })
+  }
+
+  /**
+   * Couples a fraction of the mouth strength into the eye/brow region: a
+   * cheek-raise cue while smiling (AU6-ish), a brow-lower/furrow cue while
+   * frowning (AU4-ish). `roi` bounds one eye's brow + under-eye landmarks.
+   */
+  private warpEyeRegion(
+    ctx: CanvasRenderingContext2D,
+    roi: { x: number; y: number; w: number; h: number },
+    mouthWidth: number,
+    strength: number,
+  ) {
+    const smiling = strength > 0
+    const mag = Math.abs(strength) * mouthWidth
+    const centerX = roi.x + roi.w / 2
+
+    this.meshWarp(ctx, roi, EYE_ROI_COLS, EYE_ROI_ROWS, (sx, sy, u, v) => {
+      const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
+      const xn = (sx - centerX) / (roi.w / 2)
+
+      if (smiling) {
+        // Cheek/under-eye lifts toward the eye; weight peaks at the ROI's
+        // bottom edge (cheek) and fades out toward the brow so the brow
+        // itself stays put while smiling.
+        const liftW = v * win
+        return { x: 0, y: -mag * BROW_CHEEK_GAIN * liftW }
+      }
+      // Inner-brow lowers and pulls slightly inward (furrow); weight peaks at
+      // the ROI's top edge (brow) and fades toward the cheek.
+      const dropW = (1 - v) * win
+      return {
+        x: -Math.sign(xn) * FROWN_BROW_INWARD * mag * BROW_CHEEK_GAIN * dropW,
+        y: mag * BROW_CHEEK_GAIN * dropW,
+      }
+    })
+  }
+
+  /** Shared grid-warp mechanics: build a uniform grid over `roi`, displace each
+   * point per `displace`, and mesh-triangulate source → displaced destination. */
+  private meshWarp(
+    ctx: CanvasRenderingContext2D,
+    roi: { x: number; y: number; w: number; h: number },
+    cols: number,
+    rows: number,
+    displace: (sx: number, sy: number, u: number, v: number) => Pt,
+  ) {
+    const srcPts: Pt[] = []
+    const dstPts: Pt[] = []
     for (let r = 0; r <= rows; r++) {
       for (let c = 0; c <= cols; c++) {
         const u = c / cols
@@ -583,36 +703,8 @@ export class FaceMorphProcessor {
         const sx = roi.x + u * roi.w
         const sy = roi.y + v * roi.h
         srcPts.push({ x: sx, y: sy })
-
-        // Horizontal position relative to mouth center, normalised to corners.
-        const xn = (sx - centerX) / (mouthWidth / 2)
-        // Vertical gaussian falloff around the mouth line.
-        const vy = Math.exp(-((sy - centerY) ** 2) / (2 * sigmaY * sigmaY))
-        // Edge window → 0 at ROI border so the warp blends seamlessly.
-        const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
-        // Corner weight: strongest at the mouth corners (xn² → 1), ~0 mid-mouth.
-        const cornerW = Math.min(1.6, xn * xn) * vy * win
-
-        let dx = 0
-        let dy = 0
-        if (smiling) {
-          // Corners travel out+up at ~25° above horizontal — out first, then up
-          // (RA feedback: straight-vertical lift looked unnatural).
-          const d = mag * SMILE_GAIN * cornerW
-          dx = Math.sign(xn) * Math.cos(SMILE_ANGLE_RAD) * d
-          dy = -Math.sin(SMILE_ANGLE_RAD) * d
-        } else {
-          // Frown: outer nodes pull down and slightly inward…
-          const d = mag * FROWN_GAIN * cornerW
-          dx = -Math.sign(xn) * FROWN_INWARD * d
-          dy = d
-          // …while the centre of the lower lip drops a little → a parabolic
-          // mouth with a hint of protruding lower lip, not a straight shift.
-          const centerW = Math.max(0, 1 - xn * xn)
-          const vb = Math.exp(-((sy - poutY) ** 2) / (2 * poutSigma * poutSigma))
-          dy += mag * FROWN_GAIN * FROWN_POUT * centerW * vb * win
-        }
-        dstPts.push({ x: sx + dx, y: sy + dy })
+        const d = displace(sx, sy, u, v)
+        dstPts.push({ x: sx + d.x, y: sy + d.y })
       }
     }
 
