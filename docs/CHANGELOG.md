@@ -21,6 +21,19 @@
 
 * **Date:** 09-09-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Fixed frown detection getting stuck after calibration
+
+* **Previous behavior:**
+The expression detector decided smiling vs. frowning by checking smile first every time, and while labeled "smiling" it needed the smile signal to drop below a low "stay smiling" bar before it would even consider a frown. Because a relaxed face can score a real smile signal even when not smiling, this could keep the label stuck (or block a genuine frown outright) — reported as: frowning during calibration worked, but frowning the same way afterward didn't show up as a frown.
+* **New behavior:**
+Smile and frown are now checked independently each frame; if both cross their threshold at once, whichever one is over its threshold by more wins. A held frown can now override a stale "smiling" label instead of needing smile to fade first.
+* **Why this matters:**
+The detected-expression label feeds the researcher screen and the session logs, so a frown that silently fails to register undercounts real frowns and can throw off anything downstream that relies on that label.
+
+---
+
+* **Date:** 09-09-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Coupled eye/brow movement into the face morph and capped the test slider
 
 * **Previous behavior:**

@@ -114,8 +114,6 @@ export const DETECTION_TUNING = {
   smileOff: 0.45,
   frownOn: 0.03,
   frownOff: 0.01,
-  /** A frown only counts while the smile signal is below this. */
-  frownSmileGate: 0.75,
   /** Openness (upper-lip raise + jaw + lower-lip drop) above this → reward. */
   rewardOpenness: 0.2,
   /** Relative L/R asymmetry (smile + lip press, ÷ smile level) above this → dominance. */
@@ -420,23 +418,35 @@ export class FaceMorphProcessor {
     const labelFrown = normalized?.normalizedFrown ?? frown
     const rewardOpenness = normalized?.normalizedOpenness ?? openness
 
-    // Label with hysteresis: harder to enter a state than to stay in it. A
-    // frown needs the smile signal gone (a relaxed face can score smile ≈ 0.5).
+    // Label with hysteresis: harder to enter a state than to stay in it (the
+    // "off" bar only applies to whichever state is currently published).
+    //
+    // Smile and frown are checked independently rather than smile-first: a
+    // relaxed face's raw mouthSmile score can sit high enough (comment above)
+    // that a fixed smile-then-frown order could keep a stale "smiling" label
+    // (or block "frowning" outright) whenever that baseline noise stayed over
+    // smile's low "stay" bar — reported as "I frown after calibration and it
+    // never shows frowning." When both cross their bar at once, trust
+    // whichever is over it by the larger margin instead of always picking
+    // smile.
     const T = DETECTION_TUNING
     const smileOn = this.calibrationProfile?.thresholds.smileOn ?? T.smileOn
     const smileOff = this.calibrationProfile?.thresholds.smileOff ?? T.smileOff
     const frownOn = this.calibrationProfile?.thresholds.frownOn ?? T.frownOn
     const frownOff = this.calibrationProfile?.thresholds.frownOff ?? T.frownOff
-    const frownSmileGate = this.calibrationProfile ? 0.62 : T.frownSmileGate
-    const frowning = (on: boolean) =>
-      labelFrown >= (on ? frownOn : frownOff) && labelSmile < frownSmileGate
-    let label: ExpressionLabel = this.publishedLabel
-    if (this.publishedLabel === 'smiling') {
-      label = labelSmile >= smileOff ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
-    } else if (this.publishedLabel === 'frowning') {
-      label = frowning(false) ? 'frowning' : labelSmile >= smileOn ? 'smiling' : 'neutral'
+    const smileBar = this.publishedLabel === 'smiling' ? smileOff : smileOn
+    const frownBar = this.publishedLabel === 'frowning' ? frownOff : frownOn
+    const smileCandidate = labelSmile >= smileBar
+    const frownCandidate = labelFrown >= frownBar
+    let label: ExpressionLabel
+    if (smileCandidate && frownCandidate) {
+      label = labelSmile - smileBar >= labelFrown - frownBar ? 'smiling' : 'frowning'
+    } else if (smileCandidate) {
+      label = 'smiling'
+    } else if (frownCandidate) {
+      label = 'frowning'
     } else {
-      label = labelSmile >= smileOn ? 'smiling' : frowning(true) ? 'frowning' : 'neutral'
+      label = 'neutral'
     }
 
     const labelConfidence = this.labelConfidence(label, labelSmile, labelFrown, {
