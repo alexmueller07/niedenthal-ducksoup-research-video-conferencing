@@ -90,7 +90,7 @@ const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
 const CLASSIFIER_MODE = 'heuristic-subtype' as const
 const CLASSIFIER_VERSION = 'heuristic-contract-v1'
-const NORMALIZED_CLASSIFIER_VERSION = 'heuristic-contract-v2-face-shape-normalized'
+export const NORMALIZED_CLASSIFIER_VERSION = 'heuristic-contract-v2-face-shape-normalized'
 
 // ---- Detection tuning ----
 //

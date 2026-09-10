@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { CaptureStation } from '../lib/capture'
+import { NORMALIZED_CLASSIFIER_VERSION } from '../lib/faceMorph'
 import type { ExpressionState } from '../lib/protocol'
 import { PRESETS, getPreset, DEFAULT_PRESET_ID } from '../lib/presets'
 import type {
@@ -237,8 +238,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="detect-meta">
                   <span>{typeof expressionConfidence === 'number' ? `${Math.round(expressionConfidence * 100)}% confidence` : 'no reading yet'}</span>
-                  <span>{expression?.classifierMode ?? 'classifier idle'}</span>
-                  {expression?.classifierVersion && <span>{expression.classifierVersion}</span>}
+                  <span>{expression?.classifierVersion === NORMALIZED_CLASSIFIER_VERSION ? 'Calibrated' : 'Calibration not done'}</span>
                 </div>
               </div>
 
@@ -258,7 +258,7 @@ export default function DashboardPage() {
             )}
 
             <section className="output">
-              <h2>Output → questionnaire pipeline</h2>
+              <h2>Output</h2>
               {lastSaved ? (
                 <div className="saved">
                   <div className="saved-head">{lastSaved.sessionLabel} · {lastSaved.preset.label} · {lastSaved.durationSec}s</div>

@@ -21,6 +21,19 @@
 
 * **Date:** 09-09-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Simplified the detected-expression tag and output heading in the 1-person test tool
+
+* **Previous behavior:**
+The detected-expression box showed raw internal tags like "heuristic-subtype" and "heuristic-contract-v2-face-shape-normalized," which don't mean anything to someone reading the screen. The output section below it was also headed "Output → questionnaire pipeline," even though the 1-person test tool never runs a questionnaire.
+* **New behavior:**
+That box now just says "Calibrated" or "Calibration not done," and the output section is headed plain "Output."
+* **Why this matters:**
+Makes the researcher-facing text on that screen actually readable instead of leaking internal classifier version strings and a pipeline step that doesn't apply to this tool.
+
+---
+
+* **Date:** 09-09-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Fixed frown detection getting stuck after calibration
 
 * **Previous behavior:**
