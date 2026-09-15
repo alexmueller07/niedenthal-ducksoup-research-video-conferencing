@@ -2,7 +2,7 @@
 
 Architecture and implementation details for the Lab Video Call app. For a plain-language walkthrough of running a session, see the [researcher guide](for-non-technical-users.md).
 
-App version documented: `3.0.0` (`APP_VERSION` in `main/protocol.ts`).
+`APP_VERSION` (`main/protocol.ts`, mirrors `package.json`'s `version`) auto-bumps its patch number on every push to `main` — see §10.5 — so it will already have moved past `3.0.0` by the time you read this; check `package.json` for the current number.
 
 ## Contents
 
@@ -472,9 +472,9 @@ Access code `test` (`index.tsx:39`, `session.tsx:42–49, 275–301`). Runs the 
 
 - `electron-builder.yml`: appId `edu.wisc.niedenthal.labvideocall`, product name "Lab Video Call". Windows: NSIS installer. macOS: universal (Intel + Apple Silicon) DMG + ZIP.
 - macOS CI (`.github/workflows/build-mac.yml`) builds on every push/PR to `main`, on a GitHub `macos-latest` runner (no Mac needed locally), and uploads the DMG/ZIP as a 30-day workflow artifact — useful for testing a branch, but requires a GitHub login with repo access and expires.
-- **Releases** (`.github/workflows/release.yml`): every push to `main` builds both Windows (NSIS `.exe`) and macOS (`.dmg`/`.zip`) and publishes them to a single GitHub Release tagged `latest` — a permanent, public-facing download page, no repo access or expiry involved, no manual tagging or version bumping required. Each push overwrites the previous download with the new build, so `main` should only be updated when the app is in a shareable state.
+- **Releases** (`.github/workflows/release.yml`): every push to `main` auto-bumps the patch version (§10.5), builds both Windows (NSIS `.exe`) and macOS (`.dmg`/`.zip`), and publishes them to a single GitHub Release tagged `latest` — a permanent, public-facing download page, no repo access or expiry involved. Each push overwrites the previous download with the new build, so `main` should only be updated when the app is in a shareable state.
 - Builds are **unsigned** on both platforms (no code-signing certificate) — macOS testers must right-click → Open on first launch; Windows may show a SmartScreen warning ("More info" → "Run anyway").
-- Camera/mic Info.plist strings and entitlements (`resources/entitlements.mac.plist`) are set for a future signed build. On unsigned macOS builds, permission grants are tied to the code signature, so a fresh install may re-prompt for camera/mic access — a code-signing limitation, not a bug.
+- Camera/mic Info.plist strings and entitlements (`resources/entitlements.mac.plist`) are set for a future signed build. On unsigned macOS builds, permission grants are tied to the code signature, so a fresh install may re-prompt for camera/mic access — a code-signing limitation, not a bug. A real Apple Developer ID would fix this and also enable true silent auto-update (see §10.5 and known limitation #7).
 
 ### 10.2 Kiosk lockdown (participant machines)
 
@@ -491,6 +491,16 @@ The researcher window is a normal window; closing it mid-live prompts a confirma
 ### 10.4 Dev vs. production
 
 Dev: `npm run dev` (Nextron) runs Next.js on port 8888 + Electron; `startupDelay:30000` gives the renderer time to bind. `npm run server:dev` runs the standalone WebSocket server (`main/server-standalone.ts`) so the full three-client flow can be tested in three browser tabs without Electron (CSVs land in `scratchpad/dev-sessions/`). Production serves the statically-exported Next.js app from `app://` via `electron-serve`.
+
+### 10.5 Update checker
+
+`main/main.ts` (`app:check-update`, `app:open-external` IPC handlers), surfaced on the sign-in screen (`renderer/pages/index.tsx`) — the first thing anyone sees, before choosing a role — not on the dashboard. Not a real auto-updater — see known limitation #7.
+
+- **Versioning**: `scripts/bump-version.mjs` bumps `package.json`'s patch version and mirrors it into `APP_VERSION` (`main/protocol.ts`). `.github/workflows/release.yml` runs this on every push to `main`, before building, and pushes the bump back (commit message `chore: bump version [skip ci]` — the `[skip ci]` stops that push from re-triggering the same workflow). This is what makes each release a distinct, comparable version instead of every build claiming to be the same number.
+- On sign-in page load, the main process calls the GitHub Releases API for this repo's `latest` release, finds the `.dmg` asset, and pulls a version number out of its filename (`Lab-Video-Call-<version>-<arch>.dmg`).
+- If that version is newer than `APP_VERSION` (`main/protocol.ts`), an amber "Update available" banner appears above the sign-in card; clicking it opens the `.dmg` download URL in the default browser (`shell.openExternal`, restricted to `https://` URLs).
+- Installing it is still the same manual step as today: open the downloaded `.dmg`, right-click the app → Open.
+- Fails silently (no banner, nothing logged) if offline, rate-limited, or the release has no matching asset — this is a convenience, not something a session depends on.
 
 ---
 
@@ -580,7 +590,8 @@ Things to know before citing or relying on this software in a study.
 4. **Detection latency**: ~5 Hz sampling, 220 ms EMA smoothing, 350 ms debounce — expression onset is reported with up to ~0.5–0.7 s latency. Interpret rule "hold" durations accordingly.
 5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
-7. **The 1-Person Test Station is a testing tool, not for study data collection.** `renderer/pages/dashboard.tsx`/`renderer/lib/capture.ts` share the same `0 = neutral` alpha convention as the three-seat call app (this document, `main/presets.ts`, `EffectState.alpha`) — there is no alpha-convention mismatch to adjust for. It also now runs the same automatic neutral/smile/frown setup check as the three-seat app's waiting room (see `renderer/lib/calibration.ts`). Its `SessionManifest` is a simplified shape (no study/dyad/participant IDs) meant for quick self-testing, not the PPS questionnaire pipeline's real intake format.
+7. **There is no silent auto-update on macOS.** `electron-updater`'s Mac update mechanism (Squirrel.Mac) requires a real Apple Developer ID signature to verify updates come from the same publisher, which this app doesn't have. Instead, the sign-in screen checks GitHub Releases for a newer version and links the RA to the new installer (§10.5); installing it is still a manual right-click → Open, same as today.
+8. **The 1-Person Test Station is a testing tool, not for study data collection.** `renderer/pages/dashboard.tsx`/`renderer/lib/capture.ts` share the same `0 = neutral` alpha convention as the three-seat call app (this document, `main/presets.ts`, `EffectState.alpha`) — there is no alpha-convention mismatch to adjust for. It also now runs the same automatic neutral/smile/frown setup check as the three-seat app's waiting room (see `renderer/lib/calibration.ts`). Its `SessionManifest` is a simplified shape (no study/dyad/participant IDs) meant for quick self-testing, not the PPS questionnaire pipeline's real intake format.
 
 ---
 
@@ -590,7 +601,7 @@ Things to know before citing or relying on this software in a study.
 
 | File | Role |
 |---|---|
-| `main.ts` | App entry; kiosk lockdown; permissions; server start/stop IPC; streamed-recording IPC; folder picker; 1-Person Test Station IPC. |
+| `main.ts` | App entry; kiosk lockdown; permissions; server start/stop IPC; streamed-recording IPC; folder picker; 1-Person Test Station IPC; update check (§10.5). |
 | `server.ts` | `SessionServer`: seats, signaling relay, effect routing, phase, rule engine host, logging, LAN IP discovery. |
 | `rules.ts` | `RuleEngine`: expression/timer triggers, holds, reverts, release modes. |
 | `presets.ts` | Modification conditions, `getPreset`, `counterbalanceConditions`. |
@@ -622,9 +633,9 @@ Things to know before citing or relying on this software in a study.
 | `admin.tsx` | Researcher dashboard (panels, sliders, presets, rules, banners, mic, recordings, event log). |
 | `session.tsx` | Participant kiosk view (waiting/live/ended, PiP, banner, escape hatch, test-face panel). |
 | `dashboard.tsx` | Legacy "DuckSoup Capture Station" single-machine UI. |
-| `index.tsx` | Sign-in / role selection. |
+| `index.tsx` | Sign-in / role selection; update-checker banner (§10.5). |
 | `_app.tsx` | Next.js app shell. |
 
 ### Assets & config
 
-`renderer/public/mediapipe/` (vendored FaceLandmarker model + WASM); `renderer/public/images/test-faces/` (5 test faces); `smile_examples/` (5 calibration photos); `renderer/public/ducksoup.js` (vendored, unused); `resources/` (icons, mac entitlements); `electron-builder.yml`, `nextron.config.ts`, `renderer/next.config.ts`, `tsconfig*.json`, `.github/workflows/build-mac.yml`, `.github/workflows/release.yml`, `tests/e2e_test.py`.
+`renderer/public/mediapipe/` (vendored FaceLandmarker model + WASM); `renderer/public/images/test-faces/` (5 test faces); `smile_examples/` (5 calibration photos); `renderer/public/ducksoup.js` (vendored, unused); `resources/` (icons, mac entitlements); `electron-builder.yml`, `nextron.config.ts`, `renderer/next.config.ts`, `tsconfig*.json`, `.github/workflows/build-mac.yml`, `.github/workflows/release.yml`, `tests/e2e_test.py`, `scripts/bump-version.mjs` (version auto-bump, §10.5).

@@ -28,7 +28,7 @@ import Store from 'electron-store'
 import { createWindow } from './helpers/create-window'
 import { SessionServer, lanIps } from './server'
 import { SessionLogger } from './logger'
-import { DEFAULT_PORT } from './protocol'
+import { DEFAULT_PORT, APP_VERSION } from './protocol'
 import { patchMp4Duration } from './mp4duration'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -226,6 +226,46 @@ ipcMain.handle('role:admin', () => {
 })
 
 ipcMain.handle('app:platform', () => process.platform)
+
+// ---- Update check (no auto-update: macOS auto-update needs a real Apple
+// Developer ID signature, which this app doesn't have — see
+// docs/for-technical-users.md §10.5). This just tells the RA a newer build
+// exists and hands them the download link; installing it is still manual.
+const RELEASES_API =
+  'https://api.github.com/repos/alexmueller07/niedenthal-ducksoup-research-video-conferencing/releases/latest'
+
+function isNewerVersion(candidate: string, current: string): boolean {
+  const a = candidate.split('.').map(Number)
+  const b = current.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0)
+  }
+  return false
+}
+
+ipcMain.handle('app:check-update', async () => {
+  try {
+    const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } })
+    if (!res.ok) return null
+    const data = (await res.json()) as { assets?: { name: string; browser_download_url: string }[] }
+    const dmg = (data.assets || []).find((a) => /\.dmg$/i.test(a.name))
+    const match = dmg?.name.match(/(\d+\.\d+\.\d+)/)
+    if (!dmg || !match) return null
+    const latestVersion = match[1]
+    if (!isNewerVersion(latestVersion, APP_VERSION)) return null
+    return { latestVersion, downloadUrl: dmg.browser_download_url }
+  } catch {
+    return null // offline, rate-limited, etc. — this is a nice-to-have, fail quietly
+  }
+})
+
+ipcMain.handle('app:open-external', (_e, url: unknown) => {
+  if (typeof url === 'string' && /^https:\/\//.test(url)) {
+    void shell.openExternal(url)
+    return true
+  }
+  return false
+})
 
 // Launches a second, fully independent copy of the app (its own process, own
 // window) — mainly for testing researcher + participant views on one Mac,

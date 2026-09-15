@@ -2,8 +2,9 @@ name: Release
 
 # Builds Windows + macOS installers and publishes them to a single, always-
 # up-to-date GitHub Release ("latest") every time main is updated. No manual
-# tagging or version bumps needed. Mac build is unsigned (no Apple Developer
-# cert) — see build-mac.yml for details.
+# tagging needed — the version number auto-bumps (scripts/bump-version.mjs)
+# so the app's "Update available" check has something to compare against.
+# Mac build is unsigned (no Apple Developer cert) — see build-mac.yml.
 
 on:
   push:
@@ -13,7 +14,28 @@ permissions:
   contents: write
 
 jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          VERSION=$(node scripts/bump-version.mjs)
+          echo "Bumped to $VERSION"
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json main/protocol.ts
+          git commit -m "chore: bump version [skip ci]"
+          git push
+
   build-mac:
+    needs: bump-version
     runs-on: macos-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -21,6 +43,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: main # pick up the version bump just committed/pushed above
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -45,11 +69,14 @@ jobs:
           retention-days: 7
 
   build-win:
+    needs: bump-version
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: main # pick up the version bump just committed/pushed above
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
