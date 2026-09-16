@@ -3,9 +3,13 @@ name: Build macOS app
 # Builds a universal (Intel + Apple Silicon) macOS app of Lab Video Call on a
 # GitHub-hosted macOS runner, so it can be built without owning a Mac.
 #
-# The build is UNSIGNED (no Apple Developer cert). On first launch the tester
-# must right-click the app -> Open (see the email instructions), because macOS
-# Gatekeeper blocks unsigned apps opened by double-click.
+# Signed with a free Apple ID personal-team certificate (MAC_CSC_LINK /
+# MAC_CSC_KEY_PASSWORD secrets) so the code identity stays stable across
+# builds — this stops macOS re-prompting for camera/mic access on every
+# rebuild. It's still not notarized (that needs a paid Developer ID), so on
+# first launch the tester must right-click the app -> Open (see the email
+# instructions), because macOS Gatekeeper blocks unnotarized apps opened by
+# double-click.
 
 on:
   workflow_dispatch: # lets you trigger a build manually from the Actions tab
@@ -24,6 +28,10 @@ jobs:
       # Do not attempt to discover/use a code-signing identity in CI. Without
       # this, electron-builder can hang or fail looking for an Apple cert.
       CSC_IDENTITY_AUTO_DISCOVERY: false
+      # Free Apple ID personal-team certificate (.p12), used to sign the app
+      # so its code identity stays stable across builds/reinstalls.
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
     steps:
       - name: Check out repository

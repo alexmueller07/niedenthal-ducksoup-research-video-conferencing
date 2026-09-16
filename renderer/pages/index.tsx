@@ -26,6 +26,7 @@ export default function SignInPage() {
   const [joining, setJoining] = useState(false)
   const [isMac, setIsMac] = useState(false)
   const [launchingInstance, setLaunchingInstance] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -37,6 +38,9 @@ export default function SignInPage() {
       const platform = await ipcInvoke<string | null>('app:platform')
       setIsMac(platform === 'darwin')
     })()
+    ipcInvoke<{ latestVersion: string; downloadUrl: string }>('app:check-update').then(
+      (info) => setUpdateInfo(info),
+    )
   }, [])
 
   // Mac only opens one window per double-click by default, which makes it
@@ -113,6 +117,17 @@ export default function SignInPage() {
           </div>
           <h1 className="text-4xl font-semibold tracking-tight text-white">Video Call</h1>
         </div>
+
+        {updateInfo && (
+          <button
+            type="button"
+            onClick={() => void ipcInvoke('app:open-external', updateInfo.downloadUrl)}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/20 px-4 py-2.5 text-sm font-semibold text-amber-300 ring-1 ring-amber-500/40 transition hover:bg-amber-500/30"
+            title="Downloads a .dmg — install it the same way as before (right-click, Open)"
+          >
+            Update available — v{updateInfo.latestVersion} (click to download)
+          </button>
+        )}
 
         <div
           key={joinShake}

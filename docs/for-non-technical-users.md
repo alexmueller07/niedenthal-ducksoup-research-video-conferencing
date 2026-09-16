@@ -6,6 +6,8 @@ This is a plain-language guide to running a session. For technical details, see 
 
 Download the installer for your operating system from the [Releases page](https://github.com/alexmueller07/niedenthal-ducksoup-research-video-conferencing/releases) — grab the latest release, then the `.exe` (Windows) or `.dmg` (Mac). Since the app isn't code-signed yet, Windows may show a "Windows protected your PC" warning (click "More info" → "Run anyway") and Mac will refuse to open it on a double-click the first time (right-click the app → "Open" instead).
 
+Once it's installed, you don't need to keep checking that page yourself: whenever a newer version is available, the **sign-in screen** (the very first screen, before you type your name or access code) shows an amber **"Update available"** banner. Clicking it downloads the new `.dmg`; install it the same way as the first time (right-click → Open).
+
 ## What the app does
 
 Two participants sit at separate computers and have a conversation over video. A researcher (RA) sits at a third computer, invisible to both participants, and can:
