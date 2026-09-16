@@ -19,6 +19,19 @@
 
 ## Update History
 
+* **Date:** 15-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Signed mac builds so camera/mic permission stops resetting
+
+* **Previous behavior:**
+Every mac build had no real signature (an "ad-hoc" one), which changes each time the app is rebuilt. Mac ties camera/mic permission to that signature, so testers kept getting asked to allow camera/mic access over and over, even after already saying yes.
+* **New behavior:**
+Mac builds are now signed with a real (free) certificate that stays the same across builds, so the app should keep its camera/mic permission across rebuilds and reinstalls instead of asking again each time.
+* **Why this matters:**
+Testers were getting the "allow camera/microphone" popup repeatedly, which was confusing and looked broken. This should stop that from happening for most cases, without needing to pay for a full Apple developer account.
+
+---
+
 * **Date:** 09-09-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Simplified the detected-expression tag and output heading in the 1-person test tool
