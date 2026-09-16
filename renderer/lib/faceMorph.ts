@@ -62,10 +62,6 @@ const RIGHT_OUTER_EYE = 263
 const NOSE_TIP = 1
 const LEFT_FACE_EDGE = 234
 const RIGHT_FACE_EDGE = 454
-// Brow + under-eye/cheek landmarks used for the eye-region coupling below —
-// bounds a small ROI per eye, the same way LIP_INDICES bounds the mouth ROI.
-const LEFT_BROW_EYE_INDICES = [70, 63, 105, 66, 107, 33, 145, 153, 154, 155, 133]
-const RIGHT_BROW_EYE_INDICES = [336, 296, 334, 293, 300, 263, 374, 380, 381, 382, 362]
 
 // ---- Morph tuning (calibrate with Randy; all displacements scale with mouth width) ----
 const SMILE_ANGLE_RAD = (25 * Math.PI) / 180 // corners move out+up at ~25° above horizontal
@@ -74,17 +70,11 @@ const FROWN_GAIN = 0.13 // corner-down travel per unit of -alpha
 const FROWN_INWARD = 0.25 // slight inward pull of the corners while frowning
 const FROWN_POUT = 0.5 // lower-lip-centre drop relative to corner drop
 const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
-// Eye/brow coupling — a real smile engages orbicularis oculi (cheek raise,
-// AU6) and a real frown engages corrugator (inner-brow lowerer, AU4). Running
-// the mouth warp with the eyes left untouched is the single biggest uncanny
-// cue (RA feedback), so we nudge the eye region too, at a fraction of the
-// mouth's intensity — enough to read as "the eyes are in on it" without being
-// its own distinct effect.
-const EYE_COUPLING_SCALE = 0.28 // eye-region strength as a fraction of mouth strength
-const BROW_CHEEK_GAIN = 0.22 // cheek-raise / brow-lower travel per unit of (scaled) strength
-const FROWN_BROW_INWARD = 0.4 // slight inward pull of the brows while frowning (furrow)
-const EYE_ROI_COLS = 6
-const EYE_ROI_ROWS = 4
+const MORPH_SCALE_MIN = 0.85
+const MORPH_SCALE_MAX = 1.15
+const REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH = 0.38
+const REFERENCE_SMILE_RANGE = 0.16
+const REFERENCE_FROWN_RANGE = 0.075
 // Below this left/right face-half symmetry the morph fades out (side profile).
 const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
@@ -305,35 +295,8 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    const strength = this.alphaCurrent * yawScale
+    const strength = this.alphaCurrent * yawScale * this.calibratedMorphScale(this.alphaCurrent)
     this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
-
-    const eyeStrength = strength * EYE_COUPLING_SCALE
-    if (Math.abs(eyeStrength) >= 0.01) {
-      for (const indices of [LEFT_BROW_EYE_INDICES, RIGHT_BROW_EYE_INDICES]) {
-        let eMinX = Infinity
-        let eMinY = Infinity
-        let eMaxX = -Infinity
-        let eMaxY = -Infinity
-        for (const i of indices) {
-          const p = toPx(i)
-          eMinX = Math.min(eMinX, p.x)
-          eMinY = Math.min(eMinY, p.y)
-          eMaxX = Math.max(eMaxX, p.x)
-          eMaxY = Math.max(eMaxY, p.y)
-        }
-        const ePadX = mouthWidth * 0.15
-        const ePadTop = mouthWidth * 0.2
-        const ePadBottom = mouthWidth * 0.3
-        const eyeRoi = {
-          x: Math.max(0, eMinX - ePadX),
-          y: Math.max(0, eMinY - ePadTop),
-          w: Math.min(width, eMaxX + ePadX) - Math.max(0, eMinX - ePadX),
-          h: Math.min(height, eMaxY + ePadBottom) - Math.max(0, eMinY - ePadTop),
-        }
-        this.warpEyeRegion(dstCtx, eyeRoi, mouthWidth, eyeStrength)
-      }
-    }
     return true
   }
 
@@ -370,10 +333,22 @@ export class FaceMorphProcessor {
     const smile = (smileL + smileR) / 2
     const frownL = ema('frownL', g('mouthFrownLeft'))
     const frownR = ema('frownR', g('mouthFrownRight'))
-    const frown = (frownL + frownR) / 2
     const pressL = ema('pressL', g('mouthPressLeft'))
     const pressR = ema('pressR', g('mouthPressRight'))
     const lipPress = (pressL + pressR) / 2
+    const pucker = ema('pucker', g('mouthPucker'))
+    const funnel = ema('funnel', g('mouthFunnel'))
+    const shrugLower = ema('shrugLower', g('mouthShrugLower'))
+    const cornerFrown = (frownL + frownR) / 2
+    // MediaPipe's mouthFrown can miss a closed-lip pout, so frown evidence also
+    // includes clear lip protrusion/funneling while suppressing it during actual
+    // smiles. Plain lip pressure is deliberately excluded: relaxed closed lips
+    // can press together naturally and should not read as frowning.
+    const smileSuppression = 1 - clamp01(((smileL + smileR) / 2 - 0.25) / 0.45)
+    const poutShape = Math.max(pucker * 0.55, funnel * 0.5, shrugLower * 0.6)
+    const poutClarity = clamp01((poutShape - 0.035) / 0.09)
+    const poutFrown = poutShape * poutClarity * smileSuppression
+    const frown = Math.max(cornerFrown, poutFrown)
     const upperUpL = ema('upperUpL', g('mouthUpperUpLeft'))
     const upperUpR = ema('upperUpR', g('mouthUpperUpRight'))
     const jawOpen = ema('jawOpen', g('jawOpen'))
@@ -607,6 +582,36 @@ export class FaceMorphProcessor {
 
   // ---- Warp ----
 
+  private calibratedMorphScale(alpha: number): number {
+    const profile = this.calibrationProfile
+    if (!profile) return 1
+
+    const neutral = profile.steps.neutral
+    const active = alpha >= 0 ? profile.steps.smile : profile.steps.frown
+    const minimum = alpha >= 0 ? 0.08 : 0.025
+    const referenceRange = alpha >= 0 ? REFERENCE_SMILE_RANGE : REFERENCE_FROWN_RANGE
+    const activeValue =
+      alpha >= 0
+        ? Math.max(active.smileMean, active.smileMax * 0.85, neutral.smileMean + minimum)
+        : Math.max(active.frownMean, active.frownMax * 0.85, neutral.frownMean + minimum)
+    const neutralValue = alpha >= 0 ? neutral.smileMean : neutral.frownMean
+    const expressionRange = Math.max(minimum, activeValue - neutralValue)
+    const expressivenessScale = clamp(
+      referenceRange / Math.max(minimum, expressionRange),
+      MORPH_SCALE_MIN,
+      MORPH_SCALE_MAX,
+    )
+    const mouthScale = neutral.mouthWidthToFaceWidthMean
+      ? clamp(
+          REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH / neutral.mouthWidthToFaceWidthMean,
+          MORPH_SCALE_MIN,
+          MORPH_SCALE_MAX,
+        )
+      : 1
+
+    return clamp(mouthScale * expressivenessScale, MORPH_SCALE_MIN, MORPH_SCALE_MAX)
+  }
+
   /**
    * Mesh-warp the ROI. `strength` is alpha after yaw attenuation:
    * positive → smile (corners out+up), negative → frown (parabolic, pout).
@@ -656,42 +661,6 @@ export class FaceMorphProcessor {
         dy += mag * FROWN_GAIN * FROWN_POUT * centerW * vb * win
       }
       return { x: dx, y: dy }
-    })
-  }
-
-  /**
-   * Couples a fraction of the mouth strength into the eye/brow region: a
-   * cheek-raise cue while smiling (AU6-ish), a brow-lower/furrow cue while
-   * frowning (AU4-ish). `roi` bounds one eye's brow + under-eye landmarks.
-   */
-  private warpEyeRegion(
-    ctx: CanvasRenderingContext2D,
-    roi: { x: number; y: number; w: number; h: number },
-    mouthWidth: number,
-    strength: number,
-  ) {
-    const smiling = strength > 0
-    const mag = Math.abs(strength) * mouthWidth
-    const centerX = roi.x + roi.w / 2
-
-    this.meshWarp(ctx, roi, EYE_ROI_COLS, EYE_ROI_ROWS, (sx, sy, u, v) => {
-      const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
-      const xn = (sx - centerX) / (roi.w / 2)
-
-      if (smiling) {
-        // Cheek/under-eye lifts toward the eye; weight peaks at the ROI's
-        // bottom edge (cheek) and fades out toward the brow so the brow
-        // itself stays put while smiling.
-        const liftW = v * win
-        return { x: 0, y: -mag * BROW_CHEEK_GAIN * liftW }
-      }
-      // Inner-brow lowers and pulls slightly inward (furrow); weight peaks at
-      // the ROI's top edge (brow) and fades toward the cheek.
-      const dropW = (1 - v) * win
-      return {
-        x: -Math.sign(xn) * FROWN_BROW_INWARD * mag * BROW_CHEEK_GAIN * dropW,
-        y: mag * BROW_CHEEK_GAIN * dropW,
-      }
     })
   }
 
@@ -800,6 +769,10 @@ export class FaceMorphProcessor {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return v < min ? min : v > max ? max : v
 }
 
 function round2(v: number): number {

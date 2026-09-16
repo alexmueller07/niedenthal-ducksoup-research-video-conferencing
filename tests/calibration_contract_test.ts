@@ -93,6 +93,14 @@ assert.deepEqual(calibrationStepReadiness('frown', samples(expression({ frown: 0
   ready: true,
   status: 'ready',
 })
+assert.deepEqual(calibrationStepReadiness('frown', samples(expression({ frown: 0.013 }), 1)[0]), {
+  ready: true,
+  status: 'ready',
+})
+assert.deepEqual(calibrationStepReadiness('frown', samples(expression({ frown: 0.008 }), 1)[0]), {
+  ready: false,
+  status: 'waiting-for-frown',
+})
 
 const noFace = summarizeCalibrationStep(
   'req_5',
@@ -161,6 +169,8 @@ const profile = buildExpressionCalibrationProfile({
   frown: completed('frown', { frownMean: 0.12, frownMax: 0.16 }),
 })
 assert.ok(profile)
+assert.equal(profile.thresholds.frownOn, 0.42)
+assert.equal(profile.thresholds.frownOff, 0.2)
 
 const neutralish = normalizeExpressionFeatures(
   { smile: 0.5, frown: 0, openness: 0, faceShape: expression().faceShape },

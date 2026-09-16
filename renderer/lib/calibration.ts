@@ -13,10 +13,10 @@ export const FACE_SHAPE_NORMALIZATION_VERSION = 'face-shape-normalization-v1'
 export const FACE_SHAPE_NORMALIZATION_THRESHOLDS = {
   smileOn: 0.58,
   smileOff: 0.32,
-  frownOn: 0.5,
-  frownOff: 0.28,
+  frownOn: 0.42,
+  frownOff: 0.2,
   minSmileRange: 0.08,
-  minFrownRange: 0.025,
+  minFrownRange: 0.018,
   minOpennessRange: 0.12,
   rewardOpennessDelta: 0.12,
   rewardMouthOpenRatioDelta: 0.06,
@@ -96,7 +96,7 @@ export function calibrationStepReadiness(
       : { ready: false, status: 'waiting-for-smile' }
   }
 
-  return expression.frown >= 0.018
+  return expression.frown >= 0.012
     ? { ready: true, status: 'ready' }
     : { ready: false, status: 'waiting-for-frown' }
 }
@@ -206,7 +206,7 @@ export function summarizeCalibrationStep(
   }
 
   if (step === 'frown') {
-    if (metrics.frownMax < 0.025 && metrics.frownMean < 0.015) {
+    if (metrics.frownMax < 0.018 && metrics.frownMean <= 0.01) {
       qualityFlags.push('weak_frown')
     }
   }
