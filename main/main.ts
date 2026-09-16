@@ -67,9 +67,10 @@ function loadRoute(win: BrowserWindow, route: string) {
   //     each getUserMedia call race its own prompt.
   //  2. Chromium's own permission check: grant media requests outright — this
   //     is a kiosk lab app, the OS-level permission is the real gate.
-  // Note for Ben: on an UNSIGNED (ad-hoc) build, macOS forgets the grant when a
-  // differently-signed build replaces the app, so a fresh install may ask once
-  // more. That's a code-signing limitation, not an app bug.
+  // Note for Ben: builds are now signed with a free Apple ID personal-team
+  // certificate (see build-mac.yml), so the code identity stays stable across
+  // rebuilds and macOS should keep the grant across reinstalls. Builds are
+  // still not notarized, so first launch still needs right-click -> Open.
   if (process.platform === 'darwin') {
     try {
       await systemPreferences.askForMediaAccess('microphone')

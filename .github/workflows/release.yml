@@ -4,7 +4,8 @@ name: Release
 # up-to-date GitHub Release ("latest") every time main is updated. No manual
 # tagging needed — the version number auto-bumps (scripts/bump-version.mjs)
 # so the app's "Update available" check has something to compare against.
-# Mac build is unsigned (no Apple Developer cert) — see build-mac.yml.
+# Mac build is signed with a free Apple ID personal-team cert, not notarized
+# — see build-mac.yml.
 
 on:
   push:
@@ -39,6 +40,8 @@ jobs:
     runs-on: macos-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
     steps:
       - name: Check out repository
