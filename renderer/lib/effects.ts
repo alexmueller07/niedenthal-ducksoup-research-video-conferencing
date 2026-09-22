@@ -220,6 +220,7 @@ export class LiveEffects {
       faceFound: this.face.faceFound,
       fps: this.currentFps(),
       cameraOn: !!this.camera && this.camera.getVideoTracks().some((t) => t.readyState === 'live'),
+      calibration: this.face.calibration,
       expression: this.face.expression,
     }
   }

@@ -135,6 +135,8 @@ export interface Telemetry extends EffectState {
   /** Render-loop frames per second of the morph pipeline. */
   fps: number
   cameraOn: boolean
+  /** Session-only calibration/morph health for researcher monitoring. */
+  calibration?: CalibrationRuntimeState
   /** Latest detected real-face expression (also streamed at ~5 Hz separately). */
   expression?: ExpressionState | null
 }
@@ -157,6 +159,13 @@ export type PSlot = 'P1' | 'P2'
 export type CalibrationStep = 'neutral' | 'smile' | 'frown'
 export type CalibrationTarget = PSlot | 'both'
 export type CalibrationStepStatus = 'complete' | 'needs-retake'
+export type CalibrationConfidenceState =
+  | 'uncalibrated'
+  | 'collecting'
+  | 'usable'
+  | 'strong'
+  | 'weak'
+  | 'invalid'
 export type CalibrationQualityFlag =
   | 'insufficient_samples'
   | 'face_not_visible'
@@ -165,6 +174,7 @@ export type CalibrationQualityFlag =
   | 'teeth_detected'
   | 'weak_smile'
   | 'weak_frown'
+  | 'passive_low_expression_range'
 
 export interface CalibrationMetrics {
   smileMean: number
@@ -196,6 +206,21 @@ export interface ExpressionCalibrationProfile {
   version: string
   acceptedAt: string
   steps: Record<CalibrationStep, CalibrationMetrics>
+  confidence?: {
+    state: CalibrationConfidenceState
+    detectionConfidence: number
+    morphConfidence: number
+    neutralConfidence: number
+    expressionRangeConfidence: number
+    warnings: CalibrationQualityFlag[]
+  }
+  morph?: {
+    mouthProportionScale: number
+    smileExpressivenessScale: number
+    frownExpressivenessScale: number
+    minScale: number
+    maxScale: number
+  }
   thresholds: {
     smileOn: number
     smileOff: number
@@ -204,6 +229,18 @@ export interface ExpressionCalibrationProfile {
     rewardOpenness: number
     rewardMouthOpenRatio: number
   }
+}
+
+export interface CalibrationRuntimeState {
+  state: CalibrationConfidenceState
+  detectionConfidence: number
+  morphConfidence: number
+  mouthProportionScale: number
+  smileExpressivenessScale: number
+  frownExpressivenessScale: number
+  activeMorphScale: number
+  acceptedAt?: string
+  warnings?: CalibrationQualityFlag[]
 }
 
 export type RuleExpression =

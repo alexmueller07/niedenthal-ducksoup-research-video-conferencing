@@ -1,5 +1,6 @@
 import type {
   CalibrationQualityFlag,
+  CalibrationConfidenceState,
   CalibrationStep,
   CalibrationStepResult,
   ExpressionCalibrationProfile,
@@ -57,6 +58,13 @@ export const CALIBRATION_SAMPLE_MS = 100
 export const CALIBRATION_READY_TIMEOUT_MS = 10000
 export const CALIBRATION_MAX_AUTO_RETRIES = 2
 export const CALIBRATION_RETRY_PAUSE_MS = 1400
+export const PASSIVE_CALIBRATION_COLLECT_MS = 15000
+export const PASSIVE_CALIBRATION_STEP_COLLECT_MS = 7000
+export const MORPH_CONFIDENCE_SCALE_MIN = 0.85
+export const MORPH_CONFIDENCE_SCALE_MAX = 1.15
+const REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH = 0.38
+const REFERENCE_SMILE_RANGE = 0.16
+const REFERENCE_FROWN_RANGE = 0.075
 
 export type CalibrationReadinessStatus =
   | 'ready'
@@ -222,6 +230,50 @@ export function summarizeCalibrationStep(
   }
 }
 
+export function summarizePassiveCalibration(
+  requestId: string,
+  samples: CalibrationSample[],
+  steps: CalibrationStep[] = CALIBRATION_STEPS,
+): Partial<Record<CalibrationStep, CalibrationStepResult>> {
+  const usable = samples.filter(isUsablePassiveSample)
+  const neutralCandidates = usable.filter(isPassiveNeutralCandidate)
+  const neutralSource = neutralCandidates.length >= 8 ? neutralCandidates : usable
+  const neutral = buildPassiveStepResult(requestId, 'neutral', neutralSource, samples.length)
+
+  const neutralSmile = neutral.metrics.smileMean
+  const neutralFrown = neutral.metrics.frownMean
+  const smileCandidates = topExpressionSamples(
+    usable.filter((s) => (s.expression?.smile ?? 0) >= neutralSmile + 0.035),
+    'smile',
+  )
+  const frownCandidates = topExpressionSamples(
+    usable.filter((s) => (s.expression?.frown ?? 0) >= neutralFrown + 0.008),
+    'frown',
+  )
+
+  const results: Partial<Record<CalibrationStep, CalibrationStepResult>> = {}
+  if (steps.includes('neutral')) results.neutral = neutral
+  if (steps.includes('smile')) {
+    results.smile = buildPassiveStepResult(
+      requestId,
+      'smile',
+      smileCandidates.length > 0 ? smileCandidates : usable,
+      samples.length,
+      neutral,
+    )
+  }
+  if (steps.includes('frown')) {
+    results.frown = buildPassiveStepResult(
+      requestId,
+      'frown',
+      frownCandidates.length > 0 ? frownCandidates : usable,
+      samples.length,
+      neutral,
+    )
+  }
+  return results
+}
+
 export interface NormalizedExpressionFeatures {
   normalizedSmile: number
   normalizedFrown: number
@@ -250,6 +302,9 @@ export function buildExpressionCalibrationProfile(
     return null
   }
 
+  const confidence = estimateCalibrationConfidence(results)
+  if (confidence.state === 'invalid') return null
+
   const rewardOpenness = Math.max(
     FACE_SHAPE_NORMALIZATION_THRESHOLDS.minRewardOpenness,
     smile.metrics.opennessMax + FACE_SHAPE_NORMALIZATION_THRESHOLDS.rewardOpennessDelta,
@@ -269,6 +324,8 @@ export function buildExpressionCalibrationProfile(
       smile: smile.metrics,
       frown: frown.metrics,
     },
+    confidence,
+    morph: buildMorphScaling(neutral.metrics, smile.metrics, frown.metrics),
     thresholds: {
       smileOn: FACE_SHAPE_NORMALIZATION_THRESHOLDS.smileOn,
       smileOff: FACE_SHAPE_NORMALIZATION_THRESHOLDS.smileOff,
@@ -277,6 +334,91 @@ export function buildExpressionCalibrationProfile(
       rewardOpenness: round2(rewardOpenness),
       rewardMouthOpenRatio: round2(rewardMouthOpenRatio),
     },
+  }
+}
+
+export function estimateCalibrationConfidence(
+  results: Partial<Record<CalibrationStep, CalibrationStepResult>>,
+): NonNullable<ExpressionCalibrationProfile['confidence']> {
+  const neutral = results.neutral
+  const smile = results.smile
+  const frown = results.frown
+  const warnings = uniqueFlags(CALIBRATION_STEPS.flatMap((step) => results[step]?.qualityFlags ?? []))
+
+  if (!neutral || neutral.status !== 'complete') {
+    return {
+      state: 'invalid',
+      detectionConfidence: 0,
+      morphConfidence: 0,
+      neutralConfidence: 0,
+      expressionRangeConfidence: 0,
+      warnings,
+    }
+  }
+
+  const neutralQuality = clamp01(
+    neutral.metrics.faceVisibleRatio * 0.45 +
+      clamp01((neutral.metrics.yawSymmetryMean - 0.45) / 0.45) * 0.35 +
+      clamp01(1 - neutral.metrics.mouthCornerTiltMean / 0.09) * 0.2,
+  )
+  const smileRange = smile ? expressionRange(neutral.metrics.smileMean, smile.metrics.smileMean, smile.metrics.smileMax) : 0
+  const frownRange = frown ? expressionRange(neutral.metrics.frownMean, frown.metrics.frownMean, frown.metrics.frownMax) : 0
+  const smileCoverage = clamp01(smileRange / FACE_SHAPE_NORMALIZATION_THRESHOLDS.minSmileRange)
+  const frownCoverage = clamp01(frownRange / FACE_SHAPE_NORMALIZATION_THRESHOLDS.minFrownRange)
+  const rangeConfidence = round2((smileCoverage + frownCoverage) / 2)
+  const detectionConfidence = round2(clamp01(neutralQuality * 0.45 + rangeConfidence * 0.55))
+  const morphConfidence = round2(clamp01(neutralQuality * 0.72 + rangeConfidence * 0.28))
+  const state: CalibrationConfidenceState =
+    morphConfidence >= 0.82 && detectionConfidence >= 0.75
+      ? 'strong'
+      : morphConfidence >= 0.62
+        ? 'usable'
+        : 'weak'
+
+  return {
+    state,
+    detectionConfidence,
+    morphConfidence,
+    neutralConfidence: round2(neutralQuality),
+    expressionRangeConfidence: rangeConfidence,
+    warnings,
+  }
+}
+
+export function buildMorphScaling(
+  neutral: CalibrationStepResult['metrics'],
+  smile: CalibrationStepResult['metrics'],
+  frown: CalibrationStepResult['metrics'],
+): NonNullable<ExpressionCalibrationProfile['morph']> {
+  const mouthProportionScale = neutral.mouthWidthToFaceWidthMean
+    ? clamp(
+        REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH / neutral.mouthWidthToFaceWidthMean,
+        MORPH_CONFIDENCE_SCALE_MIN,
+        MORPH_CONFIDENCE_SCALE_MAX,
+      )
+    : 1
+  const smileRange = activeRange(
+    neutral.smileMean,
+    smile.smileMean,
+    smile.smileMax,
+    FACE_SHAPE_NORMALIZATION_THRESHOLDS.minSmileRange,
+  )
+  const frownRange = activeRange(
+    neutral.frownMean,
+    frown.frownMean,
+    frown.frownMax,
+    FACE_SHAPE_NORMALIZATION_THRESHOLDS.minFrownRange,
+  )
+  return {
+    mouthProportionScale: round2(mouthProportionScale),
+    smileExpressivenessScale: round2(
+      clamp(REFERENCE_SMILE_RANGE / smileRange, MORPH_CONFIDENCE_SCALE_MIN, MORPH_CONFIDENCE_SCALE_MAX),
+    ),
+    frownExpressivenessScale: round2(
+      clamp(REFERENCE_FROWN_RANGE / frownRange, MORPH_CONFIDENCE_SCALE_MIN, MORPH_CONFIDENCE_SCALE_MAX),
+    ),
+    minScale: MORPH_CONFIDENCE_SCALE_MIN,
+    maxScale: MORPH_CONFIDENCE_SCALE_MAX,
   }
 }
 
@@ -336,6 +478,100 @@ function activeRange(neutral: number, meanValue: number, maxValue: number, minim
   return Math.max(minimum, active - neutral)
 }
 
+function buildPassiveStepResult(
+  requestId: string,
+  step: CalibrationStep,
+  samples: CalibrationSample[],
+  totalSamples: number,
+  neutral?: CalibrationStepResult,
+): CalibrationStepResult {
+  const result = summarizeCalibrationStep(requestId, step, samples)
+  const faceVisibleRatio =
+    totalSamples === 0
+      ? 0
+      : samples.filter((s) => s.telemetry?.faceFound || s.expression !== null).length / totalSamples
+  const qualityFlags = result.qualityFlags.filter(
+    (flag) => flag !== 'weak_smile' && flag !== 'weak_frown' && flag !== 'not_relaxed',
+  )
+
+  if (step === 'neutral') {
+    if (samples.length < 10 || result.metrics.faceVisibleRatio < 0.65) {
+      if (!qualityFlags.includes('insufficient_samples')) qualityFlags.push('insufficient_samples')
+    }
+    return {
+      ...result,
+      status: qualityFlags.includes('insufficient_samples') || qualityFlags.includes('face_not_visible')
+        ? 'needs-retake'
+        : 'complete',
+      metrics: { ...result.metrics, faceVisibleRatio: round2(faceVisibleRatio || result.metrics.faceVisibleRatio) },
+      qualityFlags,
+    }
+  }
+
+  if (neutral) {
+    const range =
+      step === 'smile'
+        ? expressionRange(neutral.metrics.smileMean, result.metrics.smileMean, result.metrics.smileMax)
+        : expressionRange(neutral.metrics.frownMean, result.metrics.frownMean, result.metrics.frownMax)
+    const minimum =
+      step === 'smile'
+        ? FACE_SHAPE_NORMALIZATION_THRESHOLDS.minSmileRange
+        : FACE_SHAPE_NORMALIZATION_THRESHOLDS.minFrownRange
+    if (range < minimum && !qualityFlags.includes('passive_low_expression_range')) {
+      qualityFlags.push('passive_low_expression_range')
+    }
+  }
+
+  return {
+    ...result,
+    status: qualityFlags.includes('insufficient_samples') || qualityFlags.includes('face_not_visible')
+      ? 'needs-retake'
+      : 'complete',
+    metrics: { ...result.metrics, faceVisibleRatio: round2(faceVisibleRatio || result.metrics.faceVisibleRatio) },
+    qualityFlags,
+  }
+}
+
+function isUsablePassiveSample(sample: CalibrationSample): boolean {
+  const e = sample.expression
+  if (!e || !(sample.telemetry?.faceFound ?? true)) return false
+  if ((sample.telemetry?.fps ?? 30) < 12) return false
+  const shape = e.faceShape
+  if (!shape) return false
+  if (shape.yawSymmetry < FACE_SHAPE_NORMALIZATION_THRESHOLDS.minYawSymmetry) return false
+  if (shape.mouthCornerTilt > 0.11) return false
+  return true
+}
+
+function isPassiveNeutralCandidate(sample: CalibrationSample): boolean {
+  const e = sample.expression
+  if (!e?.faceShape) return false
+  return (
+    e.smile < 0.62 &&
+    e.frown < 0.06 &&
+    e.openness < 0.18 &&
+    e.lipPress < 0.28 &&
+    e.faceShape.mouthOpenRatio < 0.11
+  )
+}
+
+function topExpressionSamples(samples: CalibrationSample[], step: 'smile' | 'frown'): CalibrationSample[] {
+  const sorted = [...samples].sort((a, b) => {
+    const av = step === 'smile' ? a.expression?.smile ?? 0 : a.expression?.frown ?? 0
+    const bv = step === 'smile' ? b.expression?.smile ?? 0 : b.expression?.frown ?? 0
+    return bv - av
+  })
+  return sorted.slice(0, Math.max(10, Math.ceil(sorted.length * 0.35)))
+}
+
+function expressionRange(neutral: number, meanValue: number, maxValue: number): number {
+  return Math.max(0, Math.max(meanValue, maxValue * 0.85) - neutral)
+}
+
+function uniqueFlags(flags: CalibrationQualityFlag[]): CalibrationQualityFlag[] {
+  return Array.from(new Set(flags))
+}
+
 function mean(values: number[]): number {
   if (values.length === 0) return 0
   return values.reduce((sum, v) => sum + v, 0) / values.length
@@ -353,6 +589,11 @@ function round2(value: number): number {
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0
   return Math.min(1, Math.max(0, value))
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(max, Math.max(min, value))
 }
 
 function isNumber(value: number | undefined): value is number {

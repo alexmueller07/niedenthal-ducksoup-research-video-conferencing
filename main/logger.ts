@@ -85,6 +85,13 @@ export interface EffectStateInput {
   normalizationVersion?: string
   classifierMode?: string
   classifierVersion?: string
+  calibrationState?: string
+  calibrationDetectionConfidence?: number
+  calibrationMorphConfidence?: number
+  mouthProportionScale?: number
+  smileExpressivenessScale?: number
+  frownExpressivenessScale?: number
+  activeMorphScale?: number
   /** Raw MediaPipe facial-movement scores (0..1) behind the expression label — not OpenFace/FACS AUs. */
   rawMouthSmileLeft?: number
   rawMouthSmileRight?: number
@@ -120,7 +127,7 @@ export interface RecordingStopInput {
 
 const EVENT_HEADER = 'seat,name,role,date,time,elapsed_ms,event,target,parameter,value,details\n'
 const STATE_HEADER =
-  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,normalized_smile,normalized_frown,normalized_openness,smile_margin,frown_margin,normalization_applied,normalization_version,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
+  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,normalized_smile,normalized_frown,normalized_openness,smile_margin,frown_margin,normalization_applied,normalization_version,calibration_state,calibration_detection_confidence,calibration_morph_confidence,mouth_proportion_scale,smile_expressiveness_scale,frown_expressiveness_scale,active_morph_scale,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
 const RECORDINGS_HEADER =
   'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
@@ -399,6 +406,13 @@ export class SessionLogger {
         csvField(input.frownMargin ?? ''),
         csvField(input.normalizationApplied ?? ''),
         csvField(input.normalizationVersion ?? ''),
+        csvField(input.calibrationState ?? ''),
+        csvField(input.calibrationDetectionConfidence ?? ''),
+        csvField(input.calibrationMorphConfidence ?? ''),
+        csvField(input.mouthProportionScale ?? ''),
+        csvField(input.smileExpressivenessScale ?? ''),
+        csvField(input.frownExpressivenessScale ?? ''),
+        csvField(input.activeMorphScale ?? ''),
         input.rawMouthSmileLeft ?? '',
         input.rawMouthSmileRight ?? '',
         input.rawMouthFrownLeft ?? '',

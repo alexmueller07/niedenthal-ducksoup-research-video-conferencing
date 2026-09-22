@@ -31,6 +31,7 @@
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import { normalizeExpressionFeatures } from './calibration'
 import type {
+  CalibrationRuntimeState,
   ExpressionCalibrationProfile,
   ExpressionLabel,
   ExpressionState,
@@ -142,6 +143,7 @@ export class FaceMorphProcessor {
   private lastExpression: ExpressionState | null = null
   private lastFaceTs = 0
   private calibrationProfile: ExpressionCalibrationProfile | null = null
+  private activeMorphScale = 1
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -191,6 +193,32 @@ export class FaceMorphProcessor {
   /** Latest detected REAL expression (null until a face has been seen). */
   get expression(): ExpressionState | null {
     return this.lastExpression
+  }
+
+  get calibration(): CalibrationRuntimeState {
+    const profile = this.calibrationProfile
+    if (!profile) {
+      return {
+        state: 'uncalibrated',
+        detectionConfidence: 0,
+        morphConfidence: 0,
+        mouthProportionScale: 1,
+        smileExpressivenessScale: 1,
+        frownExpressivenessScale: 1,
+        activeMorphScale: 1,
+      }
+    }
+    return {
+      state: profile.confidence?.state ?? 'usable',
+      detectionConfidence: profile.confidence?.detectionConfidence ?? 0.65,
+      morphConfidence: profile.confidence?.morphConfidence ?? 0.65,
+      mouthProportionScale: profile.morph?.mouthProportionScale ?? 1,
+      smileExpressivenessScale: profile.morph?.smileExpressivenessScale ?? 1,
+      frownExpressivenessScale: profile.morph?.frownExpressivenessScale ?? 1,
+      activeMorphScale: round2(this.activeMorphScale),
+      acceptedAt: profile.acceptedAt,
+      warnings: profile.confidence?.warnings,
+    }
   }
 
   /**
@@ -295,7 +323,9 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    const strength = this.alphaCurrent * yawScale * this.calibratedMorphScale(this.alphaCurrent)
+    const morphScale = this.calibratedMorphScale(this.alphaCurrent)
+    this.activeMorphScale = morphScale
+    const strength = this.alphaCurrent * yawScale * morphScale
     this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
     return true
   }
@@ -585,6 +615,16 @@ export class FaceMorphProcessor {
   private calibratedMorphScale(alpha: number): number {
     const profile = this.calibrationProfile
     if (!profile) return 1
+
+    if (profile.morph) {
+      const expressionScale =
+        alpha >= 0 ? profile.morph.smileExpressivenessScale : profile.morph.frownExpressivenessScale
+      return clamp(
+        profile.morph.mouthProportionScale * expressionScale,
+        profile.morph.minScale,
+        profile.morph.maxScale,
+      )
+    }
 
     const neutral = profile.steps.neutral
     const active = alpha >= 0 ? profile.steps.smile : profile.steps.frown

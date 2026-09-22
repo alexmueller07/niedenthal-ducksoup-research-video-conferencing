@@ -12,16 +12,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { LiveEffects } from '../lib/effects'
 import {
-  CALIBRATION_COLLECT_MS,
-  CALIBRATION_MAX_AUTO_RETRIES,
-  CALIBRATION_PREP_MS,
-  CALIBRATION_PROMPTS,
-  CALIBRATION_READY_TIMEOUT_MS,
-  CALIBRATION_RETRY_PAUSE_MS,
   CALIBRATION_SAMPLE_MS,
-  calibrationStepReadiness,
-  calibrationRetryInstruction,
-  summarizeCalibrationStep,
+  PASSIVE_CALIBRATION_COLLECT_MS,
+  PASSIVE_CALIBRATION_STEP_COLLECT_MS,
+  summarizePassiveCalibration,
   type CalibrationSample,
 } from '../lib/calibration'
 import { SignalClient, SignalStatus, normalizeServerUrl } from '../lib/signaling'
@@ -368,145 +362,31 @@ export default function ParticipantSession() {
     }
 
     async function runSetupCheck(requestId: string, steps: CalibrationStep[], runId: number) {
-      const maxAttempts = CALIBRATION_MAX_AUTO_RETRIES + 1
-      for (let i = 0; i < steps.length; i++) {
-        if (setupRunRef.current !== runId) return
-        const step = steps[i]
-        const prompt = CALIBRATION_PROMPTS[step]
-        const index = i + 1
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          if (setupRunRef.current !== runId) return
-          setSetupCheck({
-            title: prompt.title,
-            instruction: prompt.instruction,
-            step,
-            index,
-            total: steps.length,
-            attempt,
-            maxAttempts,
-            phase: 'prepare',
-            progress: 0,
-            qualityFlags: [],
-          })
-          sendEvent('calibration_prompt_shown', {
-            param: 'step',
-            value: step,
-            detail: { requestId, step, index, total: steps.length, attempt, maxAttempts },
-          })
-          await sleep(CALIBRATION_PREP_MS)
-          if (setupRunRef.current !== runId) return
-
-          const result = await collectSetupStep(
-            requestId,
-            step,
-            runId,
-            index,
-            steps.length,
-            attempt,
-            maxAttempts,
-          )
-          if (!result || setupRunRef.current !== runId) return
-
-          if (result.status === 'complete') {
-            client.send({ type: 'calibration-result', result })
-            setSetupCheck({
-              title: prompt.title,
-              instruction: 'Recorded. Please hold for the next check.',
-              step,
-              index,
-              total: steps.length,
-              attempt,
-              maxAttempts,
-              phase: 'complete',
-              progress: 1,
-              qualityFlags: result.qualityFlags,
-            })
-            await sleep(650)
-            break
-          }
-
-          if (attempt < maxAttempts) {
-            sendEvent('calibration_auto_retake', {
-              param: 'step',
-              value: step,
-              detail: {
-                requestId,
-                step,
-                index,
-                total: steps.length,
-                attempt,
-                nextAttempt: attempt + 1,
-                maxAttempts,
-                qualityFlags: result.qualityFlags,
-                metrics: result.metrics,
-              },
-            })
-            setSetupCheck({
-              title: prompt.title,
-              instruction: calibrationRetryInstruction(step, result.qualityFlags),
-              step,
-              index,
-              total: steps.length,
-              attempt: attempt + 1,
-              maxAttempts,
-              phase: 'retrying',
-              progress: 1,
-              qualityFlags: result.qualityFlags,
-            })
-            await sleep(CALIBRATION_RETRY_PAUSE_MS)
-            continue
-          }
-
-          client.send({ type: 'calibration-result', result })
-          setSetupCheck({
-            title: prompt.title,
-            instruction: 'Please wait while the researcher checks your setup.',
-            step,
-            index,
-            total: steps.length,
-            attempt,
-            maxAttempts,
-            phase: 'paused',
-            progress: 1,
-            qualityFlags: result.qualityFlags,
-          })
-          return
-        }
-      }
-
-      if (setupRunRef.current !== runId) return
-      setSetupCheck({
-        title: 'Video setup check',
-        instruction: 'Setup check complete. Please wait for the researcher to begin.',
-        step: 'done',
-        index: steps.length,
-        total: steps.length,
-        attempt: 1,
-        maxAttempts: 1,
-        phase: 'done',
-        progress: 1,
-        qualityFlags: [],
+      setSetupCheck(null)
+      sendEvent('passive_calibration_started', {
+        param: 'steps',
+        value: steps.join('|'),
+        detail: { requestId, steps },
       })
-      await sleep(1800)
-      if (setupRunRef.current === runId) setSetupCheck(null)
+      const samples = await collectPassiveSetupSamples(runId, steps.length > 1)
+      if (!samples || setupRunRef.current !== runId) return
+      const results = summarizePassiveCalibration(requestId, samples, steps)
+      for (const step of steps) {
+        const result = results[step]
+        if (result) client.send({ type: 'calibration-result', result })
+      }
+      sendEvent('passive_calibration_completed', {
+        param: 'steps',
+        value: steps.join('|'),
+        detail: { requestId, steps, samples: samples.length, results },
+      })
     }
 
-    function collectSetupStep(
-      requestId: string,
-      step: CalibrationStep,
-      runId: number,
-      index: number,
-      total: number,
-      attempt: number,
-      maxAttempts: number,
-    ) {
+    function collectPassiveSetupSamples(runId: number, fullRun: boolean) {
       const observedSamples: CalibrationSample[] = []
-      let heldSamples: CalibrationSample[] = []
       const started = performance.now()
-      let readyStarted: number | null = null
-      const prompt = CALIBRATION_PROMPTS[step]
-      return new Promise<ReturnType<typeof summarizeCalibrationStep> | null>((resolve) => {
+      const duration = fullRun ? PASSIVE_CALIBRATION_COLLECT_MS : PASSIVE_CALIBRATION_STEP_COLLECT_MS
+      return new Promise<CalibrationSample[] | null>((resolve) => {
         const timer = setInterval(() => {
           if (setupRunRef.current !== runId) {
             clearInterval(timer)
@@ -520,52 +400,9 @@ export default function ParticipantSession() {
             telemetry: fx?.telemetry() ?? null,
           }
           observedSamples.push(sample)
-
-          const readiness = calibrationStepReadiness(step, sample)
-          if (!readiness.ready) {
-            readyStarted = null
-            heldSamples = []
-            setSetupCheck({
-              title: prompt.title,
-              instruction: prompt.instruction,
-              step,
-              index,
-              total,
-              attempt,
-              maxAttempts,
-              phase: 'waiting',
-              progress: 0,
-              qualityFlags: [],
-            })
-            if (now - started >= CALIBRATION_READY_TIMEOUT_MS) {
-              clearInterval(timer)
-              resolve(summarizeCalibrationStep(requestId, step, observedSamples))
-            }
-            return
-          }
-
-          if (readyStarted === null) {
-            readyStarted = now
-            heldSamples = []
-          }
-          heldSamples.push(sample)
-
-          const progress = Math.min(1, (now - readyStarted) / CALIBRATION_COLLECT_MS)
-          setSetupCheck({
-            title: prompt.title,
-            instruction: prompt.instruction,
-            step,
-            index,
-            total,
-            attempt,
-            maxAttempts,
-            phase: 'collecting',
-            progress,
-            qualityFlags: [],
-          })
-          if (progress >= 1) {
+          if (now - started >= duration) {
             clearInterval(timer)
-            resolve(summarizeCalibrationStep(requestId, step, heldSamples))
+            resolve(observedSamples)
           }
         }, CALIBRATION_SAMPLE_MS)
       })
@@ -961,10 +798,6 @@ export default function ParticipantSession() {
       `}</style>
     </div>
   )
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function Spinner() {

@@ -19,6 +19,7 @@ import {
   buildExpressionCalibrationProfile,
   CALIBRATION_PROMPTS,
   CALIBRATION_STEPS,
+  estimateCalibrationConfidence,
 } from '../lib/calibration'
 import { pickRecorderFormat } from '../lib/recording'
 import {
@@ -29,6 +30,7 @@ import {
 import type {
   AutomationRule,
   CalibrationQualityFlag,
+  CalibrationRuntimeState,
   CalibrationStep,
   CalibrationStepResult,
   EffectState,
@@ -96,6 +98,7 @@ const QUALITY_FLAG_LABELS: Record<CalibrationQualityFlag, string> = {
   teeth_detected: 'Teeth/open mouth',
   weak_smile: 'Smile too subtle',
   weak_frown: 'Frown too subtle',
+  passive_low_expression_range: 'Limited expression range',
 }
 
 function emptyCalibrationSlot(): CalibrationSlotState {
@@ -848,6 +851,7 @@ export default function AdminDashboard() {
               onIdentity={(identity) => setIdentity(slot, identity)}
               phase={phase}
               calibrationState={calibration[slot]}
+              calibrationRuntime={telemetry[slot]?.calibration}
               onRunCalibration={() => requestCalibration(slot, CALIBRATION_STEPS)}
               onRetakeCalibration={(step) => requestCalibration(slot, [step])}
               onAcceptCalibration={() => acceptCalibration(slot)}
@@ -1113,6 +1117,7 @@ function CalibrationSlotRow({
   name,
   connected,
   state,
+  runtime,
   onRetake,
   onAccept,
 }: {
@@ -1120,12 +1125,20 @@ function CalibrationSlotRow({
   name: string
   connected: boolean
   state: CalibrationSlotState
+  runtime?: CalibrationRuntimeState
   onRetake: (slot: PSlot, step: CalibrationStep) => void
   onAccept: (slot: PSlot) => void
 }) {
   const ready = calibrationReady(state) && state.status !== 'accepted'
   const flags = CALIBRATION_STEPS.flatMap((step) => state.results[step]?.qualityFlags ?? [])
   const uniqueFlags = Array.from(new Set(flags))
+  const pendingConfidence = Object.keys(state.results).length > 0
+    ? estimateCalibrationConfidence(state.results)
+    : null
+  const detectionConfidence =
+    runtime?.detectionConfidence ?? pendingConfidence?.detectionConfidence ?? 0
+  const morphConfidence = runtime?.morphConfidence ?? pendingConfidence?.morphConfidence ?? 0
+  const calibrationKind = state.status === 'accepted' ? runtime?.state ?? 'usable' : pendingConfidence?.state ?? state.status
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-950/45 p-3">
@@ -1139,9 +1152,24 @@ function CalibrationSlotRow({
           </p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${calibrationStatusClass(state.status, connected)}`}>
-          {connected ? state.status.replace('-', ' ') : 'offline'}
+          {connected ? calibrationKind.replace('-', ' ') : 'offline'}
         </span>
       </div>
+
+      {(pendingConfidence || runtime) && (
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[10.5px]">
+          <CalibrationMeter label="Detection" value={detectionConfidence} />
+          <CalibrationMeter label="Morph" value={morphConfidence} />
+          <div className="rounded-lg bg-gray-900/80 px-2 py-1.5 text-gray-400">
+            <p className="font-medium text-gray-300">Mouth scale</p>
+            <p>{formatScale(runtime?.mouthProportionScale ?? pendingMorphScale(state, 'mouth'))}</p>
+          </div>
+          <div className="rounded-lg bg-gray-900/80 px-2 py-1.5 text-gray-400">
+            <p className="font-medium text-gray-300">Active scale</p>
+            <p>{formatScale(runtime?.activeMorphScale ?? 1)}</p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-3 gap-1.5">
         {CALIBRATION_STEPS.map((step) => (
@@ -1192,7 +1220,7 @@ function CalibrationSlotRow({
             disabled={!connected}
             className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-[11px] font-medium text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
           >
-            Retake {CALIBRATION_PROMPTS[step].shortLabel}
+            Collect {CALIBRATION_PROMPTS[step].shortLabel}
           </button>
         ))}
         <button
@@ -1206,6 +1234,41 @@ function CalibrationSlotRow({
       </div>
     </div>
   )
+}
+
+function CalibrationMeter({ label, value }: { label: string; value: number }) {
+  const pct = Math.round(value * 100)
+  const tone =
+    pct >= 80
+      ? 'bg-emerald-500 text-emerald-100'
+      : pct >= 60
+        ? 'bg-sky-500 text-sky-100'
+        : pct >= 35
+          ? 'bg-amber-500 text-amber-100'
+          : 'bg-red-500 text-red-100'
+  return (
+    <div className="rounded-lg bg-gray-900/80 px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-gray-300">{label}</p>
+        <p className="font-mono text-gray-200">{pct}%</p>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-800">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function pendingMorphScale(state: CalibrationSlotState, kind: 'mouth'): number {
+  if (kind !== 'mouth') return 1
+  const neutral = state.results.neutral
+  const value = neutral?.metrics.mouthWidthToFaceWidthMean
+  if (!value) return 1
+  return Math.min(1.15, Math.max(0.85, 0.38 / value))
+}
+
+function formatScale(value: number): string {
+  return Number.isFinite(value) ? `${value.toFixed(2)}x` : '--'
 }
 
 function StepPill({
@@ -1270,6 +1333,7 @@ interface PanelProps {
   onIdentity: (identity: Identity) => void
   phase: Phase
   calibrationState: CalibrationSlotState
+  calibrationRuntime?: CalibrationRuntimeState
   onRunCalibration: () => void
   onRetakeCalibration: (step: CalibrationStep) => void
   onAcceptCalibration: () => void
@@ -1287,6 +1351,7 @@ function ParticipantPanel({
   onIdentity,
   phase,
   calibrationState,
+  calibrationRuntime,
   onRunCalibration,
   onRetakeCalibration,
   onAcceptCalibration,
@@ -1527,6 +1592,7 @@ function ParticipantPanel({
             name={info?.identity.name || (slot === 'P1' ? 'Participant 1' : 'Participant 2')}
             connected={!!info}
             state={calibrationState}
+            runtime={calibrationRuntime}
             onRetake={(_slot, step) => onRetakeCalibration(step)}
             onAccept={() => onAcceptCalibration()}
           />

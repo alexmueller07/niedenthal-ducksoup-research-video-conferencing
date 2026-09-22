@@ -6,7 +6,9 @@ import {
   buildExpressionCalibrationProfile,
   calibrationStepReadiness,
   calibrationRetryInstruction,
+  estimateCalibrationConfidence,
   normalizeExpressionFeatures,
+  summarizePassiveCalibration,
   summarizeCalibrationStep,
   type CalibrationSample,
 } from '../renderer/lib/calibration'
@@ -196,5 +198,37 @@ const openMouth = normalizeExpressionFeatures(
   profile,
 )
 assert.ok(openMouth.normalizedOpenness > 0.9)
+
+const passiveNeutral = samples(expression({ smile: 0.18, frown: 0.01 }), 60)
+const passiveSmile = samples(expression({ label: 'smiling', smile: 0.58, frown: 0.01 }), 15)
+const passiveFrown = samples(expression({ label: 'frowning', smile: 0.08, frown: 0.04 }), 15)
+const passiveResults = summarizePassiveCalibration('passive_1', [
+  ...passiveNeutral,
+  ...passiveSmile,
+  ...passiveFrown,
+])
+assert.equal(passiveResults.neutral?.status, 'complete')
+assert.equal(passiveResults.smile?.status, 'complete')
+assert.equal(passiveResults.frown?.status, 'complete')
+assert.ok(passiveResults.neutral.metrics.faceVisibleRatio > 0.6)
+assert.ok(passiveResults.smile.metrics.smileMax > passiveResults.neutral.metrics.smileMean)
+
+const passiveConfidence = estimateCalibrationConfidence(passiveResults)
+assert.notEqual(passiveConfidence.state, 'invalid')
+assert.ok(passiveConfidence.morphConfidence > 0.5)
+assert.ok(passiveConfidence.morphConfidence <= 1)
+
+const passiveProfile = buildExpressionCalibrationProfile(passiveResults)
+assert.ok(passiveProfile)
+assert.ok(passiveProfile.confidence)
+assert.ok(passiveProfile.morph)
+assert.ok(passiveProfile.morph.mouthProportionScale >= 0.85)
+assert.ok(passiveProfile.morph.mouthProportionScale <= 1.15)
+
+const weakPassiveResults = summarizePassiveCalibration('passive_2', passiveNeutral)
+assert.equal(weakPassiveResults.neutral?.status, 'complete')
+assert.ok(weakPassiveResults.smile?.qualityFlags.includes('passive_low_expression_range'))
+assert.ok(weakPassiveResults.frown?.qualityFlags.includes('passive_low_expression_range'))
+assert.notEqual(estimateCalibrationConfidence(weakPassiveResults).state, 'invalid')
 
 console.log('calibration contract checks passed')
