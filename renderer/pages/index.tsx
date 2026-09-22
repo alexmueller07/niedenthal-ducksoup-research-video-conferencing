@@ -27,6 +27,7 @@ export default function SignInPage() {
   const [isMac, setIsMac] = useState(false)
   const [launchingInstance, setLaunchingInstance] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null)
+  const [showSignIn, setShowSignIn] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -106,8 +107,63 @@ export default function SignInPage() {
   const missingParticipantId = !!joinError && !participantId.trim()
   const missingDyadId = !!joinError && !dyadId.trim()
 
+  if (!showSignIn) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6 text-white">
+        <div className="pointer-events-none absolute inset-0 opacity-45">
+          <div
+            className="h-full w-full"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(96, 165, 250, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(96, 165, 250, 0.06) 1px, transparent 1px)',
+              backgroundSize: '30px 30px',
+            }}
+          />
+        </div>
+        <main className="relative flex min-h-[560px] w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/70 px-8 py-14 shadow-2xl ring-1 ring-sky-500/10 backdrop-blur">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-400/70 to-transparent" />
+          <div className="absolute inset-y-12 left-0 w-px bg-gradient-to-b from-transparent via-sky-500/35 to-transparent" />
+          <div className="absolute inset-y-12 right-0 w-px bg-gradient-to-b from-transparent via-violet-500/35 to-transparent" />
+          <div className="relative text-center">
+            <div className="mx-auto mb-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
+              <svg viewBox="0 0 24 24" className="h-8 w-8 text-sky-300" fill="currentColor" aria-hidden="true">
+                <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z" />
+              </svg>
+            </div>
+            <h1 className="text-6xl font-black leading-none tracking-normal text-white drop-shadow-[0_0_30px_rgba(56,189,248,0.14)] sm:text-7xl md:text-8xl">
+              Session
+              <br />
+              <span className="font-black italic text-sky-100">View</span>
+            </h1>
+            <button
+              type="button"
+              onClick={() => setShowSignIn(true)}
+              className="mt-20 rounded-full bg-white px-12 py-4 text-sm font-black uppercase tracking-[0.18em] text-gray-950 shadow-[0_0_38px_rgba(56,189,248,0.22)] transition hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-400/30"
+            >
+              Continue
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6">
+    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6">
+      <button
+        type="button"
+        onClick={() => {
+          setJoinError('')
+          setShowSignIn(false)
+        }}
+        className="absolute left-6 top-6 inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900/80 px-4 py-2.5 text-sm font-semibold text-gray-200 shadow-lg backdrop-blur transition hover:border-sky-500/60 hover:bg-gray-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+      >
+        <span className="text-lg leading-none" aria-hidden="true">
+          ‹
+        </span>
+        Back
+      </button>
+
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
@@ -115,7 +171,7 @@ export default function SignInPage() {
               <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z" />
             </svg>
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-white">Video Call</h1>
+          <h1 className="text-4xl font-semibold tracking-normal text-white">Session View</h1>
         </div>
 
         {updateInfo && (

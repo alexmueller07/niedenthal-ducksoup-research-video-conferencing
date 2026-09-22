@@ -376,7 +376,9 @@ export class FaceMorphProcessor {
     // can press together naturally and should not read as frowning.
     const smileSuppression = 1 - clamp01(((smileL + smileR) / 2 - 0.25) / 0.45)
     const poutShape = Math.max(pucker * 0.55, funnel * 0.5, shrugLower * 0.6)
-    const poutClarity = clamp01((poutShape - 0.035) / 0.09)
+    const cornerSupport = clamp01((cornerFrown - 0.006) / 0.035)
+    const pressPenalty = clamp01(1 - Math.max(0, lipPress - 0.22) / 0.25)
+    const poutClarity = clamp01((poutShape - 0.045) / 0.09) * Math.max(0.45, cornerSupport) * pressPenalty
     const poutFrown = poutShape * poutClarity * smileSuppression
     const frown = Math.max(cornerFrown, poutFrown)
     const upperUpL = ema('upperUpL', g('mouthUpperUpLeft'))

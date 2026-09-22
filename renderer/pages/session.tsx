@@ -78,6 +78,10 @@ const TEST_FACES = [
   { id: 'frown', label: 'Frown', url: '/images/test-faces/frown.png' },
 ]
 
+const CAMERA_QUALITY_MESSAGE =
+  'Please look toward the screen while we finish checking camera quality.'
+const CAMERA_QUALITY_MESSAGE_SEC = 5
+
 export default function ParticipantSession() {
   const router = useRouter()
 
@@ -358,7 +362,20 @@ export default function ParticipantSession() {
     function startSetupCheck(requestId: string, steps: CalibrationStep[]) {
       const runId = setupRunRef.current + 1
       setupRunRef.current = runId
+      showParticipantBanner(CAMERA_QUALITY_MESSAGE, CAMERA_QUALITY_MESSAGE_SEC)
+      sendEvent('message_shown', {
+        detail: { text: CAMERA_QUALITY_MESSAGE, durationSec: CAMERA_QUALITY_MESSAGE_SEC },
+      })
       void runSetupCheck(requestId, steps, runId)
+    }
+
+    function showParticipantBanner(text: string, durationSec: number) {
+      if (bannerTimer.current) clearTimeout(bannerTimer.current)
+      setBanner({ text, key: Date.now() })
+      bannerTimer.current = setTimeout(
+        () => setBanner(null),
+        Math.max(1, durationSec) * 1000,
+      )
     }
 
     async function runSetupCheck(requestId: string, steps: CalibrationStep[], runId: number) {
