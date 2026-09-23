@@ -131,12 +131,60 @@ fixed geometry, so α = 1.0 uncalibrated behaves exactly as α = 1.0 always did.
 | `cornerTravel` | `SMILE_GAIN` 0.17 / `FROWN_GAIN` 0.13 | Corner travel at their maximum, in mouth-widths |
 | `cornerAngleRad` | `SMILE_ANGLE_RAD` 25° / `FROWN_INWARD` 0.25 | The direction their corners actually travel |
 | `poutDrop` | `FROWN_POUT` 0.5 | Lower-lip-centre drop at their maximum frown |
+| `cheekRise` | — | How far their cheeks rise toward the eyes (§3.4) |
+| `browRise` | — | How far their brows move, **signed** — some people raise, some lower |
+| `browFurrow` | — | How far their inner brow ends pull together |
 
 Both directions now use one displacement formula, because the calibrated angle already points out+up
 for a smile and down+in for a frown.
 
 Safety rails, so a bad calibration cannot produce a dead or grotesque morph: `cornerTravel` is
 clamped to `[0.04, 0.35]` mouth-widths and `cornerAngleRad` to `[10°, 45°]` (mirrored for a frown).
+
+#### The rest of the face
+
+A mouth that changes while the cheeks and brows stay frozen is the clearest giveaway that an
+expression isn't real — reported from a live test, where the calibrated mouth morph looked right but
+the face around it didn't follow. Those three measurements are taken from the **same** calibration
+takes (no extra takes), and driven by the **same** capped alpha as the mouth, so the whole face moves
+together by one share of that person's maximum and the total cap covers it for free.
+
+Signs are normalized so positive always means what people expect (cheeks up, brows up, inner brows
+together), but `browRise` deliberately keeps its sign: someone whose brows drop when they smile gets
+dropping brows. The point is to copy what that individual does, not to assume a direction.
+
+Caps are tighter than the mouth's own: `cheekRise ≤ 0.12`, `|browRise| ≤ 0.08`,
+`browFurrow ≤ 0.06` mouth-widths, and anything under `0.004` is treated as noise and dropped to 0.
+The reason is glasses — see below. All three default to **0**, which reproduces the mouth-only morph
+exactly, so an uncalibrated participant or a `schemaVersion: 1` file simply gets what it always got.
+
+#### One mesh, and what it protects
+
+When nothing but the mouth moves, the warp uses the original tight lip box at 12 × 8. When the
+cheeks and brows do move, the ROI expands to brow-to-chin at **16 × 14** and everything runs as one
+continuous displacement field — mouth corners, cheeks and brows summed over a single mesh.
+
+That matters: separate patches per region would leave the cheek *between* the mouth and the eye
+frozen, which is the exact artifact being fixed. An earlier attempt at this (`f3e9214`, since
+removed) used two small per-eye ROIs at a fixed fraction of mouth strength and was abandoned for
+looking wrong.
+
+Two protected zones:
+
+- **The eyes.** Displacement is scaled by
+  `guard = clamp01(1 − Σ gauss2(p − eyeCentre, σx, σy))` with `σx = 0.8 × eyeWidth` and
+  `σy = max(1.3 × eyeHeight, 0.42 × eyeWidth)` — a wide, shallow ellipse over each eye. The cheek
+  below and the brow above move; the lids, lashes and sclera do not. Anatomically a real cheek raise
+  *does* squeeze the eye, and that is given up on purpose: a smeared eyelid is far more noticeable
+  than a stiff one.
+- **Glasses.** The guard ellipse is sized to the lens, not the eye, and the cheek anchor is
+  deliberately mid-cheek (landmarks 205/425) rather than the infraorbital area right under the lower
+  rim. A bent spectacle frame reads as broken in a way a stiff cheek never does, and the landmarker
+  gives no signal that glasses are present, so the geometry is kept away from where frames sit.
+
+The 1-Person Test Station has a **"Cheek & brow follow"** slider (0 … 1.5, default 1.0 = as
+measured) for tuning this against a real face. It scales only the cheek/brow movement, never the
+mouth.
 
 #### The total cap
 
@@ -482,8 +530,13 @@ calibration/<participant_id>/
 
 `calibration.json` holds, per phase: every blendshape (mean + std), the combined scores, the
 landmark geometry, the top-5 peak, the quality flags — plus a `derived` block with the numbers the
-runtime actually uses (`cornerTravel`, `cornerAngleRad`, `range`, `deadZone`, `poutDrop`,
-`jawCoupling`, `openScaleRange`, `talking.openRatioStdNeutral`). `parseCalibrationFile()` reloads it.
+runtime actually uses (`cornerTravel`, `cornerAngleRad`, `cheekRise`, `browRise`, `browFurrow`,
+`range`, `deadZone`, `poutDrop`, `jawCoupling`, `openScaleRange`, `talking.openRatioStdNeutral`).
+`parseCalibrationFile()` reloads it, accepting `schemaVersion` **1 or 2** — a v1 file loads fine and
+simply carries no cheek/brow data, so the morph falls back to mouth-only for that participant.
+
+**Anyone calibrated before the cheek/brow measurements existed needs recalibrating** to get them.
+Nothing will complain; they will just keep getting a mouth-only morph.
 
 In the three-seat call the participant measures, the researcher's machine writes
 (`SessionLogger.writeCalibration`). In the 1-person station the same files are written locally via
@@ -766,6 +819,12 @@ fallbacks, which reproduce the pre-calibration geometry exactly.
 | Calibrated travel clamp | 0.04 … 0.35 mouth-widths |
 | Calibrated angle clamp | 10° … 45° (mirrored for a frown) |
 | Open-mouth fade | ×0.4 floor at a fully open mouth |
+| Cheek rise cap | 0.12 mouth-widths |
+| Brow rise cap | ±0.08 mouth-widths |
+| Brow furrow cap | 0.06 mouth-widths |
+| Face-coupling noise floor | 0.004 mouth-widths |
+| Eye guard σ | 0.8 × eye width, max(1.3 × eye height, 0.42 × eye width) |
+| Mesh resolution | 12 × 8 mouth-only, 16 × 14 with cheeks and brows |
 | Alpha tween τ | 350 ms |
 | Warp skip threshold | `|α| < 0.02` |
 | Tween snap threshold | `|α−α_target| < 0.004` |
@@ -808,6 +867,7 @@ uncalibrated fallbacks.
 | Constant | Value |
 |---|---|
 | Phases | neutral, smileClosed, smileOpen, frown |
+| Schema version written / accepted | 2 / 1 and 2 |
 | Prep / settle per phase | 1500 ms / 650 ms |
 | Record: neutral | 3000 ms |
 | Record: each expression | 4000 ms |
@@ -862,7 +922,7 @@ Things to know before citing or relying on this software in a study.
 
 1. **Preset intensities are pilot settings.** α is now a fraction of each participant's own calibrated maximum, and the preset values were rescaled to that meaning to keep the visible effect near where the old fixed geometry put it (§3.8). That rescaling was a judgement call, not a measurement. No psychophysical validation (detection threshold, naturalness, believability) has been run — describe presets as pilot settings, not validated intensities, and revisit the numbers once real per-participant corner-travel data exists.
 2. **The smile sub-type classifier is a heuristic tuned to five still images**, not validated against FACS-coded or human-rated video. The Duchenne eye-constriction cue is deliberately unused (unreliable on webcams with this model). Treat sub-type as exploratory unless independently validated.
-3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry and a lower-lip pout only — no Duchenne eye/cheek changes, teeth, or lighting consistent with a real smile. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_detected` in `effect_state_P1.csv`/`effect_state_P2.csv` for affected frames.
+3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry, a lower-lip pout, and a measured cheek raise and brow movement — but no change to the eyes themselves, no teeth, and no lighting consistent with a real smile. The eye aperture is deliberately left alone (§3.3), so the eye-narrowing part of a genuine Duchenne smile is still absent. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_detected` in `effect_state_P1.csv`/`effect_state_P2.csv` for affected frames.
 4. **Detection latency**: ~5 Hz sampling, 80 ms EMA smoothing, 100 ms debounce — expression onset is reported with roughly ~0.2 s latency (down from ~0.5–0.7 s before calibration allowed the longer windows to be shortened). Interpret rule "hold" durations accordingly.
 5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
@@ -875,7 +935,9 @@ Things to know before citing or relying on this software in a study.
 
 11. **The frown reading is suppressed during speech.** Ordinary talking produces the pucker/funnel mouth shapes the frown reading keys on, so frowns are not published while the microphone and mouth movement both say the participant is speaking (§3.6). Genuine frowns made *while talking* will be missed. `talking` is logged per second so affected stretches can be identified.
 
-12. **The camera-free replay test runs on a synthetic fixture.** `tests/fixtures/calibration_frames.json` is generated by `tests/make_calibration_fixture.ts`, not recorded from a real face — it exercises the maths, not MediaPipe's behaviour on real footage. Replace it with a real `FaceMorphProcessor.sample()` dump when one is available; the test reads the file and needs no changes.
+12. **Cheek and brow movement is geometry-blind to glasses.** The landmarker reports no signal for spectacles, so the morph simply keeps its anchors and its eye guard away from where frames usually sit rather than detecting them. On unusual frames — very large lenses, heavy rims, frames sitting low on the cheek — the movement may still catch the frame. Check the altered view on a glasses wearer before running them, and drop "Cheek & brow follow" toward 0 if it does.
+
+13. **The camera-free replay test runs on a synthetic fixture.** `tests/fixtures/calibration_frames.json` is generated by `tests/make_calibration_fixture.ts`, not recorded from a real face — it exercises the maths, not MediaPipe's behaviour on real footage. Replace it with a real `FaceMorphProcessor.sample()` dump when one is available; the test reads the file and needs no changes.
 
 ---
 

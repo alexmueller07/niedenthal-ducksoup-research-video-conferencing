@@ -19,6 +19,31 @@
 
 ## Update History
 
+* **Date:** 23-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** The cheeks and eyebrows now move with the smile, not just the mouth
+
+* **Previous behavior:**
+Only the mouth changed. Everything above it stayed exactly where it was. On someone whose cheeks and eyebrows genuinely move when they smile, that looked wrong — the mouth did all the work while the rest of the face sat frozen, so it read as a stiff, pressed smile rather than a real one. Same on frowns: the mouth pulled down with a completely unmoved brow.
+
+* **New behavior:**
+Calibration now also measures how far that person's cheeks and eyebrows move, from the same four takes they already do — no extra steps for participants. The whole face then moves together by the same share of their own maximum, so a smile raises their cheeks and moves their brows by their own amounts, and a frown pulls their inner brows down and together.
+
+Eyebrow direction is copied rather than assumed. Someone who raises their brows when they smile gets raised brows; someone whose brows drop gets dropped brows.
+
+The eyes themselves are deliberately left alone. A real cheek raise does squeeze the eyes slightly, but eyelids and eyelashes smear badly if a warp goes even slightly wrong there, and that is far more noticeable than a slightly stiff cheek.
+
+Glasses were the other thing to work around. A frame's lower rim sits right on the upper cheek and the top rim sits just under the eyebrows — exactly the areas now moving — and bending a rigid frame looks broken. So the movement is kept low on the cheek, away from where frames sit, the protected zone around each eye is sized to a lens rather than an eye, and the amounts are capped tighter than the mouth's.
+
+The 1-person test tool has a new "Cheek & brow follow" slider to dial this up or down against a real face, from mouth-only to slightly more than measured.
+
+* **Why this matters:**
+This was the remaining thing making the change look artificial. A mouth moving on its own is the clearest giveaway that an expression isn't genuine, so tying the rest of the face to it — by the same per-person measurement, from the same takes — is what makes it hold together.
+
+Two things to know. Anyone calibrated before this update needs calibrating again to get the new movement; nothing will warn you, they will just keep getting the mouth-only version. And if you wear glasses, check how it looks on the altered view before running a session, and turn the new slider down if the frames catch.
+
+---
+
 * **Date:** 22-09-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Rebuilt calibration so the face change fits each person's own face

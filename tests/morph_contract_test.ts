@@ -8,6 +8,9 @@ import assert from 'node:assert/strict'
 import {
   FALLBACK_FROWN,
   FALLBACK_SMILE,
+  MAX_BROW_RISE,
+  MAX_CHEEK_RISE,
+  MIN_FACE_COUPLING,
   MORPH_TRAVEL_MAX,
   MORPH_TRAVEL_MIN,
   OPEN_MOUTH_FADE,
@@ -31,6 +34,9 @@ const NEUTRAL: GeometryFrame = {
   mouthWidthToFaceWidth: 0.4, // → 2.5 mouth-widths per face-width
   mouthCornerTilt: 0.02,
   yawSymmetry: 0.9,
+  cheekRaiseY: 0.3,
+  browRaiseY: 0.12,
+  browGapX: 0.1,
 }
 
 function stat(mean: number) {
@@ -72,19 +78,32 @@ const profile = {
         mouthWidthToFaceWidth: stat(NEUTRAL.mouthWidthToFaceWidth),
         mouthCornerTilt: stat(NEUTRAL.mouthCornerTilt),
         yawSymmetry: stat(NEUTRAL.yawSymmetry),
+        cheekRaiseY: stat(NEUTRAL.cheekRaiseY),
+        browRaiseY: stat(NEUTRAL.browRaiseY),
+        browGapX: stat(NEUTRAL.browGapX),
       },
       qualityFlags: [],
     },
   },
   derived: {
     // Straight out along the mouth line, so the projection maths is easy to read.
-    smile: { range: 0.65, deadZone: 0.1, cornerTravel: 0.1, cornerAngleRad: 0 },
+    smile: {
+      range: 0.65,
+      deadZone: 0.1,
+      cornerTravel: 0.1,
+      cornerAngleRad: 0,
+      cheekRise: 0.05,
+      browRise: 0.02,
+    },
     frown: {
       range: 0.29,
       deadZone: 0.12,
       cornerTravel: 0.08,
       cornerAngleRad: -Math.PI / 2,
       poutDrop: 0.04,
+      cheekRise: 0,
+      browRise: -0.015,
+      browFurrow: 0.03,
     },
     openness: { neutral: 0.05, max: 0.5 },
     jawCoupling: 0,
@@ -103,10 +122,38 @@ function live(overrides: Partial<GeometryFrame> = {}): GeometryFrame {
 const smileDir = morphDirectionFor(profile, 0.5)
 assert.equal(smileDir.cornerTravel, 0.1, 'smile gain is this person’s measured travel')
 assert.equal(smileDir.cornerAngleRad, 0, 'and their measured direction')
+assert.equal(smileDir.cheekRise, 0.05, 'their cheeks move with the smile by their own amount')
+assert.equal(smileDir.browRise, 0.02, 'and so do their brows')
 
 const frownDir = morphDirectionFor(profile, -0.5)
 assert.equal(frownDir.cornerTravel, 0.08, 'frown gain is measured separately')
 assert.equal(frownDir.poutDrop, 0.04, 'the frown also drops the lower lip')
+assert.equal(frownDir.browFurrow, 0.03, 'a frown pulls the inner brows together')
+assert.ok(frownDir.browRise < 0, 'and drops them, because that is what this person does')
+
+// Brow direction is kept, not assumed: whichever way this person's brows go,
+// the morph copies it.
+const droopyBrows = JSON.parse(JSON.stringify(profile)) as CalibrationProfile
+droopyBrows.derived.smile.browRise = -0.03
+assert.ok(
+  morphDirectionFor(droopyBrows, 1).browRise < 0,
+  'someone whose brows drop when they smile gets dropping brows',
+)
+
+// A calibration with no cheek/brow data - uncalibrated, or a file written
+// before these were measured - must behave exactly as the mouth-only morph did.
+const mouthOnly = JSON.parse(JSON.stringify(profile)) as CalibrationProfile
+delete (mouthOnly.derived.smile as { cheekRise?: number }).cheekRise
+delete (mouthOnly.derived.smile as { browRise?: number }).browRise
+const legacy = morphDirectionFor(mouthOnly, 1)
+assert.equal(legacy.cheekRise, 0, 'a file without cheek data moves nothing but the mouth')
+assert.equal(legacy.browRise, 0, 'same for brows')
+assert.equal(legacy.cornerTravel, profile.derived.smile.cornerTravel, 'the mouth is untouched by this')
+
+const uncalibrated = morphDirectionFor(null, 1)
+assert.equal(uncalibrated.cheekRise, 0, 'an uncalibrated participant gets a mouth-only morph')
+assert.equal(uncalibrated.browRise, 0)
+assert.equal(uncalibrated.browFurrow, 0)
 
 // Without a profile the geometry is exactly what it was before calibration
 // existed, so alpha 1.0 uncalibrated behaves as alpha 1.0 always did.
@@ -249,5 +296,11 @@ assert.equal(detector.talking, true, 'a brief pause does not end speech')
 t += 600
 detector.push(t, 0.05, 0)
 assert.equal(detector.talking, false, 'a real pause does')
+
+// The off-mouth movement is capped tighter than the mouth's own travel,
+// because these areas sit under glasses frames on a lot of people.
+assert.ok(MAX_CHEEK_RISE < MORPH_TRAVEL_MAX, 'cheek travel is capped tighter than the mouth')
+assert.ok(MAX_BROW_RISE < MAX_CHEEK_RISE, 'brow travel is capped tighter still')
+assert.ok(MIN_FACE_COUPLING > 0, 'measurements in the noise are dropped rather than rendered')
 
 console.log('morph contract checks passed')

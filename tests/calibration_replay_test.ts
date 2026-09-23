@@ -74,6 +74,21 @@ assert.ok(
   'the open-mouth phase should reveal some jaw-to-corner coupling',
 )
 
+// The rest of the face: a replayed smile that raises the cheeks and brows
+// should come out as movement the morph can actually use.
+assert.ok(
+  (profile!.derived.smile.cheekRise ?? 0) > 0,
+  `replayed smile should measure a cheek rise, got ${profile!.derived.smile.cheekRise}`,
+)
+assert.ok(
+  (profile!.derived.smile.browRise ?? 0) > 0,
+  'and a brow rise',
+)
+assert.ok(
+  (profile!.derived.frown.browFurrow ?? 0) > 0,
+  'the replayed frown should measure the brows pulling together',
+)
+
 // ---- Replay the detection timeline ----
 
 const smileRange = profile!.derived.smile.range

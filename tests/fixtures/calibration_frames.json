@@ -64,7 +64,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -106,7 +109,10 @@
         "mouthOpenRatio": 0.0316,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -148,7 +154,10 @@
         "mouthOpenRatio": 0.033,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -190,7 +199,10 @@
         "mouthOpenRatio": 0.0338,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -232,7 +244,10 @@
         "mouthOpenRatio": 0.034,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -274,7 +289,10 @@
         "mouthOpenRatio": 0.0334,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -316,7 +334,10 @@
         "mouthOpenRatio": 0.0323,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -358,7 +379,10 @@
         "mouthOpenRatio": 0.0307,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -400,7 +424,10 @@
         "mouthOpenRatio": 0.029,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -442,7 +469,10 @@
         "mouthOpenRatio": 0.0275,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -484,7 +514,10 @@
         "mouthOpenRatio": 0.0264,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -526,7 +559,10 @@
         "mouthOpenRatio": 0.026,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -568,7 +604,10 @@
         "mouthOpenRatio": 0.0263,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -610,7 +649,10 @@
         "mouthOpenRatio": 0.0272,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -652,7 +694,10 @@
         "mouthOpenRatio": 0.0286,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -694,7 +739,10 @@
         "mouthOpenRatio": 0.0303,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -736,7 +784,10 @@
         "mouthOpenRatio": 0.0319,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -778,7 +829,10 @@
         "mouthOpenRatio": 0.0332,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -820,7 +874,10 @@
         "mouthOpenRatio": 0.0339,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -862,7 +919,10 @@
         "mouthOpenRatio": 0.0339,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -904,7 +964,10 @@
         "mouthOpenRatio": 0.0333,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -946,7 +1009,10 @@
         "mouthOpenRatio": 0.032,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -988,7 +1054,10 @@
         "mouthOpenRatio": 0.0304,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1030,7 +1099,10 @@
         "mouthOpenRatio": 0.0288,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1072,7 +1144,10 @@
         "mouthOpenRatio": 0.0273,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1114,7 +1189,10 @@
         "mouthOpenRatio": 0.0263,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1156,7 +1234,10 @@
         "mouthOpenRatio": 0.026,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1198,7 +1279,10 @@
         "mouthOpenRatio": 0.0264,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1240,7 +1324,10 @@
         "mouthOpenRatio": 0.0274,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1282,7 +1369,10 @@
         "mouthOpenRatio": 0.0289,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1324,7 +1414,10 @@
         "mouthOpenRatio": 0.0305,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1366,7 +1459,10 @@
         "mouthOpenRatio": 0.0321,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1408,7 +1504,10 @@
         "mouthOpenRatio": 0.0333,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1450,7 +1549,10 @@
         "mouthOpenRatio": 0.0339,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1492,7 +1594,10 @@
         "mouthOpenRatio": 0.0339,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1534,7 +1639,10 @@
         "mouthOpenRatio": 0.0331,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1576,7 +1684,10 @@
         "mouthOpenRatio": 0.0318,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1618,7 +1729,10 @@
         "mouthOpenRatio": 0.0302,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1660,7 +1774,10 @@
         "mouthOpenRatio": 0.0285,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1702,7 +1819,10 @@
         "mouthOpenRatio": 0.0271,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1744,7 +1864,10 @@
         "mouthOpenRatio": 0.0262,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1786,7 +1909,10 @@
         "mouthOpenRatio": 0.026,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1828,7 +1954,10 @@
         "mouthOpenRatio": 0.0265,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1870,7 +1999,10 @@
         "mouthOpenRatio": 0.0276,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1912,7 +2044,10 @@
         "mouthOpenRatio": 0.0291,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1954,7 +2089,10 @@
         "mouthOpenRatio": 0.0308,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -1996,7 +2134,10 @@
         "mouthOpenRatio": 0.0324,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2038,7 +2179,10 @@
         "mouthOpenRatio": 0.0335,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2080,7 +2224,10 @@
         "mouthOpenRatio": 0.034,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2122,7 +2269,10 @@
         "mouthOpenRatio": 0.0338,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2164,7 +2314,10 @@
         "mouthOpenRatio": 0.0329,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2206,7 +2359,10 @@
         "mouthOpenRatio": 0.0315,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2248,7 +2404,10 @@
         "mouthOpenRatio": 0.0299,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2290,7 +2449,10 @@
         "mouthOpenRatio": 0.0283,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2332,7 +2494,10 @@
         "mouthOpenRatio": 0.0269,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2374,7 +2539,10 @@
         "mouthOpenRatio": 0.0261,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2416,7 +2584,10 @@
         "mouthOpenRatio": 0.026,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2458,7 +2629,10 @@
         "mouthOpenRatio": 0.0266,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2500,7 +2674,10 @@
         "mouthOpenRatio": 0.0278,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2542,7 +2719,10 @@
         "mouthOpenRatio": 0.0294,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2584,7 +2764,10 @@
         "mouthOpenRatio": 0.0311,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2626,7 +2809,10 @@
         "mouthOpenRatio": 0.0326,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2668,7 +2854,10 @@
         "mouthOpenRatio": 0.0336,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2710,7 +2899,10 @@
         "mouthOpenRatio": 0.034,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2752,7 +2944,10 @@
         "mouthOpenRatio": 0.0337,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2794,7 +2989,10 @@
         "mouthOpenRatio": 0.0327,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2836,7 +3034,10 @@
         "mouthOpenRatio": 0.0313,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2878,7 +3079,10 @@
         "mouthOpenRatio": 0.0296,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2920,7 +3124,10 @@
         "mouthOpenRatio": 0.028,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -2962,7 +3169,10 @@
         "mouthOpenRatio": 0.0268,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3004,7 +3214,10 @@
         "mouthOpenRatio": 0.0261,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3046,7 +3259,10 @@
         "mouthOpenRatio": 0.0261,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3088,7 +3304,10 @@
         "mouthOpenRatio": 0.0268,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3130,7 +3349,10 @@
         "mouthOpenRatio": 0.0281,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3172,7 +3394,10 @@
         "mouthOpenRatio": 0.0297,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3214,7 +3439,10 @@
         "mouthOpenRatio": 0.0313,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3256,7 +3484,10 @@
         "mouthOpenRatio": 0.0328,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3298,7 +3529,10 @@
         "mouthOpenRatio": 0.0337,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3340,7 +3574,10 @@
         "mouthOpenRatio": 0.034,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3382,7 +3619,10 @@
         "mouthOpenRatio": 0.0336,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3424,7 +3664,10 @@
         "mouthOpenRatio": 0.0325,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3466,7 +3709,10 @@
         "mouthOpenRatio": 0.031,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3508,7 +3754,10 @@
         "mouthOpenRatio": 0.0293,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3550,7 +3799,10 @@
         "mouthOpenRatio": 0.0278,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3592,7 +3844,10 @@
         "mouthOpenRatio": 0.0266,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3634,7 +3889,10 @@
         "mouthOpenRatio": 0.026,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3676,7 +3934,10 @@
         "mouthOpenRatio": 0.0262,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3718,7 +3979,10 @@
         "mouthOpenRatio": 0.027,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3760,7 +4024,10 @@
         "mouthOpenRatio": 0.0283,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3802,7 +4069,10 @@
         "mouthOpenRatio": 0.0299,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3844,7 +4114,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3886,7 +4159,10 @@
         "mouthOpenRatio": 0.0301,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2999,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -3928,7 +4204,10 @@
         "mouthOpenRatio": 0.0302,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2997,
+        "browRaiseY": 0.1201,
+        "browGapX": 0.1
       }
     },
     {
@@ -3970,7 +4249,10 @@
         "mouthOpenRatio": 0.0303,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2995,
+        "browRaiseY": 0.1202,
+        "browGapX": 0.1
       }
     },
     {
@@ -4012,7 +4294,10 @@
         "mouthOpenRatio": 0.0305,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2992,
+        "browRaiseY": 0.1203,
+        "browGapX": 0.1
       }
     },
     {
@@ -4054,7 +4339,10 @@
         "mouthOpenRatio": 0.0306,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.299,
+        "browRaiseY": 0.1204,
+        "browGapX": 0.1
       }
     },
     {
@@ -4096,7 +4384,10 @@
         "mouthOpenRatio": 0.0308,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2986,
+        "browRaiseY": 0.1206,
+        "browGapX": 0.1
       }
     },
     {
@@ -4138,7 +4429,10 @@
         "mouthOpenRatio": 0.031,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2983,
+        "browRaiseY": 0.1207,
+        "browGapX": 0.1
       }
     },
     {
@@ -4180,7 +4474,10 @@
         "mouthOpenRatio": 0.0313,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2979,
+        "browRaiseY": 0.1208,
+        "browGapX": 0.1
       }
     },
     {
@@ -4222,7 +4519,10 @@
         "mouthOpenRatio": 0.0315,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2975,
+        "browRaiseY": 0.121,
+        "browGapX": 0.1
       }
     },
     {
@@ -4264,7 +4564,10 @@
         "mouthOpenRatio": 0.0318,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.297,
+        "browRaiseY": 0.1212,
+        "browGapX": 0.1
       }
     },
     {
@@ -4306,7 +4609,10 @@
         "mouthOpenRatio": 0.0321,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2966,
+        "browRaiseY": 0.1214,
+        "browGapX": 0.1
       }
     },
     {
@@ -4348,7 +4654,10 @@
         "mouthOpenRatio": 0.0323,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2961,
+        "browRaiseY": 0.1216,
+        "browGapX": 0.1
       }
     },
     {
@@ -4390,7 +4699,10 @@
         "mouthOpenRatio": 0.0326,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2956,
+        "browRaiseY": 0.1218,
+        "browGapX": 0.1
       }
     },
     {
@@ -4432,7 +4744,10 @@
         "mouthOpenRatio": 0.0329,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2951,
+        "browRaiseY": 0.122,
+        "browGapX": 0.1
       }
     },
     {
@@ -4474,7 +4789,10 @@
         "mouthOpenRatio": 0.0333,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2946,
+        "browRaiseY": 0.1222,
+        "browGapX": 0.1
       }
     },
     {
@@ -4516,7 +4834,10 @@
         "mouthOpenRatio": 0.0336,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.294,
+        "browRaiseY": 0.1224,
+        "browGapX": 0.1
       }
     },
     {
@@ -4558,7 +4879,10 @@
         "mouthOpenRatio": 0.0339,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2934,
+        "browRaiseY": 0.1226,
+        "browGapX": 0.1
       }
     },
     {
@@ -4600,7 +4924,10 @@
         "mouthOpenRatio": 0.0343,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2928,
+        "browRaiseY": 0.1229,
+        "browGapX": 0.1
       }
     },
     {
@@ -4642,7 +4969,10 @@
         "mouthOpenRatio": 0.0347,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2922,
+        "browRaiseY": 0.1231,
+        "browGapX": 0.1
       }
     },
     {
@@ -4684,7 +5014,10 @@
         "mouthOpenRatio": 0.035,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2916,
+        "browRaiseY": 0.1234,
+        "browGapX": 0.1
       }
     },
     {
@@ -4726,7 +5059,10 @@
         "mouthOpenRatio": 0.0354,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.291,
+        "browRaiseY": 0.1236,
+        "browGapX": 0.1
       }
     },
     {
@@ -4768,7 +5104,10 @@
         "mouthOpenRatio": 0.0358,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2903,
+        "browRaiseY": 0.1239,
+        "browGapX": 0.1
       }
     },
     {
@@ -4810,7 +5149,10 @@
         "mouthOpenRatio": 0.0362,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2897,
+        "browRaiseY": 0.1241,
+        "browGapX": 0.1
       }
     },
     {
@@ -4852,7 +5194,10 @@
         "mouthOpenRatio": 0.0366,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.289,
+        "browRaiseY": 0.1244,
+        "browGapX": 0.1
       }
     },
     {
@@ -4894,7 +5239,10 @@
         "mouthOpenRatio": 0.037,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2883,
+        "browRaiseY": 0.1247,
+        "browGapX": 0.1
       }
     },
     {
@@ -4936,7 +5284,10 @@
         "mouthOpenRatio": 0.0375,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2876,
+        "browRaiseY": 0.125,
+        "browGapX": 0.1
       }
     },
     {
@@ -4978,7 +5329,10 @@
         "mouthOpenRatio": 0.0379,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2868,
+        "browRaiseY": 0.1253,
+        "browGapX": 0.1
       }
     },
     {
@@ -5020,7 +5374,10 @@
         "mouthOpenRatio": 0.0383,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2861,
+        "browRaiseY": 0.1256,
+        "browGapX": 0.1
       }
     },
     {
@@ -5062,7 +5419,10 @@
         "mouthOpenRatio": 0.0388,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2854,
+        "browRaiseY": 0.1259,
+        "browGapX": 0.1
       }
     },
     {
@@ -5104,7 +5464,10 @@
         "mouthOpenRatio": 0.0392,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2846,
+        "browRaiseY": 0.1262,
+        "browGapX": 0.1
       }
     },
     {
@@ -5146,7 +5509,10 @@
         "mouthOpenRatio": 0.0397,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2838,
+        "browRaiseY": 0.1265,
+        "browGapX": 0.1
       }
     },
     {
@@ -5188,7 +5554,10 @@
         "mouthOpenRatio": 0.0402,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.283,
+        "browRaiseY": 0.1268,
+        "browGapX": 0.1
       }
     },
     {
@@ -5230,7 +5599,10 @@
         "mouthOpenRatio": 0.0407,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2822,
+        "browRaiseY": 0.1271,
+        "browGapX": 0.1
       }
     },
     {
@@ -5272,7 +5644,10 @@
         "mouthOpenRatio": 0.0412,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2814,
+        "browRaiseY": 0.1274,
+        "browGapX": 0.1
       }
     },
     {
@@ -5314,7 +5689,10 @@
         "mouthOpenRatio": 0.0416,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2806,
+        "browRaiseY": 0.1278,
+        "browGapX": 0.1
       }
     },
     {
@@ -5356,7 +5734,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5398,7 +5779,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5440,7 +5824,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5482,7 +5869,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5524,7 +5914,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5566,7 +5959,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5608,7 +6004,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5650,7 +6049,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5692,7 +6094,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5734,7 +6139,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5776,7 +6184,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5818,7 +6229,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5860,7 +6274,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5902,7 +6319,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5944,7 +6364,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -5986,7 +6409,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6028,7 +6454,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6070,7 +6499,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6112,7 +6544,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6154,7 +6589,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6196,7 +6634,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6238,7 +6679,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6280,7 +6724,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6322,7 +6769,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6364,7 +6814,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6406,7 +6859,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6448,7 +6904,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6490,7 +6949,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6532,7 +6994,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6574,7 +7039,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6616,7 +7084,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6658,7 +7129,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6700,7 +7174,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6742,7 +7219,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6784,7 +7264,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6826,7 +7309,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6868,7 +7354,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6910,7 +7399,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6952,7 +7444,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -6994,7 +7489,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7036,7 +7534,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7078,7 +7579,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7120,7 +7624,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7162,7 +7669,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7204,7 +7714,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7246,7 +7759,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7288,7 +7804,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7330,7 +7849,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7372,7 +7894,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7414,7 +7939,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7456,7 +7984,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7498,7 +8029,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7540,7 +8074,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7582,7 +8119,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7624,7 +8164,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7666,7 +8209,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7708,7 +8254,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7750,7 +8299,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7792,7 +8344,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7834,7 +8389,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7876,7 +8434,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7918,7 +8479,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -7960,7 +8524,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -8002,7 +8569,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -8044,7 +8614,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -8086,7 +8659,10 @@
         "mouthOpenRatio": 0.042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.28,
+        "browRaiseY": 0.128,
+        "browGapX": 0.1
       }
     },
     {
@@ -8128,7 +8704,10 @@
         "mouthOpenRatio": 0.0419,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2802,
+        "browRaiseY": 0.1279,
+        "browGapX": 0.1
       }
     },
     {
@@ -8170,7 +8749,10 @@
         "mouthOpenRatio": 0.0417,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2805,
+        "browRaiseY": 0.1278,
+        "browGapX": 0.1
       }
     },
     {
@@ -8212,7 +8794,10 @@
         "mouthOpenRatio": 0.0415,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2808,
+        "browRaiseY": 0.1277,
+        "browGapX": 0.1
       }
     },
     {
@@ -8254,7 +8839,10 @@
         "mouthOpenRatio": 0.0414,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2811,
+        "browRaiseY": 0.1276,
+        "browGapX": 0.1
       }
     },
     {
@@ -8296,7 +8884,10 @@
         "mouthOpenRatio": 0.0412,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2814,
+        "browRaiseY": 0.1275,
+        "browGapX": 0.1
       }
     },
     {
@@ -8338,7 +8929,10 @@
         "mouthOpenRatio": 0.041,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2816,
+        "browRaiseY": 0.1273,
+        "browGapX": 0.1
       }
     },
     {
@@ -8380,7 +8974,10 @@
         "mouthOpenRatio": 0.0408,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2819,
+        "browRaiseY": 0.1272,
+        "browGapX": 0.1
       }
     },
     {
@@ -8422,7 +9019,10 @@
         "mouthOpenRatio": 0.0407,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2822,
+        "browRaiseY": 0.1271,
+        "browGapX": 0.1
       }
     },
     {
@@ -8464,7 +9064,10 @@
         "mouthOpenRatio": 0.0405,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2825,
+        "browRaiseY": 0.127,
+        "browGapX": 0.1
       }
     },
     {
@@ -8506,7 +9109,10 @@
         "mouthOpenRatio": 0.0403,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2828,
+        "browRaiseY": 0.1269,
+        "browGapX": 0.1
       }
     },
     {
@@ -8548,7 +9154,10 @@
         "mouthOpenRatio": 0.0402,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.283,
+        "browRaiseY": 0.1268,
+        "browGapX": 0.1
       }
     },
     {
@@ -8590,7 +9199,10 @@
         "mouthOpenRatio": 0.04,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2833,
+        "browRaiseY": 0.1267,
+        "browGapX": 0.1
       }
     },
     {
@@ -8632,7 +9244,10 @@
         "mouthOpenRatio": 0.0398,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2836,
+        "browRaiseY": 0.1266,
+        "browGapX": 0.1
       }
     },
     {
@@ -8674,7 +9289,10 @@
         "mouthOpenRatio": 0.0397,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2839,
+        "browRaiseY": 0.1264,
+        "browGapX": 0.1
       }
     },
     {
@@ -8716,7 +9334,10 @@
         "mouthOpenRatio": 0.0395,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2842,
+        "browRaiseY": 0.1263,
+        "browGapX": 0.1
       }
     },
     {
@@ -8758,7 +9379,10 @@
         "mouthOpenRatio": 0.0393,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2844,
+        "browRaiseY": 0.1262,
+        "browGapX": 0.1
       }
     },
     {
@@ -8800,7 +9424,10 @@
         "mouthOpenRatio": 0.0392,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2847,
+        "browRaiseY": 0.1261,
+        "browGapX": 0.1
       }
     },
     {
@@ -8842,7 +9469,10 @@
         "mouthOpenRatio": 0.039,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.285,
+        "browRaiseY": 0.126,
+        "browGapX": 0.1
       }
     },
     {
@@ -8884,7 +9514,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -8926,7 +9559,10 @@
         "mouthOpenRatio": 0.031,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2999,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -8968,7 +9604,10 @@
         "mouthOpenRatio": 0.0329,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2997,
+        "browRaiseY": 0.1201,
+        "browGapX": 0.1
       }
     },
     {
@@ -9010,7 +9649,10 @@
         "mouthOpenRatio": 0.0354,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2994,
+        "browRaiseY": 0.1202,
+        "browGapX": 0.1
       }
     },
     {
@@ -9052,7 +9694,10 @@
         "mouthOpenRatio": 0.0383,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2991,
+        "browRaiseY": 0.1204,
+        "browGapX": 0.1
       }
     },
     {
@@ -9094,7 +9739,10 @@
         "mouthOpenRatio": 0.0415,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2987,
+        "browRaiseY": 0.1205,
+        "browGapX": 0.1
       }
     },
     {
@@ -9136,7 +9784,10 @@
         "mouthOpenRatio": 0.0452,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2983,
+        "browRaiseY": 0.1207,
+        "browGapX": 0.1
       }
     },
     {
@@ -9178,7 +9829,10 @@
         "mouthOpenRatio": 0.0491,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2978,
+        "browRaiseY": 0.1209,
+        "browGapX": 0.1
       }
     },
     {
@@ -9220,7 +9874,10 @@
         "mouthOpenRatio": 0.0533,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2973,
+        "browRaiseY": 0.1211,
+        "browGapX": 0.1
       }
     },
     {
@@ -9262,7 +9919,10 @@
         "mouthOpenRatio": 0.0578,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2968,
+        "browRaiseY": 0.1213,
+        "browGapX": 0.1
       }
     },
     {
@@ -9304,7 +9964,10 @@
         "mouthOpenRatio": 0.0626,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2963,
+        "browRaiseY": 0.1215,
+        "browGapX": 0.1
       }
     },
     {
@@ -9346,7 +10009,10 @@
         "mouthOpenRatio": 0.0676,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2957,
+        "browRaiseY": 0.1217,
+        "browGapX": 0.1
       }
     },
     {
@@ -9388,7 +10054,10 @@
         "mouthOpenRatio": 0.0729,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2951,
+        "browRaiseY": 0.1219,
+        "browGapX": 0.1
       }
     },
     {
@@ -9430,7 +10099,10 @@
         "mouthOpenRatio": 0.0783,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2945,
+        "browRaiseY": 0.1222,
+        "browGapX": 0.1
       }
     },
     {
@@ -9472,7 +10144,10 @@
         "mouthOpenRatio": 0.084,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2939,
+        "browRaiseY": 0.1225,
+        "browGapX": 0.1
       }
     },
     {
@@ -9514,7 +10189,10 @@
         "mouthOpenRatio": 0.0899,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2932,
+        "browRaiseY": 0.1227,
+        "browGapX": 0.1
       }
     },
     {
@@ -9556,7 +10234,10 @@
         "mouthOpenRatio": 0.096,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2925,
+        "browRaiseY": 0.123,
+        "browGapX": 0.1
       }
     },
     {
@@ -9598,7 +10279,10 @@
         "mouthOpenRatio": 0.1023,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2918,
+        "browRaiseY": 0.1233,
+        "browGapX": 0.1
       }
     },
     {
@@ -9640,7 +10324,10 @@
         "mouthOpenRatio": 0.1088,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.291,
+        "browRaiseY": 0.1236,
+        "browGapX": 0.1
       }
     },
     {
@@ -9682,7 +10369,10 @@
         "mouthOpenRatio": 0.1154,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2903,
+        "browRaiseY": 0.1239,
+        "browGapX": 0.1
       }
     },
     {
@@ -9724,7 +10414,10 @@
         "mouthOpenRatio": 0.1222,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2895,
+        "browRaiseY": 0.1242,
+        "browGapX": 0.1
       }
     },
     {
@@ -9766,7 +10459,10 @@
         "mouthOpenRatio": 0.1293,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2887,
+        "browRaiseY": 0.1245,
+        "browGapX": 0.1
       }
     },
     {
@@ -9808,7 +10504,10 @@
         "mouthOpenRatio": 0.1364,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2879,
+        "browRaiseY": 0.1248,
+        "browGapX": 0.1
       }
     },
     {
@@ -9850,7 +10549,10 @@
         "mouthOpenRatio": 0.1438,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2871,
+        "browRaiseY": 0.1252,
+        "browGapX": 0.1
       }
     },
     {
@@ -9892,7 +10594,10 @@
         "mouthOpenRatio": 0.1513,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2862,
+        "browRaiseY": 0.1255,
+        "browGapX": 0.1
       }
     },
     {
@@ -9934,7 +10639,10 @@
         "mouthOpenRatio": 0.1589,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2853,
+        "browRaiseY": 0.1259,
+        "browGapX": 0.1
       }
     },
     {
@@ -9976,7 +10684,10 @@
         "mouthOpenRatio": 0.1667,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2845,
+        "browRaiseY": 0.1262,
+        "browGapX": 0.1
       }
     },
     {
@@ -10018,7 +10729,10 @@
         "mouthOpenRatio": 0.1747,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2836,
+        "browRaiseY": 0.1266,
+        "browGapX": 0.1
       }
     },
     {
@@ -10060,7 +10774,10 @@
         "mouthOpenRatio": 0.1828,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2826,
+        "browRaiseY": 0.1269,
+        "browGapX": 0.1
       }
     },
     {
@@ -10102,7 +10819,10 @@
         "mouthOpenRatio": 0.1911,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2817,
+        "browRaiseY": 0.1273,
+        "browGapX": 0.1
       }
     },
     {
@@ -10144,7 +10864,10 @@
         "mouthOpenRatio": 0.1995,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2807,
+        "browRaiseY": 0.1277,
+        "browGapX": 0.1
       }
     },
     {
@@ -10186,7 +10909,10 @@
         "mouthOpenRatio": 0.208,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2798,
+        "browRaiseY": 0.1281,
+        "browGapX": 0.1
       }
     },
     {
@@ -10228,7 +10954,10 @@
         "mouthOpenRatio": 0.2167,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2788,
+        "browRaiseY": 0.1285,
+        "browGapX": 0.1
       }
     },
     {
@@ -10270,7 +10999,10 @@
         "mouthOpenRatio": 0.2255,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2778,
+        "browRaiseY": 0.1289,
+        "browGapX": 0.1
       }
     },
     {
@@ -10312,7 +11044,10 @@
         "mouthOpenRatio": 0.2345,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2768,
+        "browRaiseY": 0.1293,
+        "browGapX": 0.1
       }
     },
     {
@@ -10354,7 +11089,10 @@
         "mouthOpenRatio": 0.2436,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2757,
+        "browRaiseY": 0.1297,
+        "browGapX": 0.1
       }
     },
     {
@@ -10396,7 +11134,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10438,7 +11179,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10480,7 +11224,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10522,7 +11269,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10564,7 +11314,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10606,7 +11359,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10648,7 +11404,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10690,7 +11449,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10732,7 +11494,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10774,7 +11539,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10816,7 +11584,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10858,7 +11629,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10900,7 +11674,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10942,7 +11719,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -10984,7 +11764,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11026,7 +11809,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11068,7 +11854,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11110,7 +11899,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11152,7 +11944,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11194,7 +11989,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11236,7 +12034,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11278,7 +12079,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11320,7 +12124,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11362,7 +12169,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11404,7 +12214,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11446,7 +12259,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11488,7 +12304,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11530,7 +12349,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11572,7 +12394,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11614,7 +12439,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11656,7 +12484,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11698,7 +12529,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11740,7 +12574,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11782,7 +12619,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11824,7 +12664,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11866,7 +12709,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11908,7 +12754,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11950,7 +12799,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -11992,7 +12844,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12034,7 +12889,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12076,7 +12934,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12118,7 +12979,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12160,7 +13024,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12202,7 +13069,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12244,7 +13114,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12286,7 +13159,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12328,7 +13204,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12370,7 +13249,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12412,7 +13294,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12454,7 +13339,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12496,7 +13384,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12538,7 +13429,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12580,7 +13474,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12622,7 +13519,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12664,7 +13564,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12706,7 +13609,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12748,7 +13654,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12790,7 +13699,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12832,7 +13744,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12874,7 +13789,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12916,7 +13834,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -12958,7 +13879,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -13000,7 +13924,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -13042,7 +13969,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -13084,7 +14014,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -13126,7 +14059,10 @@
         "mouthOpenRatio": 0.25,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.275,
+        "browRaiseY": 0.13,
+        "browGapX": 0.1
       }
     },
     {
@@ -13168,7 +14104,10 @@
         "mouthOpenRatio": 0.2474,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2753,
+        "browRaiseY": 0.1299,
+        "browGapX": 0.1
       }
     },
     {
@@ -13210,7 +14149,10 @@
         "mouthOpenRatio": 0.2443,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2756,
+        "browRaiseY": 0.1297,
+        "browGapX": 0.1
       }
     },
     {
@@ -13252,7 +14194,10 @@
         "mouthOpenRatio": 0.2412,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.276,
+        "browRaiseY": 0.1296,
+        "browGapX": 0.1
       }
     },
     {
@@ -13294,7 +14239,10 @@
         "mouthOpenRatio": 0.2381,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2763,
+        "browRaiseY": 0.1295,
+        "browGapX": 0.1
       }
     },
     {
@@ -13336,7 +14284,10 @@
         "mouthOpenRatio": 0.2351,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2767,
+        "browRaiseY": 0.1293,
+        "browGapX": 0.1
       }
     },
     {
@@ -13378,7 +14329,10 @@
         "mouthOpenRatio": 0.232,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.277,
+        "browRaiseY": 0.1292,
+        "browGapX": 0.1
       }
     },
     {
@@ -13420,7 +14374,10 @@
         "mouthOpenRatio": 0.2289,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2774,
+        "browRaiseY": 0.129,
+        "browGapX": 0.1
       }
     },
     {
@@ -13462,7 +14419,10 @@
         "mouthOpenRatio": 0.2258,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2777,
+        "browRaiseY": 0.1289,
+        "browGapX": 0.1
       }
     },
     {
@@ -13504,7 +14464,10 @@
         "mouthOpenRatio": 0.2227,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2781,
+        "browRaiseY": 0.1288,
+        "browGapX": 0.1
       }
     },
     {
@@ -13546,7 +14509,10 @@
         "mouthOpenRatio": 0.2196,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2784,
+        "browRaiseY": 0.1286,
+        "browGapX": 0.1
       }
     },
     {
@@ -13588,7 +14554,10 @@
         "mouthOpenRatio": 0.2166,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2788,
+        "browRaiseY": 0.1285,
+        "browGapX": 0.1
       }
     },
     {
@@ -13630,7 +14599,10 @@
         "mouthOpenRatio": 0.2135,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2791,
+        "browRaiseY": 0.1283,
+        "browGapX": 0.1
       }
     },
     {
@@ -13672,7 +14644,10 @@
         "mouthOpenRatio": 0.2104,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2795,
+        "browRaiseY": 0.1282,
+        "browGapX": 0.1
       }
     },
     {
@@ -13714,7 +14689,10 @@
         "mouthOpenRatio": 0.2073,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2798,
+        "browRaiseY": 0.1281,
+        "browGapX": 0.1
       }
     },
     {
@@ -13756,7 +14734,10 @@
         "mouthOpenRatio": 0.2042,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2802,
+        "browRaiseY": 0.1279,
+        "browGapX": 0.1
       }
     },
     {
@@ -13798,7 +14779,10 @@
         "mouthOpenRatio": 0.2012,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2805,
+        "browRaiseY": 0.1278,
+        "browGapX": 0.1
       }
     },
     {
@@ -13840,7 +14824,10 @@
         "mouthOpenRatio": 0.1981,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2809,
+        "browRaiseY": 0.1276,
+        "browGapX": 0.1
       }
     },
     {
@@ -13882,7 +14869,10 @@
         "mouthOpenRatio": 0.195,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.2813,
+        "browRaiseY": 0.1275,
+        "browGapX": 0.1
       }
     },
     {
@@ -13924,7 +14914,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -13966,7 +14959,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1199,
+        "browGapX": 0.0999
       }
     },
     {
@@ -14008,7 +15004,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1198,
+        "browGapX": 0.0998
       }
     },
     {
@@ -14050,7 +15049,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1197,
+        "browGapX": 0.0996
       }
     },
     {
@@ -14092,7 +15094,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1195,
+        "browGapX": 0.0993
       }
     },
     {
@@ -14134,7 +15139,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1194,
+        "browGapX": 0.0991
       }
     },
     {
@@ -14176,7 +15184,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1192,
+        "browGapX": 0.0988
       }
     },
     {
@@ -14218,7 +15229,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.119,
+        "browGapX": 0.0984
       }
     },
     {
@@ -14260,7 +15274,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1187,
+        "browGapX": 0.0981
       }
     },
     {
@@ -14302,7 +15319,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1185,
+        "browGapX": 0.0977
       }
     },
     {
@@ -14344,7 +15364,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1182,
+        "browGapX": 0.0973
       }
     },
     {
@@ -14386,7 +15409,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1179,
+        "browGapX": 0.0969
       }
     },
     {
@@ -14428,7 +15454,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1177,
+        "browGapX": 0.0965
       }
     },
     {
@@ -14470,7 +15499,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1174,
+        "browGapX": 0.096
       }
     },
     {
@@ -14512,7 +15544,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1171,
+        "browGapX": 0.0956
       }
     },
     {
@@ -14554,7 +15589,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1167,
+        "browGapX": 0.0951
       }
     },
     {
@@ -14596,7 +15634,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1164,
+        "browGapX": 0.0946
       }
     },
     {
@@ -14638,7 +15679,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1161,
+        "browGapX": 0.0941
       }
     },
     {
@@ -14680,7 +15724,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1157,
+        "browGapX": 0.0936
       }
     },
     {
@@ -14722,7 +15769,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1153,
+        "browGapX": 0.093
       }
     },
     {
@@ -14764,7 +15814,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.115,
+        "browGapX": 0.0925
       }
     },
     {
@@ -14806,7 +15859,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1146,
+        "browGapX": 0.0919
       }
     },
     {
@@ -14848,7 +15904,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1142,
+        "browGapX": 0.0913
       }
     },
     {
@@ -14890,7 +15949,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1138,
+        "browGapX": 0.0907
       }
     },
     {
@@ -14932,7 +15994,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1134,
+        "browGapX": 0.0901
       }
     },
     {
@@ -14974,7 +16039,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.113,
+        "browGapX": 0.0895
       }
     },
     {
@@ -15016,7 +16084,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1125,
+        "browGapX": 0.0888
       }
     },
     {
@@ -15058,7 +16129,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1121,
+        "browGapX": 0.0882
       }
     },
     {
@@ -15100,7 +16174,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1117,
+        "browGapX": 0.0875
       }
     },
     {
@@ -15142,7 +16219,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1112,
+        "browGapX": 0.0868
       }
     },
     {
@@ -15184,7 +16264,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1108,
+        "browGapX": 0.0861
       }
     },
     {
@@ -15226,7 +16309,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1103,
+        "browGapX": 0.0854
       }
     },
     {
@@ -15268,7 +16354,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1098,
+        "browGapX": 0.0847
       }
     },
     {
@@ -15310,7 +16399,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1093,
+        "browGapX": 0.084
       }
     },
     {
@@ -15352,7 +16444,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1088,
+        "browGapX": 0.0833
       }
     },
     {
@@ -15394,7 +16489,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1084,
+        "browGapX": 0.0825
       }
     },
     {
@@ -15436,7 +16534,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15478,7 +16579,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15520,7 +16624,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15562,7 +16669,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15604,7 +16714,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15646,7 +16759,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15688,7 +16804,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15730,7 +16849,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15772,7 +16894,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15814,7 +16939,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15856,7 +16984,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15898,7 +17029,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15940,7 +17074,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -15982,7 +17119,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16024,7 +17164,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16066,7 +17209,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16108,7 +17254,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16150,7 +17299,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16192,7 +17344,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16234,7 +17389,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16276,7 +17434,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16318,7 +17479,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16360,7 +17524,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16402,7 +17569,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16444,7 +17614,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16486,7 +17659,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16528,7 +17704,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16570,7 +17749,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16612,7 +17794,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16654,7 +17839,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16696,7 +17884,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16738,7 +17929,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16780,7 +17974,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16822,7 +18019,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16864,7 +18064,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16906,7 +18109,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16948,7 +18154,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -16990,7 +18199,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17032,7 +18244,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17074,7 +18289,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17116,7 +18334,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17158,7 +18379,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17200,7 +18424,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17242,7 +18469,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17284,7 +18514,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17326,7 +18559,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17368,7 +18604,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17410,7 +18649,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17452,7 +18694,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17494,7 +18739,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17536,7 +18784,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17578,7 +18829,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17620,7 +18874,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17662,7 +18919,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17704,7 +18964,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17746,7 +19009,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17788,7 +19054,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17830,7 +19099,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17872,7 +19144,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17914,7 +19189,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17956,7 +19234,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -17998,7 +19279,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -18040,7 +19324,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -18082,7 +19369,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -18124,7 +19414,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -18166,7 +19459,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.108,
+        "browGapX": 0.082
       }
     },
     {
@@ -18208,7 +19504,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1081,
+        "browGapX": 0.0822
       }
     },
     {
@@ -18250,7 +19549,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1083,
+        "browGapX": 0.0825
       }
     },
     {
@@ -18292,7 +19594,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1085,
+        "browGapX": 0.0827
       }
     },
     {
@@ -18334,7 +19639,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1086,
+        "browGapX": 0.083
       }
     },
     {
@@ -18376,7 +19684,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1088,
+        "browGapX": 0.0832
       }
     },
     {
@@ -18418,7 +19729,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.109,
+        "browGapX": 0.0835
       }
     },
     {
@@ -18460,7 +19774,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1092,
+        "browGapX": 0.0837
       }
     },
     {
@@ -18502,7 +19819,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1093,
+        "browGapX": 0.084
       }
     },
     {
@@ -18544,7 +19864,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1095,
+        "browGapX": 0.0842
       }
     },
     {
@@ -18586,7 +19909,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1097,
+        "browGapX": 0.0845
       }
     },
     {
@@ -18628,7 +19954,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1098,
+        "browGapX": 0.0847
       }
     },
     {
@@ -18670,7 +19999,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.11,
+        "browGapX": 0.085
       }
     },
     {
@@ -18712,7 +20044,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1102,
+        "browGapX": 0.0852
       }
     },
     {
@@ -18754,7 +20089,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1103,
+        "browGapX": 0.0855
       }
     },
     {
@@ -18796,7 +20134,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1105,
+        "browGapX": 0.0857
       }
     },
     {
@@ -18838,7 +20179,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1107,
+        "browGapX": 0.086
       }
     },
     {
@@ -18880,7 +20224,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.1108,
+        "browGapX": 0.0862
       }
     },
     {
@@ -18922,7 +20269,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.111,
+        "browGapX": 0.0865
       }
     },
     {
@@ -18964,7 +20314,10 @@
         "mouthOpenRatio": 0.1562,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19006,7 +20359,10 @@
         "mouthOpenRatio": 0.0707,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19048,7 +20404,10 @@
         "mouthOpenRatio": 0.0301,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19090,7 +20449,10 @@
         "mouthOpenRatio": 0.065,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19132,7 +20494,10 @@
         "mouthOpenRatio": 0.1492,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19174,7 +20539,10 @@
         "mouthOpenRatio": 0.2188,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19216,7 +20584,10 @@
         "mouthOpenRatio": 0.2212,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19258,7 +20629,10 @@
         "mouthOpenRatio": 0.1546,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19300,7 +20674,10 @@
         "mouthOpenRatio": 0.0694,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19342,7 +20719,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19384,7 +20764,10 @@
         "mouthOpenRatio": 0.0663,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19426,7 +20809,10 @@
         "mouthOpenRatio": 0.1508,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19468,7 +20854,10 @@
         "mouthOpenRatio": 0.2196,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19510,7 +20899,10 @@
         "mouthOpenRatio": 0.2205,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19552,7 +20944,10 @@
         "mouthOpenRatio": 0.153,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19594,7 +20989,10 @@
         "mouthOpenRatio": 0.068,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19636,7 +21034,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19678,7 +21079,10 @@
         "mouthOpenRatio": 0.0676,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19720,7 +21124,10 @@
         "mouthOpenRatio": 0.1525,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19762,7 +21169,10 @@
         "mouthOpenRatio": 0.2203,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19804,7 +21214,10 @@
         "mouthOpenRatio": 0.2198,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19846,7 +21259,10 @@
         "mouthOpenRatio": 0.1513,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19888,7 +21304,10 @@
         "mouthOpenRatio": 0.0667,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19930,7 +21349,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -19972,7 +21394,10 @@
         "mouthOpenRatio": 0.069,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20014,7 +21439,10 @@
         "mouthOpenRatio": 0.1541,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20056,7 +21484,10 @@
         "mouthOpenRatio": 0.221,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20098,7 +21529,10 @@
         "mouthOpenRatio": 0.219,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20140,7 +21574,10 @@
         "mouthOpenRatio": 0.1497,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20182,7 +21619,10 @@
         "mouthOpenRatio": 0.0654,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20224,7 +21664,10 @@
         "mouthOpenRatio": 0.03,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20266,7 +21709,10 @@
         "mouthOpenRatio": 0.0703,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20308,7 +21754,10 @@
         "mouthOpenRatio": 0.1557,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20350,7 +21799,10 @@
         "mouthOpenRatio": 0.2217,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20392,7 +21844,10 @@
         "mouthOpenRatio": 0.2183,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20434,7 +21889,10 @@
         "mouthOpenRatio": 0.148,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20476,7 +21934,10 @@
         "mouthOpenRatio": 0.0642,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20518,7 +21979,10 @@
         "mouthOpenRatio": 0.0301,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20560,7 +22024,10 @@
         "mouthOpenRatio": 0.0717,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20602,7 +22069,10 @@
         "mouthOpenRatio": 0.1573,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20644,7 +22114,10 @@
         "mouthOpenRatio": 0.2223,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20686,7 +22159,10 @@
         "mouthOpenRatio": 0.2175,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20728,7 +22204,10 @@
         "mouthOpenRatio": 0.1464,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20770,7 +22249,10 @@
         "mouthOpenRatio": 0.0629,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20812,7 +22294,10 @@
         "mouthOpenRatio": 0.0302,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20854,7 +22339,10 @@
         "mouthOpenRatio": 0.073,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20896,7 +22384,10 @@
         "mouthOpenRatio": 0.159,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20938,7 +22429,10 @@
         "mouthOpenRatio": 0.223,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -20980,7 +22474,10 @@
         "mouthOpenRatio": 0.2166,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21022,7 +22519,10 @@
         "mouthOpenRatio": 0.1447,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21064,7 +22564,10 @@
         "mouthOpenRatio": 0.0617,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21106,7 +22609,10 @@
         "mouthOpenRatio": 0.0303,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21148,7 +22654,10 @@
         "mouthOpenRatio": 0.0744,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21190,7 +22699,10 @@
         "mouthOpenRatio": 0.1606,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21232,7 +22744,10 @@
         "mouthOpenRatio": 0.2236,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21274,7 +22789,10 @@
         "mouthOpenRatio": 0.2158,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21316,7 +22834,10 @@
         "mouthOpenRatio": 0.1431,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21358,7 +22879,10 @@
         "mouthOpenRatio": 0.0605,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21400,7 +22924,10 @@
         "mouthOpenRatio": 0.0305,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21442,7 +22969,10 @@
         "mouthOpenRatio": 0.0758,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21484,7 +23014,10 @@
         "mouthOpenRatio": 0.1622,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21526,7 +23059,10 @@
         "mouthOpenRatio": 0.2242,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21568,7 +23104,10 @@
         "mouthOpenRatio": 0.2149,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21610,7 +23149,10 @@
         "mouthOpenRatio": 0.1414,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21652,7 +23194,10 @@
         "mouthOpenRatio": 0.0593,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21694,7 +23239,10 @@
         "mouthOpenRatio": 0.0307,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21736,7 +23284,10 @@
         "mouthOpenRatio": 0.0772,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21778,7 +23329,10 @@
         "mouthOpenRatio": 0.1638,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21820,7 +23374,10 @@
         "mouthOpenRatio": 0.2247,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21862,7 +23419,10 @@
         "mouthOpenRatio": 0.214,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21904,7 +23464,10 @@
         "mouthOpenRatio": 0.1397,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21946,7 +23509,10 @@
         "mouthOpenRatio": 0.0581,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -21988,7 +23554,10 @@
         "mouthOpenRatio": 0.0309,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22030,7 +23599,10 @@
         "mouthOpenRatio": 0.0787,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22072,7 +23644,10 @@
         "mouthOpenRatio": 0.1653,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22114,7 +23689,10 @@
         "mouthOpenRatio": 0.2252,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22156,7 +23734,10 @@
         "mouthOpenRatio": 0.2131,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22198,7 +23779,10 @@
         "mouthOpenRatio": 0.138,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22240,7 +23824,10 @@
         "mouthOpenRatio": 0.0569,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22282,7 +23869,10 @@
         "mouthOpenRatio": 0.0311,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22324,7 +23914,10 @@
         "mouthOpenRatio": 0.0801,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22366,7 +23959,10 @@
         "mouthOpenRatio": 0.1669,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22408,7 +24004,10 @@
         "mouthOpenRatio": 0.2257,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22450,7 +24049,10 @@
         "mouthOpenRatio": 0.2121,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22492,7 +24094,10 @@
         "mouthOpenRatio": 0.1364,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22534,7 +24139,10 @@
         "mouthOpenRatio": 0.0558,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22576,7 +24184,10 @@
         "mouthOpenRatio": 0.0314,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22618,7 +24229,10 @@
         "mouthOpenRatio": 0.0816,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22660,7 +24274,10 @@
         "mouthOpenRatio": 0.1685,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22702,7 +24319,10 @@
         "mouthOpenRatio": 0.2262,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22744,7 +24364,10 @@
         "mouthOpenRatio": 0.2112,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22786,7 +24409,10 @@
         "mouthOpenRatio": 0.1347,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22828,7 +24454,10 @@
         "mouthOpenRatio": 0.0547,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22870,7 +24499,10 @@
         "mouthOpenRatio": 0.0317,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22912,7 +24544,10 @@
         "mouthOpenRatio": 0.0831,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22954,7 +24589,10 @@
         "mouthOpenRatio": 0.17,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -22996,7 +24634,10 @@
         "mouthOpenRatio": 0.2267,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23038,7 +24679,10 @@
         "mouthOpenRatio": 0.2102,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23080,7 +24724,10 @@
         "mouthOpenRatio": 0.133,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23122,7 +24769,10 @@
         "mouthOpenRatio": 0.0536,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23164,7 +24814,10 @@
         "mouthOpenRatio": 0.032,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23206,7 +24859,10 @@
         "mouthOpenRatio": 0.0846,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23248,7 +24904,10 @@
         "mouthOpenRatio": 0.1715,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23290,7 +24949,10 @@
         "mouthOpenRatio": 0.2271,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23332,7 +24994,10 @@
         "mouthOpenRatio": 0.2091,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23374,7 +25039,10 @@
         "mouthOpenRatio": 0.1313,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23416,7 +25084,10 @@
         "mouthOpenRatio": 0.0525,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23458,7 +25129,10 @@
         "mouthOpenRatio": 0.0323,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23500,7 +25174,10 @@
         "mouthOpenRatio": 0.0861,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23542,7 +25219,10 @@
         "mouthOpenRatio": 0.1731,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23584,7 +25264,10 @@
         "mouthOpenRatio": 0.2275,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23626,7 +25309,10 @@
         "mouthOpenRatio": 0.2081,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23668,7 +25354,10 @@
         "mouthOpenRatio": 0.1296,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23710,7 +25399,10 @@
         "mouthOpenRatio": 0.0514,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23752,7 +25444,10 @@
         "mouthOpenRatio": 0.0327,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23794,7 +25489,10 @@
         "mouthOpenRatio": 0.0876,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23836,7 +25534,10 @@
         "mouthOpenRatio": 0.1746,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23878,7 +25579,10 @@
         "mouthOpenRatio": 0.2278,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23920,7 +25624,10 @@
         "mouthOpenRatio": 0.207,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     },
     {
@@ -23962,7 +25669,10 @@
         "mouthOpenRatio": 0.128,
         "mouthWidthToFaceWidth": 0.4,
         "mouthCornerTilt": 0.02,
-        "yawSymmetry": 0.9
+        "yawSymmetry": 0.9,
+        "cheekRaiseY": 0.3,
+        "browRaiseY": 0.12,
+        "browGapX": 0.1
       }
     }
   ]

@@ -27,6 +27,9 @@ const NEUTRAL = {
   mouthWidthToFaceWidth: 0.4,
   mouthCornerTilt: 0.02,
   yawSymmetry: 0.9,
+  cheekRaiseY: 0.3,
+  browRaiseY: 0.12,
+  browGapX: 0.1,
 }
 
 /** Deterministic pseudo-noise, so the fixture is byte-stable across runs. */
@@ -46,6 +49,9 @@ interface Segment {
     spread: number
     lift: number
     lipDrop: number
+    cheek: number
+    brow: number
+    browGap: number
     mic: number
   }
 }
@@ -62,6 +68,9 @@ const SEGMENTS: Segment[] = [
       spread: 0.4,
       lift: 0.3,
       lipDrop: 0.06,
+      cheek: 0.3,
+      brow: 0.12,
+      browGap: 0.1,
       mic: 0.002,
     }),
   },
@@ -79,6 +88,10 @@ const SEGMENTS: Segment[] = [
         spread: 0.4 + 0.04 * r,
         lift: 0.3 + 0.01 * r,
         lipDrop: 0.06,
+        // Cheeks ride up toward the eyes, brows lift slightly.
+        cheek: 0.3 - 0.02 * r,
+        brow: 0.12 + 0.008 * r,
+        browGap: 0.1,
         mic: 0.002,
       }
     },
@@ -96,6 +109,9 @@ const SEGMENTS: Segment[] = [
         spread: 0.4 + 0.06 * r,
         lift: 0.3 + 0.015 * r,
         lipDrop: 0.06,
+        cheek: 0.3 - 0.025 * r,
+        brow: 0.12 + 0.01 * r,
+        browGap: 0.1,
         mic: 0.003,
       }
     },
@@ -113,6 +129,10 @@ const SEGMENTS: Segment[] = [
         spread: 0.4 - 0.02 * r,
         lift: 0.3 - 0.02 * r,
         lipDrop: 0.06 + 0.025 * r,
+        // Inner brows come together and drop.
+        cheek: 0.3,
+        brow: 0.12 - 0.012 * r,
+        browGap: 0.1 - 0.018 * r,
         mic: 0.002,
       }
     },
@@ -132,6 +152,9 @@ const SEGMENTS: Segment[] = [
         spread: 0.4 + 0.05 * syllable,
         lift: 0.3,
         lipDrop: 0.06,
+        cheek: 0.3,
+        brow: 0.12,
+        browGap: 0.1,
         mic: 0.05 + 0.1 * syllable,
       }
     },
@@ -196,6 +219,9 @@ for (const segment of SEGMENTS) {
         cornerLiftY: round(v.lift),
         lowerLipDropY: round(v.lipDrop),
         mouthOpenRatio: round(v.open),
+        cheekRaiseY: round(v.cheek),
+        browRaiseY: round(v.brow),
+        browGapX: round(v.browGap),
       },
     })
     tsMs += STEP_MS

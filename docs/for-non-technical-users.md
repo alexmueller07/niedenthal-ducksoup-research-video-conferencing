@@ -82,6 +82,16 @@ Both smiles are needed, and they do different jobs. The **closed-lip** one decid
 - **Presets get weaker-sounding numbers.** "Smile (strong)" is now 0.50 rather than 0.9, because 0.9 would now mean 90% of their real maximum. The change you see on screen is about the same as before.
 - **Expression reading gets more accurate and noticeably quicker**, because it's now judged against their own relaxed face instead of one cutoff for everybody.
 
+### Cheeks and eyebrows
+
+The change isn't just the mouth. Calibration also measures how much that person's cheeks and eyebrows move, and the whole face moves together — a smile lifts their cheeks, a frown pulls their brows down and together. All from the same four takes; participants don't do anything extra.
+
+It copies what each person actually does rather than assuming. If someone raises their eyebrows when they smile, theirs go up; if someone's drop, theirs drop.
+
+The eyes themselves are left alone on purpose. Eyelids and eyelashes look obviously wrong if a change there is even slightly off, which is far more noticeable than a slightly stiff cheek.
+
+**If a participant wears glasses**, have a quick look at their altered view before you start. The movement is deliberately kept away from where frames sit, but unusual frames — very large lenses, or ones sitting low on the cheek — could still catch. The 1-person test tool has a "Cheek & brow follow" slider you can turn down if so.
+
 ### Talking
 
 The app now detects when someone is speaking, using both their mouth movement and their microphone. While they're talking, frowns are not reported — ordinary talking makes almost the same mouth shapes a frown does, so a frown logged mid-sentence is nearly always wrong. Smiles are still reported, since people genuinely smile while talking. The face modification isn't switched off during speech, just eased back while the mouth is wide open, where this kind of change looks least convincing anyway.
@@ -91,6 +101,8 @@ The app now detects when someone is speaking, using both their mouth movement an
 Everything, into the session folder under `calibration/<participant id>/`: a `calibration.json` with every measurement from every take, plus the four photos. The event log records each take and the moment you accepted it. For the rest of the session, the per-second data file records their readings on their own scale alongside the raw ones.
 
 A participant is **not** remembered between sessions — if the same person comes back another day, calibrate them again.
+
+If someone was calibrated before the cheek and eyebrow update, calibrate them again to pick it up. Nothing will warn you — they'd just keep getting the mouth-only version.
 
 ### If you skip it
 

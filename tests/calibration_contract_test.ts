@@ -16,6 +16,7 @@ import {
   type GeometryFrame,
   type ScoreFrame,
 } from '../renderer/lib/calibration'
+import { MAX_CHEEK_RISE } from '../renderer/lib/calibration'
 import type { CalibrationPhase, CalibrationPhaseSummary } from '../main/protocol'
 
 // ---- Fixtures ----
@@ -28,6 +29,9 @@ const NEUTRAL_GEOMETRY: GeometryFrame = {
   mouthWidthToFaceWidth: 0.4,
   mouthCornerTilt: 0.02,
   yawSymmetry: 0.9,
+  cheekRaiseY: 0.3,
+  browRaiseY: 0.12,
+  browGapX: 0.1,
 }
 
 function frames(
@@ -84,7 +88,14 @@ function buildPhases(): Partial<Record<CalibrationPhase, CalibrationPhaseSummary
   const smileClosed = validatePhase(
     summarizePhase(
       'smileClosed',
-      risingFrames(120, 'smile', 0.7, { cornerSpreadX: 0.44, cornerLiftY: 0.31, mouthOpenRatio: 0.04 }),
+      risingFrames(120, 'smile', 0.7, {
+        cornerSpreadX: 0.44,
+        cornerLiftY: 0.31,
+        mouthOpenRatio: 0.04,
+        // Cheeks ride up toward the eyes, brows lift a little.
+        cheekRaiseY: 0.28,
+        browRaiseY: 0.13,
+      }),
     ),
     neutral,
   )
@@ -98,7 +109,14 @@ function buildPhases(): Partial<Record<CalibrationPhase, CalibrationPhaseSummary
   const frown = validatePhase(
     summarizePhase(
       'frown',
-      risingFrames(120, 'frown', 0.3, { cornerSpreadX: 0.38, cornerLiftY: 0.28, lowerLipDropY: 0.085 }),
+      risingFrames(120, 'frown', 0.3, {
+        cornerSpreadX: 0.38,
+        cornerLiftY: 0.28,
+        lowerLipDropY: 0.085,
+        // Inner brows come together and drop.
+        browRaiseY: 0.105,
+        browGapX: 0.08,
+      }),
     ),
     neutral,
   )
@@ -224,6 +242,50 @@ assert.ok(profile!.derived.frown.cornerAngleRad < 0, 'a frown points downward')
 assert.ok(profile!.derived.frown.poutDrop > 0, 'a frown drops the centre of the lower lip')
 assert.ok(profile!.derived.jawCoupling > 0, 'opening the mouth is measured as moving the corners')
 
+// ---- The rest of the face ----
+
+assert.ok(
+  (profile!.derived.smile.cheekRise ?? 0) > 0,
+  `a smile that raises the cheeks should measure a cheek rise, got ${profile!.derived.smile.cheekRise}`,
+)
+assert.ok(
+  (profile!.derived.smile.browRise ?? 0) > 0,
+  'and a brow rise, since this face raises its brows when smiling',
+)
+assert.ok(
+  (profile!.derived.frown.browFurrow ?? 0) > 0,
+  'a frown should measure the inner brows pulling together',
+)
+assert.ok(
+  (profile!.derived.frown.browRise ?? 0) < 0,
+  'and the brows dropping',
+)
+assert.ok(
+  (profile!.derived.smile.cheekRise ?? 0) <= MAX_CHEEK_RISE,
+  'cheek travel stays inside its cap',
+)
+
+// A face whose cheeks and brows genuinely do not move must come out at zero
+// rather than as jitter, so it simply gets the mouth-only morph.
+const stillPhases = {
+  neutral: phases.neutral,
+  smileClosed: validatePhase(
+    summarizePhase(
+      'smileClosed',
+      risingFrames(120, 'smile', 0.7, { cornerSpreadX: 0.44, cornerLiftY: 0.31 }),
+    ),
+    phases.neutral,
+  ),
+  smileOpen: phases.smileOpen,
+  frown: phases.frown,
+}
+const stillProfile = buildCalibrationProfile(stillPhases, META)
+assert.equal(
+  stillProfile!.derived.smile.cheekRise,
+  0,
+  'a face whose cheeks do not move gets no cheek movement, not noise',
+)
+
 // An incomplete calibration is worse than none: the morph would be scaled
 // against a range nobody measured.
 assert.equal(
@@ -236,6 +298,16 @@ assert.equal(
 
 const roundTripped = parseCalibrationFile(JSON.parse(JSON.stringify(profile)))
 assert.ok(roundTripped, 'a written profile reloads')
+
+// Calibrations recorded before the cheeks and brows were measured must still
+// load, so nobody's existing session data becomes unreadable.
+const v1 = JSON.parse(JSON.stringify(profile))
+v1.schemaVersion = 1
+delete v1.derived.smile.cheekRise
+delete v1.derived.smile.browRise
+const reloadedV1 = parseCalibrationFile(v1)
+assert.ok(reloadedV1, 'an older calibration file still loads')
+assert.equal(reloadedV1!.derived.smile.cheekRise, undefined, 'it just carries no cheek data')
 assert.equal(roundTripped!.derived.smile.cornerTravel, profile!.derived.smile.cornerTravel)
 assert.equal(parseCalibrationFile({ schemaVersion: 99 }), null, 'an unknown schema is refused')
 assert.equal(parseCalibrationFile(null), null, 'garbage is refused')
