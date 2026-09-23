@@ -9,7 +9,7 @@
 
 export const PROTOCOL_VERSION = 1
 export const DEFAULT_PORT = 8771
-export const APP_VERSION = '3.0.4'
+export const APP_VERSION = '3.0.5'
 
 export type Role = 'participant' | 'admin'
 
