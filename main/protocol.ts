@@ -231,6 +231,12 @@ export interface GeometryStats {
   cornerLiftY: Stat
   /** Lower-lip-centre drop below the mouth line ÷ face width. */
   lowerLipDropY: Stat
+  /** Cheek height below the eye line ÷ face width. Shrinks as the cheeks raise. */
+  cheekRaiseY: Stat
+  /** Brow height above the eye line ÷ face width. Grows as the brows raise. */
+  browRaiseY: Stat
+  /** Gap between the inner brow ends ÷ face width. Shrinks as the brows furrow. */
+  browGapX: Stat
   /** Inner-lip vertical opening ÷ mouth width. */
   mouthOpenRatio: Stat
   /** Mouth width ÷ face width. */
@@ -290,9 +296,27 @@ export interface CalibrationDirection {
   cornerTravel: number
   /** Morph: direction the corners travel, radians above horizontal. */
   cornerAngleRad: number
+  /**
+   * How far the rest of the face moves with the mouth at this person's
+   * maximum, in mouth-widths. A mouth that moves while the cheeks and brows
+   * stay frozen is the single biggest giveaway that the expression is not
+   * real, so these are measured per person from the same takes.
+   *
+   * Positive cheekRise = cheeks move up toward the eyes.
+   * Positive browRise  = brows move up. Negative = they drop.
+   * Positive browFurrow = inner brow ends pull toward each other.
+   *
+   * All default to 0, which reproduces the mouth-only morph exactly — that is
+   * what an uncalibrated participant, or a calibration recorded before these
+   * were measured, falls back to.
+   */
+  cheekRise?: number
+  browRise?: number
+  browFurrow?: number
 }
 
 export interface CalibrationProfile {
+  /** 1 = mouth only. 2 adds the cheek/brow measurements. Both still load. */
   schemaVersion: number
   version: string
   participantId: string

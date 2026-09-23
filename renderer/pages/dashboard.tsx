@@ -44,6 +44,9 @@ export default function DashboardPage() {
   })
   const preset = getPreset(config.presetId)
   const [alpha, setAlpha] = useState(preset.alpha)
+  // How much the cheeks and brows follow the mouth. 1 = exactly what
+  // calibration measured; here to tune against a real face.
+  const [faceCoupling, setFaceCoupling] = useState(1)
 
   const [connection, setConnection] = useState<ConnectionStatus>('disconnected')
   const [recording, setRecording] = useState<RecordingStatus>('idle')
@@ -108,6 +111,10 @@ export default function DashboardPage() {
   useEffect(() => {
     stationRef.current?.setAlpha(alpha)
   }, [alpha])
+
+  useEffect(() => {
+    stationRef.current?.setFaceCoupling(faceCoupling)
+  }, [faceCoupling])
 
   const applyPreset = (id: string) => {
     const p = getPreset(id)
@@ -259,6 +266,12 @@ export default function DashboardPage() {
                 <div className="slider-head"><span>Smile (face)</span><span className="val">{alpha.toFixed(2)}</span></div>
                 <input type="range" min={-1} max={1} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
                 <div className="ticks"><span>Frown</span><span>Neutral</span><span>Smile</span></div>
+              </div>
+
+              <div className="slider">
+                <div className="slider-head"><span>Cheek &amp; brow follow</span><span className="val">{faceCoupling.toFixed(2)}</span></div>
+                <input type="range" min={0} max={1.5} step={0.05} value={faceCoupling} onChange={(e) => setFaceCoupling(parseFloat(e.target.value))} />
+                <div className="ticks"><span>Mouth only</span><span>As measured</span><span>More</span></div>
               </div>
             </section>
           </aside>

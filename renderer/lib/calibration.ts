@@ -33,8 +33,10 @@ import type {
 } from './protocol'
 import { CALIBRATION_PHASES } from './protocol'
 
-export const CALIBRATION_VERSION = 'per-participant-geometry-v1'
-export const CALIBRATION_SCHEMA_VERSION = 1
+export const CALIBRATION_VERSION = 'per-participant-geometry-v2-face-coupling'
+export const CALIBRATION_SCHEMA_VERSION = 2
+/** Older files are still readable; they simply carry no cheek/brow data. */
+const SUPPORTED_SCHEMA_VERSIONS = [1, 2]
 
 // ---- Timing ----
 
@@ -128,6 +130,20 @@ export const MAX_CLOSED_SMILE_OPEN_RATIO = 0.12
 /** How far the morph fades at a wide-open mouth (1 − this = the floor). */
 export const OPEN_MOUTH_FADE = 0.6
 
+/**
+ * Caps on how far the rest of the face is allowed to move, in mouth-widths.
+ *
+ * Deliberately tighter than the mouth's own cap. The cheek and brow areas sit
+ * under glasses frames on a lot of people, and a bent frame reads as broken in
+ * a way a slightly stiff cheek never does — so a mis-measurement here is much
+ * more costly than under-moving.
+ */
+export const MAX_CHEEK_RISE = 0.12
+export const MAX_BROW_RISE = 0.08
+export const MAX_BROW_FURROW = 0.06
+/** Below this the measurement is noise, and moving by it would only add jitter. */
+export const MIN_FACE_COUPLING = 0.004
+
 // ---- Frame shape ----
 
 /** Every blendshape the pipeline reads, in the order they are stored. */
@@ -156,6 +172,9 @@ export interface GeometryFrame {
   cornerSpreadX: number
   cornerLiftY: number
   lowerLipDropY: number
+  cheekRaiseY: number
+  browRaiseY: number
+  browGapX: number
   mouthOpenRatio: number
   mouthWidthToFaceWidth: number
   mouthCornerTilt: number
@@ -183,6 +202,9 @@ const GEOMETRY_KEYS: Array<keyof GeometryFrame> = [
   'cornerSpreadX',
   'cornerLiftY',
   'lowerLipDropY',
+  'cheekRaiseY',
+  'browRaiseY',
+  'browGapX',
   'mouthOpenRatio',
   'mouthWidthToFaceWidth',
   'mouthCornerTilt',
@@ -354,6 +376,11 @@ export function buildCalibrationProfile(
     (frown.peak.geometry.lowerLipDropY.mean - n.lowerLipDropY.mean) * toMouthWidths,
   )
 
+  // How much the rest of the face moves with each expression, measured on the
+  // same takes and in the same units as the mouth.
+  const smileCoupling = faceCoupling(n, smileClosed.peak.geometry, toMouthWidths)
+  const frownCoupling = faceCoupling(n, frown.peak.geometry, toMouthWidths)
+
   // How much of a smile's corner travel is really the jaw dropping: the gap
   // between the open and closed smile, per unit of mouth opening. Subtracting
   // this at runtime is what stops talking from reading as an expression.
@@ -397,6 +424,7 @@ export function buildCalibrationProfile(
         cornerAngleRad: round3(
           clamp(smileVec.angle, MORPH_ANGLE_MIN_RAD, MORPH_ANGLE_MAX_RAD),
         ),
+        ...smileCoupling,
       },
       frown: {
         range: round3(frownRange),
@@ -408,6 +436,7 @@ export function buildCalibrationProfile(
           -clamp(-frownVec.angle, MORPH_ANGLE_MIN_RAD, Math.PI - MORPH_ANGLE_MIN_RAD),
         ),
         poutDrop: round3(Math.min(poutDrop, MORPH_TRAVEL_MAX)),
+        ...frownCoupling,
       },
       openness: {
         neutral: round3(neutral.scores.openness.mean),
@@ -446,6 +475,39 @@ function cornerVector(
   return { travel: Math.hypot(dx, dy), angle: Math.atan2(dy, dx), dx, dy }
 }
 
+/**
+ * Cheek, brow and brow-furrow travel between a neutral baseline and a peak, in
+ * mouth-widths.
+ *
+ * Signs are chosen so that positive always means "the thing people expect":
+ * cheeks up, brows up, inner brows together. `cheekRaiseY` and `browGapX`
+ * shrink as those happen, hence the flipped subtraction.
+ *
+ * Anything below the noise floor comes back as 0, so a person whose cheeks
+ * genuinely do not move gets a mouth-only morph rather than a jittery one.
+ */
+function faceCoupling(
+  neutral: GeometryStats,
+  peak: GeometryStats,
+  toMouthWidths: number,
+): { cheekRise: number; browRise: number; browFurrow: number } {
+  const cheekRise = (neutral.cheekRaiseY.mean - peak.cheekRaiseY.mean) * toMouthWidths
+  const browRise = (peak.browRaiseY.mean - neutral.browRaiseY.mean) * toMouthWidths
+  const browFurrow = (neutral.browGapX.mean - peak.browGapX.mean) * toMouthWidths
+  return {
+    // Brow movement keeps its sign: some people raise their brows when they
+    // smile and others lower them, and the whole point is to copy what this
+    // person does rather than assume.
+    cheekRise: round3(deadband(clamp(cheekRise, 0, MAX_CHEEK_RISE))),
+    browRise: round3(deadband(clamp(browRise, -MAX_BROW_RISE, MAX_BROW_RISE))),
+    browFurrow: round3(deadband(clamp(browFurrow, 0, MAX_BROW_FURROW))),
+  }
+}
+
+function deadband(value: number): number {
+  return Math.abs(value) < MIN_FACE_COUPLING ? 0 : value
+}
+
 export function deadZoneFor(neutralStd: number, range: number): number {
   return clamp(
     (NEUTRAL_SIGMA_MARGIN * neutralStd) / Math.max(1e-6, range),
@@ -458,7 +520,7 @@ export function deadZoneFor(neutralStd: number, range: number): number {
 export function parseCalibrationFile(raw: unknown): CalibrationProfile | null {
   if (!raw || typeof raw !== 'object') return null
   const candidate = raw as Partial<CalibrationProfile>
-  if (candidate.schemaVersion !== CALIBRATION_SCHEMA_VERSION) return null
+  if (!SUPPORTED_SCHEMA_VERSIONS.includes(candidate.schemaVersion as number)) return null
   if (!candidate.derived?.smile || !candidate.derived?.frown) return null
   if (!candidate.phases?.neutral) return null
   return candidate as CalibrationProfile
@@ -489,6 +551,9 @@ export interface MorphDirection {
   cornerTravel: number
   cornerAngleRad: number
   poutDrop: number
+  cheekRise: number
+  browRise: number
+  browFurrow: number
 }
 
 /** The per-person warp geometry for a given alpha, or today's constants if uncalibrated. */
@@ -498,13 +563,25 @@ export function morphDirectionFor(
 ): MorphDirection {
   if (alpha >= 0) {
     const d = profile?.derived.smile ?? FALLBACK_SMILE
-    return { cornerTravel: d.cornerTravel, cornerAngleRad: d.cornerAngleRad, poutDrop: 0 }
+    return {
+      cornerTravel: d.cornerTravel,
+      cornerAngleRad: d.cornerAngleRad,
+      poutDrop: 0,
+      // Absent on an uncalibrated participant and on files written before the
+      // cheeks and brows were measured — both fall back to a mouth-only morph.
+      cheekRise: d.cheekRise ?? 0,
+      browRise: d.browRise ?? 0,
+      browFurrow: 0,
+    }
   }
   const d = profile?.derived.frown ?? FALLBACK_FROWN
   return {
     cornerTravel: d.cornerTravel,
     cornerAngleRad: d.cornerAngleRad,
     poutDrop: d.poutDrop,
+    cheekRise: d.cheekRise ?? 0,
+    browRise: d.browRise ?? 0,
+    browFurrow: d.browFurrow ?? 0,
   }
 }
 

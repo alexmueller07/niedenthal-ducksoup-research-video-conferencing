@@ -123,6 +123,11 @@ export class CaptureStation {
     const p = getPreset(config.presetId)
     this.setAlpha(p.alpha)
   }
+  /** Scale how much the cheeks and brows move with the mouth. 1 = as measured. */
+  setFaceCoupling(scale: number) {
+    this.face.setFaceCoupling(scale)
+  }
+
   setAlpha(alpha: number) {
     this.alpha = alpha
     this.face.setAlpha(alpha)

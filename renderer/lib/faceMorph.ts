@@ -72,6 +72,23 @@ const LOWER_INNER_LIP = 14
 const LOWER_LIP_CENTER = 17
 const LEFT_OUTER_EYE = 33
 const RIGHT_OUTER_EYE = 263
+const LEFT_INNER_EYE = 133
+const RIGHT_INNER_EYE = 362
+// Upper/lower lids, used to size the protected zone around each eye.
+const LEFT_UPPER_LID = 159
+const LEFT_LOWER_LID = 145
+const RIGHT_UPPER_LID = 386
+const RIGHT_LOWER_LID = 374
+// Brows: inner ends move toward each other in a furrow, the mid points ride up
+// and down with a raise.
+const LEFT_BROW_INNER = 107
+const RIGHT_BROW_INNER = 336
+const LEFT_BROW_MID = 105
+const RIGHT_BROW_MID = 334
+// Mid-cheek, kept low on the face: on a glasses wearer the lower rim sits on
+// the upper cheek, and bending a rigid frame looks far worse than a stiff cheek.
+const LEFT_CHEEK = 205
+const RIGHT_CHEEK = 425
 // Yaw estimation: nose tip vs. the two face-oval cheek extremes.
 const NOSE_TIP = 1
 const LEFT_FACE_EDGE = 234
@@ -163,6 +180,20 @@ interface Pt {
   y: number
 }
 
+/** Landmark positions the displacement field is built around, in pixels. */
+interface FaceAnchors {
+  mouthCenterX: number
+  mouthCenterY: number
+  leftEye: Pt
+  rightEye: Pt
+  eyeWidth: number
+  eyeHeight: number
+  leftCheek: Pt
+  rightCheek: Pt
+  leftBrow: Pt
+  rightBrow: Pt
+}
+
 export class FaceMorphProcessor {
   private landmarker: FaceLandmarker | null = null
   private src: HTMLCanvasElement // holds the raw frame for sampling
@@ -189,6 +220,13 @@ export class FaceMorphProcessor {
   private talkingDetector = new TalkingDetector()
   private micRms = 0
   private reportedExceeded = false
+  /**
+   * Multiplier on the cheek/brow movement only. 1 = exactly what calibration
+   * measured. Exposed for tuning against a real face, because how much of this
+   * looks right is a judgement call that no test can settle — and it depends on
+   * things the landmarks don't see, like glasses.
+   */
+  private faceCouplingScale = 1
   // Live cap state, reported in telemetry so the logs show what was actually
   // applied rather than only what was commanded.
   private liveLevel = 0
@@ -225,6 +263,15 @@ export class FaceMorphProcessor {
   /** Set the morph target; the render loop eases toward it (smooth transitions). */
   setAlpha(alpha: number) {
     this.alphaTarget = alpha
+  }
+
+  /** Scale the cheek/brow movement. 1 = as measured, 0 = mouth only. */
+  setFaceCoupling(scale: number) {
+    this.faceCouplingScale = Number.isFinite(scale) ? Math.min(1.5, Math.max(0, scale)) : 1
+  }
+
+  get faceCoupling() {
+    return this.faceCouplingScale
   }
 
   /** Apply this participant's calibration. Null clears it back to the fallbacks. */
@@ -402,28 +449,6 @@ export class FaceMorphProcessor {
     const yawScale = clamp01((symmetry - YAW_FADE_END) / (YAW_FADE_START - YAW_FADE_END))
     if (yawScale <= 0.01) return false
 
-    // ROI bounding box over the lips, expanded to include surrounding skin so
-    // the warp blends naturally.
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (const i of LIP_INDICES) {
-      const p = toPx(i)
-      minX = Math.min(minX, p.x)
-      minY = Math.min(minY, p.y)
-      maxX = Math.max(maxX, p.x)
-      maxY = Math.max(maxY, p.y)
-    }
-    const padX = mouthWidth * 0.55
-    const padY = mouthWidth * 0.7
-    const roi = {
-      x: Math.max(0, minX - padX),
-      y: Math.max(0, minY - padY),
-      w: Math.min(width, maxX + padX) - Math.max(0, minX - padX),
-      h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
-    }
-
     // The cap is on the TOTAL: what their real face is already doing plus what
     // the morph adds must not exceed their own calibrated maximum. So the morph
     // only gets the headroom that is left.
@@ -433,7 +458,67 @@ export class FaceMorphProcessor {
 
     const openScale = openMouthScale(this.calibrationProfile, geometry.mouthOpenRatio)
     const strength = capped * yawScale * openScale
-    this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
+    const direction_ = this.morphDirection(strength)
+    // Does anything beyond the mouth actually move for this person? If not
+    // (uncalibrated, or a calibration recorded before cheeks and brows were
+    // measured) keep the original tight mouth box and mesh, so the morph is
+    // byte-for-byte what it was and no extra area gets rendered for nothing.
+    const couples =
+      Math.abs(direction_.cheekRise) > 0 ||
+      Math.abs(direction_.browRise) > 0 ||
+      Math.abs(direction_.browFurrow) > 0
+
+    // ROI bounding box, expanded to include surrounding skin so the warp blends
+    // naturally. Lips only when the mouth moves alone; brow-to-chin when the
+    // rest of the face comes with it, so the cheek between mouth and eye is
+    // inside one continuous field instead of a frozen band between two patches.
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    const bounds = couples
+      ? [...LIP_INDICES, LEFT_BROW_MID, RIGHT_BROW_MID, LEFT_BROW_INNER, RIGHT_BROW_INNER,
+         LEFT_CHEEK, RIGHT_CHEEK, LEFT_OUTER_EYE, RIGHT_OUTER_EYE]
+      : LIP_INDICES
+    for (const i of bounds) {
+      const p = toPx(i)
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x)
+      maxY = Math.max(maxY, p.y)
+    }
+    const padX = mouthWidth * 0.55
+    const padY = mouthWidth * 0.7
+    // Extra headroom above the brows so the window has somewhere to fade out
+    // rather than cutting off mid-forehead.
+    const padTop = couples ? mouthWidth * 0.85 : padY
+    const roi = {
+      x: Math.max(0, minX - padX),
+      y: Math.max(0, minY - padTop),
+      w: Math.min(width, maxX + padX) - Math.max(0, minX - padX),
+      h: Math.min(height, maxY + padY) - Math.max(0, minY - padTop),
+    }
+
+    const anchors: FaceAnchors = {
+      mouthCenterX: centerX,
+      mouthCenterY: centerY,
+      leftEye: midpoint(toPx(LEFT_OUTER_EYE), toPx(LEFT_INNER_EYE)),
+      rightEye: midpoint(toPx(RIGHT_OUTER_EYE), toPx(RIGHT_INNER_EYE)),
+      eyeWidth: Math.max(
+        distance(toPx(LEFT_OUTER_EYE), toPx(LEFT_INNER_EYE)),
+        distance(toPx(RIGHT_OUTER_EYE), toPx(RIGHT_INNER_EYE)),
+      ),
+      eyeHeight: Math.max(
+        distance(toPx(LEFT_UPPER_LID), toPx(LEFT_LOWER_LID)),
+        distance(toPx(RIGHT_UPPER_LID), toPx(RIGHT_LOWER_LID)),
+      ),
+      leftCheek: toPx(LEFT_CHEEK),
+      rightCheek: toPx(RIGHT_CHEEK),
+      leftBrow: toPx(LEFT_BROW_MID),
+      rightBrow: toPx(RIGHT_BROW_MID),
+    }
+
+    this.warp(dstCtx, roi, anchors, mouthWidth, strength, couples)
     return true
   }
 
@@ -519,6 +604,9 @@ export class FaceMorphProcessor {
           mouthWidthToFaceWidth: ema('geoMouthFace', geometry.mouthWidthToFaceWidth),
           mouthCornerTilt: ema('geoCornerTilt', geometry.mouthCornerTilt),
           yawSymmetry: ema('geoYawSymmetry', geometry.yawSymmetry),
+          cheekRaiseY: ema('geoCheekRaise', geometry.cheekRaiseY),
+          browRaiseY: ema('geoBrowRaise', geometry.browRaiseY),
+          browGapX: ema('geoBrowGap', geometry.browGapX),
         }
       : null
     const smoothedFaceShape: FaceShapeMetrics | undefined = smoothedGeometry
@@ -775,6 +863,8 @@ export class FaceMorphProcessor {
     const mouthWidth = distance(lc, rc)
     const cornerMeanY = (lc.y + rc.y) / 2
     const eyeMeanY = (lEye.y + rEye.y) / 2
+    const cheekMeanY = (toPx(LEFT_CHEEK).y + toPx(RIGHT_CHEEK).y) / 2
+    const browMeanY = (toPx(LEFT_BROW_MID).y + toPx(RIGHT_BROW_MID).y) / 2
     const mouthOpen = Math.abs(lowerLip.y - upperLip.y)
     const dl = Math.abs(nose.x - lEdge.x)
     const dr = Math.abs(rEdge.x - nose.x)
@@ -789,50 +879,88 @@ export class FaceMorphProcessor {
       mouthWidthToFaceWidth: mouthWidth / faceWidth,
       mouthCornerTilt: safeRatio(Math.abs(lc.y - rc.y), mouthWidth),
       yawSymmetry: Math.min(dl, dr) / Math.max(1e-3, Math.max(dl, dr)),
+      // How the rest of the face moves with the expression. Same face-width
+      // normalization, so these are comparable across people and distances.
+      cheekRaiseY: (cheekMeanY - eyeMeanY) / faceWidth,
+      browRaiseY: (eyeMeanY - browMeanY) / faceWidth,
+      browGapX: Math.abs(toPx(RIGHT_BROW_INNER).x - toPx(LEFT_BROW_INNER).x) / faceWidth,
     }
   }
 
   // ---- Warp ----
 
+  /** Calibrated warp geometry with the cheek/brow tuning multiplier applied. */
+  private morphDirection(strength: number) {
+    const d = morphDirectionFor(this.calibrationProfile, strength)
+    const k = this.faceCouplingScale
+    if (k === 1) return d
+    return {
+      ...d,
+      cheekRise: d.cheekRise * k,
+      browRise: d.browRise * k,
+      browFurrow: d.browFurrow * k,
+    }
+  }
+
   /**
    * Mesh-warp the ROI. `strength` is alpha after yaw attenuation:
    * positive → smile (corners out+up), negative → frown (parabolic, pout).
    */
+  /**
+   * Warp the ROI. `strength` is the capped alpha after the head-turn and
+   * open-mouth fades: positive → smile, negative → frown.
+   *
+   * When this person's cheeks and brows move with their expression, all of it
+   * is one continuous field over one mesh. That matters: a mouth that moves
+   * while the cheek just above it stays frozen is what reads as fake, and two
+   * separate patches would leave exactly that frozen band between them.
+   */
   private warp(
     ctx: CanvasRenderingContext2D,
     roi: { x: number; y: number; w: number; h: number },
-    centerX: number,
-    centerY: number,
+    a: FaceAnchors,
     mouthWidth: number,
     strength: number,
+    couples: boolean,
   ) {
     const sigmaY = mouthWidth * 0.6
     const smiling = strength > 0
     const mag = Math.abs(strength) * mouthWidth
     // Corner travel and direction come from this participant's calibration, so
     // the same alpha moves a small mouth and a wide one by their own amounts.
-    const { cornerTravel, cornerAngleRad, poutDrop } = morphDirectionFor(
-      this.calibrationProfile,
-      strength,
-    )
+    const { cornerTravel, cornerAngleRad, poutDrop, cheekRise, browRise, browFurrow } =
+      this.morphDirection(strength)
     const travelX = Math.cos(cornerAngleRad)
     const travelY = -Math.sin(cornerAngleRad)
     // The lower-lip pout centre sits slightly below the mouth line.
-    const poutY = centerY + mouthWidth * 0.22
+    const poutY = a.mouthCenterY + mouthWidth * 0.22
     const poutSigma = mouthWidth * 0.35
 
-    this.meshWarp(ctx, roi, this.cols, this.rows, (sx, sy, u, v) => {
+    // Spread of each off-mouth contribution. Kept fairly tight so the movement
+    // stays where it belongs instead of sliding the whole face around.
+    const cheekSigma = mouthWidth * 0.55
+    const browSigmaX = mouthWidth * 0.6
+    const browSigmaY = mouthWidth * 0.3
+    // Protected zone over each eye: wide enough to cover a spectacle lens,
+    // shallow enough that the cheek below and brow above still move. Bending a
+    // rigid glasses frame looks broken in a way a stiff cheek never does.
+    const guardSigmaX = a.eyeWidth * 0.8
+    const guardSigmaY = Math.max(a.eyeHeight * 1.3, a.eyeWidth * 0.42)
+    const cols = couples ? 16 : this.cols
+    const rows = couples ? 14 : this.rows
+
+    this.meshWarp(ctx, roi, cols, rows, (sx, sy, u, v) => {
       // Horizontal position relative to mouth center, normalised to corners.
-      const xn = (sx - centerX) / (mouthWidth / 2)
+      const xn = (sx - a.mouthCenterX) / (mouthWidth / 2)
       // Vertical gaussian falloff around the mouth line.
-      const vy = Math.exp(-((sy - centerY) ** 2) / (2 * sigmaY * sigmaY))
+      const vy = Math.exp(-((sy - a.mouthCenterY) ** 2) / (2 * sigmaY * sigmaY))
       // Edge window → 0 at ROI border so the warp blends seamlessly.
       const win = Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
       // Corner weight: strongest at the mouth corners (xn² → 1), ~0 mid-mouth.
       const cornerW = Math.min(1.6, xn * xn) * vy * win
 
-      // One formula for both directions: the calibrated angle already points
-      // out+up for a smile and down+in for a frown.
+      // ---- Mouth: one formula for both directions, since the calibrated
+      // angle already points out+up for a smile and down+in for a frown. ----
       const d = mag * cornerTravel * cornerW
       let dx = Math.sign(xn) * travelX * d
       let dy = travelY * d
@@ -843,6 +971,39 @@ export class FaceMorphProcessor {
         const vb = Math.exp(-((sy - poutY) ** 2) / (2 * poutSigma * poutSigma))
         dy += mag * poutDrop * centerW * vb * win
       }
+
+      if (!couples) return { x: dx, y: dy }
+
+      // ---- Everything above the mouth, held off the eyes themselves. ----
+      const guard = clamp01(
+        1 -
+          gauss2(sx - a.leftEye.x, sy - a.leftEye.y, guardSigmaX, guardSigmaY) -
+          gauss2(sx - a.rightEye.x, sy - a.rightEye.y, guardSigmaX, guardSigmaY),
+      )
+      const coupled = win * guard
+
+      // Cheeks rise toward the eyes.
+      if (cheekRise !== 0) {
+        const w =
+          gauss2(sx - a.leftCheek.x, sy - a.leftCheek.y, cheekSigma, cheekSigma) +
+          gauss2(sx - a.rightCheek.x, sy - a.rightCheek.y, cheekSigma, cheekSigma)
+        dy -= mag * cheekRise * Math.min(1, w) * coupled
+      }
+
+      // Brows rise or drop, whichever this person actually does, and pull
+      // toward each other for a frown.
+      if (browRise !== 0 || browFurrow !== 0) {
+        const wl = gauss2(sx - a.leftBrow.x, sy - a.leftBrow.y, browSigmaX, browSigmaY)
+        const wr = gauss2(sx - a.rightBrow.x, sy - a.rightBrow.y, browSigmaX, browSigmaY)
+        const w = Math.min(1, wl + wr)
+        dy -= mag * browRise * w * coupled
+        if (browFurrow !== 0) {
+          // Each brow moves toward the midline between them.
+          const midX = (a.leftBrow.x + a.rightBrow.x) / 2
+          dx += Math.sign(midX - sx) * mag * browFurrow * w * coupled
+        }
+      }
+
       return { x: dx, y: dy }
     })
   }
@@ -956,6 +1117,17 @@ function clamp01(v: number): number {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
+}
+
+/** Elliptical gaussian, 1 at the centre and falling off faster on the tight axis. */
+function gauss2(dx: number, dy: number, sigmaX: number, sigmaY: number): number {
+  const sx = Math.max(1e-3, sigmaX)
+  const sy = Math.max(1e-3, sigmaY)
+  return Math.exp(-((dx * dx) / (2 * sx * sx) + (dy * dy) / (2 * sy * sy)))
+}
+
+function midpoint(a: Pt, b: Pt): Pt {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 }
 
 function distance(a: Pt, b: Pt): number {
