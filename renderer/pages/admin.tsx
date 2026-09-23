@@ -1290,8 +1290,11 @@ function ParticipantPanel({
         <EffectSlider
           label="Smile"
           hint={effects.alpha > 0.02 ? 'lifted' : effects.alpha < -0.02 ? 'dampened' : 'neutral'}
-          min={-2}
-          max={2}
+          // Alpha is a fraction of this participant's own calibrated maximum,
+          // so 1 is the most their face actually does and there is nothing
+          // meaningful beyond it.
+          min={-1}
+          max={1}
           step={0.05}
           value={effects.alpha}
           neutral={0}

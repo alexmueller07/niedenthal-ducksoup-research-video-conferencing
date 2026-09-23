@@ -31,6 +31,8 @@ The researcher presses "Run calibration" for a participant, who is then guided t
 
 From those takes the app measures how far that person's mouth corners actually travel, and in which direction. The face-change setting now means "a fraction of this person's own maximum": 1.0 moves their mouth exactly as far as their own biggest real smile, and never further. Two people on the same setting get changes that are proportionate to their own faces.
 
+Because of that, the Smile slider now runs from -1 to 1 instead of -2 to 2, and the preset numbers were rescaled to match (Smile (strong) is 0.50 rather than 0.9). The change you see on screen stays about the same as before.
+
 The limit applies to the *total*, not just the change: if a participant is already smiling, the app only adds the amount left over, so their real expression plus the added one never goes past what their face actually does.
 
 Expression detection now uses the same personal range instead of one threshold for everyone, with a dead zone based on how much that person's resting face naturally wobbles. It reacts about three times faster than before, because the long averaging that was there to hide the old thresholds' mistakes is no longer needed.
