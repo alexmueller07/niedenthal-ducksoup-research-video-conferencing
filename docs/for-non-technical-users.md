@@ -53,26 +53,48 @@ Fill in name, participant ID, and dyad ID as usual. Under "Setup options" you ca
 5. **Press "End session"** when the conversation is done. Both participants see an "ended" screen. Everything is saved automatically.
 6. If needed, you can **restart** the same session (continues recording as a new file) or send participants back to the **waiting room**.
 
-## Video setup check (calibration)
+## Calibration
 
-Before starting the conversation, you can run a quick per-participant setup check from the waiting room. It's how the app learns what *that specific person's* neutral face, smile, and frown actually look like, instead of judging everyone against one generic cutoff.
+Before starting the conversation, run a calibration for each participant from the waiting room. **It is worth doing every time.** It is how the app learns what that specific person's face actually does — both for reading their expressions and, more importantly, for deciding how far to move their mouth when you modify it.
 
-1. In the waiting room, find the **Video setup check** section under a participant's own panel and press **Run**.
-2. The participant is asked to hold a relaxed face, then a small closed-mouth smile, then a small frown, a few seconds each.
-3. Each step shows a set of numbers once it finishes:
-   - **smile** — how much smile signal the app saw, on average, during that step (0 = none, higher = more)
-   - **frown** — same idea, for frowning
-   - **open** — the most "teeth showing" the app saw during that step (should be low on the smile step — a closed-mouth smile shouldn't show teeth)
-   - **mouth** — a second, independent check of how open the mouth was, based on measuring the face directly rather than the AI's guess
-   - **yaw** — how directly the participant was facing the camera (close to 1 = facing straight on)
+Without it, everyone gets the same fixed amount of change regardless of their face, which is why the effect used to look overdone on some people and invisible on others.
 
-   For example, a Frown step reading `smile 0.00 · frown 0.03 · open 0.04 · mouth 0.18 · yaw 0.96` reads as: barely any smile signal, a weak frown signal, no teeth showing, a decent geometric mouth-open reading, and the participant was facing the camera well. A low frown number like that is worth a **Retake** if you want a cleaner sample — it's your judgment call.
-4. If a step doesn't look right, press **Retake** on that step to redo just it.
-5. Once all three steps are complete, press **Accept values**. From that moment on, that participant's smiling/frowning readout is judged against their own numbers instead of the generic default.
+### Running it
 
-**This gets recorded, not just applied.** Every step result (all the numbers above) and the final accepted profile are written into that session's event log. Once accepted, every second for the rest of the conversation, the participant's per-second data file also records their calibrated ("normalized") smile/frown readings alongside the raw ones — so you can see, after the fact, exactly how their real expression compared to their own baseline the whole time, not just whether calibration was turned on.
+1. In the waiting room, find the **Calibration** section under a participant's video and press **Run calibration**.
+2. The participant is taken through four short takes, each with a prompt and a countdown on their screen:
+   - **Relax your face** (3 seconds)
+   - **Biggest smile, lips together** (4 seconds)
+   - **Biggest smile, showing teeth** (4 seconds)
+   - **Biggest frown** (4 seconds)
 
-One thing calibration does **not** do: it has no effect on the Smile/Voice sliders or presets. Those are the deliberate manipulation shown to the partner. Calibration only makes the *measurement* of the participant's real, unaltered face more accurate — it's used for the live readout and the logged data, not for anything shown on screen.
+   About 22 seconds in total. Tell them beforehand to go as big as they comfortably can — a half-hearted smile here means the app underestimates their range for the whole session.
+3. As each take finishes, a photo of their strongest moment appears under their video with the key numbers under it. The number in green or red is the change from their relaxed face — that is the one to look at. A take that barely moves off their relaxed face gets outlined in red with a short reason.
+4. If a take doesn't look right, press **Redo** under that one photo. Only that take is repeated — they don't sit through all four again.
+5. When all four look reasonable, press **Accept**.
+
+Both smiles are needed, and they do different jobs. The **closed-lip** one decides how far the app moves their mouth corners, because when the mouth is open a lot of the corner movement is really the jaw dropping, which the app can't reproduce. The **open-mouth** one tells the app their real maximum for reading expressions, and how their jaw and mouth corners move together — which is what lets it tell talking apart from smiling later.
+
+### What changes once it's accepted
+
+- **The Smile slider changes meaning.** It now runs from −1 to 1, where 1 is that person's own biggest smile and −1 is their own biggest frown. The same setting on two people produces changes that suit each of their faces rather than being identical.
+- **The app will never push them past their own maximum.** And the limit covers the total: if someone is already smiling on their own, the app only adds what's left over. So the same preset visibly does less on someone who is already grinning. That is intentional — going past what their face can do is exactly what looked fake before.
+- **Presets get weaker-sounding numbers.** "Smile (strong)" is now 0.50 rather than 0.9, because 0.9 would now mean 90% of their real maximum. The change you see on screen is about the same as before.
+- **Expression reading gets more accurate and noticeably quicker**, because it's now judged against their own relaxed face instead of one cutoff for everybody.
+
+### Talking
+
+The app now detects when someone is speaking, using both their mouth movement and their microphone. While they're talking, frowns are not reported — ordinary talking makes almost the same mouth shapes a frown does, so a frown logged mid-sentence is nearly always wrong. Smiles are still reported, since people genuinely smile while talking. The face modification isn't switched off during speech, just eased back while the mouth is wide open, where this kind of change looks least convincing anyway.
+
+### What gets saved
+
+Everything, into the session folder under `calibration/<participant id>/`: a `calibration.json` with every measurement from every take, plus the four photos. The event log records each take and the moment you accepted it. For the rest of the session, the per-second data file records their readings on their own scale alongside the raw ones.
+
+A participant is **not** remembered between sessions — if the same person comes back another day, calibrate them again.
+
+### If you skip it
+
+The app still works. It falls back to the old single fixed amount for everyone, and the panel under their video keeps saying **Not calibrated** so it's obvious from the dashboard which participants were and weren't done.
 
 ## Automation rules (optional)
 
@@ -112,8 +134,9 @@ Participant screens are locked down (full-screen, no way to click out) so partic
 
 Each session saves to its own folder (you can open it directly from the dashboard's "Data folder" button):
 
-- A log of every event (connections, messages, button presses, detected expressions, video setup check results, etc. — see [Video setup check](#video-setup-check-calibration) above)
-- A log of exactly what was applied to each participant, once per second, including their calibrated smile/frown readings if a setup check was accepted
+- A log of every event (connections, messages, button presses, detected expressions, calibration results, etc. — see [Calibration](#calibration) above)
+- A log of exactly what was applied to each participant, once per second — including how much was actually applied after the per-person limit, and their smile/frown readings on their own scale if they were calibrated
+- Each calibrated participant's measurements and photos, under `calibration/<participant id>/`
 - A summary file once the session ends
 - Video/audio recordings: each participant's real feed, each participant's modified feed, and the researcher's mic
 

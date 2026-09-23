@@ -19,6 +19,35 @@
 
 ## Update History
 
+* **Date:** 22-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Rebuilt calibration so the face change fits each person's own face
+
+* **Previous behavior:**
+The app moved every participant's mouth corners by the same fixed amount, no matter whose face it was. Someone whose real smile barely moves their mouth got an obvious, rubbery-looking change, while someone with a wide smile barely noticed anything. The old "video setup check" could not fix this: it quietly watched the participant sit still for 15 seconds and then guessed which moments were their smile and their frown — so its idea of "their biggest smile" was usually just their resting face plus noise. It never measured how far the mouth actually moves, saved nothing to disk, and could only adjust the effect by at most 15% either way.
+
+* **New behavior:**
+The researcher presses "Run calibration" for a participant, who is then guided through four short takes with on-screen prompts and a countdown: relax your face (3s), biggest smile with lips together (4s), biggest smile showing teeth (4s), biggest frown (4s). About 22 seconds in total.
+
+From those takes the app measures how far that person's mouth corners actually travel, and in which direction. The face-change setting now means "a fraction of this person's own maximum": 1.0 moves their mouth exactly as far as their own biggest real smile, and never further. Two people on the same setting get changes that are proportionate to their own faces.
+
+The limit applies to the *total*, not just the change: if a participant is already smiling, the app only adds the amount left over, so their real expression plus the added one never goes past what their face actually does.
+
+Expression detection now uses the same personal range instead of one threshold for everyone, with a dead zone based on how much that person's resting face naturally wobbles. It reacts about three times faster than before, because the long averaging that was there to hide the old thresholds' mistakes is no longer needed.
+
+Two things that used to cause problems are now handled directly. Open-mouth smiles no longer inflate the maximum, because the closed-lip take is what sets it. And talking is detected (from the mouth moving *and* the microphone being live) — frowns are not reported during speech, since ordinary talking makes the same mouth shapes a frown does, and the face change fades as the mouth opens instead of switching off mid-sentence.
+
+The researcher's screen now shows each participant's calibration underneath their video: photos of their neutral, smile and frown takes side by side with the numbers, or "Not calibrated" if they haven't done it yet. Any single take can be redone on its own without repeating the whole thing. Everything — the numbers, every individual facial reading, and the photos — is saved into the session folder under calibration/<participant id>/.
+
+All of this works the same way in the 1-person test tool and the 3-person call, using the same code, and each participant's calibration is tied to their participant ID so it can never be applied to the wrong person.
+
+* **Why this matters:**
+The face change looking unnatural was the main problem with the app, and the cause was that it treated every face as the same face. Tying it to what each person's mouth can really do is what makes it look like their expression instead of an effect applied on top of them. It also means the numbers in the session data describe a real, measured quantity per participant rather than an arbitrary constant, and those measurements are now saved alongside the recordings they applied to.
+
+Two things to know when analysing the data: the amount actually applied now varies with what the participant was doing, so use the applied_alpha column rather than the preset value; and the preset numbers were rescaled to the new meaning, so they are not comparable to sessions recorded before this change.
+
+---
+
 * **Date:** 15-09-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Signed mac builds so camera/mic permission stops resetting
