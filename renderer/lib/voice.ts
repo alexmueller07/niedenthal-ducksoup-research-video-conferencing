@@ -64,6 +64,10 @@ export class VoiceProcessor {
   private modGain2: GainNode
   private started = false
   private sources: AudioBufferSourceNode[] = []
+  // Read-only tap on the raw mic, used by the talking detector. The pitch
+  // shifter's own signal path is untouched by it.
+  private levelAnalyser: AnalyserNode
+  private levelBuffer: Float32Array<ArrayBuffer>
 
   constructor(micStream: MediaStream) {
     const ctx = new AudioContext()
@@ -73,6 +77,13 @@ export class VoiceProcessor {
 
     const source = ctx.createMediaStreamSource(micStream)
     source.connect(input)
+
+    // Short FFT window: we only need "is someone speaking right now", not a
+    // spectrum, and the expression pipeline reads this once per rendered frame.
+    this.levelAnalyser = ctx.createAnalyser()
+    this.levelAnalyser.fftSize = 512
+    this.levelBuffer = new Float32Array(new ArrayBuffer(this.levelAnalyser.fftSize * 4))
+    source.connect(this.levelAnalyser)
 
     const shiftDown = createDelayTimeBuffer(ctx, BUFFER_TIME, FADE_TIME, false)
     const shiftUp = createDelayTimeBuffer(ctx, BUFFER_TIME, FADE_TIME, true)
@@ -178,6 +189,18 @@ export class VoiceProcessor {
 
   isStarted() {
     return this.started
+  }
+
+  /**
+   * Current microphone loudness as RMS, 0..1. The talking detector needs the
+   * mic to agree with the mouth movement, because mouth wobble on its own
+   * mistakes chewing, laughing and yawning for speech.
+   */
+  micLevel(): number {
+    this.levelAnalyser.getFloatTimeDomainData(this.levelBuffer)
+    let sum = 0
+    for (let i = 0; i < this.levelBuffer.length; i++) sum += this.levelBuffer[i] ** 2
+    return Math.sqrt(sum / this.levelBuffer.length)
   }
 
   close() {

@@ -15,7 +15,8 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import os from 'os'
 import type {
-  CalibrationStep,
+  CalibrationPhase,
+  CalibrationProfile,
   ClientMessage,
   EffectState,
   ExpressionState,
@@ -80,6 +81,15 @@ export class SessionServer {
   private clients = new Map<WebSocket, ClientCtx>()
   /** Identities remembered per slot so a reconnecting participant keeps their seat. */
   private slotIdentities = new Map<SlotId, Identity>()
+  /**
+   * Accepted calibration per seat. Keyed by seat but stamped with the
+   * participant ID, and only handed back to a reconnecting client whose ID
+   * matches — otherwise a second participant taking a freed seat would inherit
+   * the first one's face measurements.
+   */
+  private calibrationBySlot = new Map<PSlot, CalibrationProfile>()
+  /** Peak-frame screenshots for each seat, held until the profile is accepted. */
+  private calibrationShots = new Map<PSlot, Record<string, string>>()
   private phase: Phase = 'waiting'
   private sessionStartedAt: string | null = null
   private pingTimer: ReturnType<typeof setInterval> | null = null
@@ -239,7 +249,38 @@ export class SessionServer {
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
     }
+    if (slot === 'P1' || slot === 'P2') this.restoreCalibration(slot, identity)
     this.broadcastRoster()
+  }
+
+  /**
+   * Hand a reconnecting participant their own calibration back — and only
+   * their own. If a different person is now in this seat, the stored profile
+   * is dropped rather than applied, because calibration describes one specific
+   * face and using it on another would silently mis-scale their morph.
+   */
+  private restoreCalibration(slot: PSlot, identity: Identity) {
+    const stored = this.calibrationBySlot.get(slot)
+    if (!stored) return
+    const pid = identity.participantId.trim()
+    if (pid && stored.participantId && pid !== stored.participantId) {
+      this.calibrationBySlot.delete(slot)
+      this.calibrationShots.delete(slot)
+      const admin = this.bySlot('ADMIN')
+      if (admin) this.send(admin.ws, { type: 'calibration-profile', profile: null })
+      this.log({
+        event: 'calibration_cleared',
+        actorSlot: slot,
+        actorName: identity.name,
+        target: slot,
+        param: 'reason',
+        value: 'different_participant',
+        detail: { was: stored.participantId, now: pid },
+      })
+      return
+    }
+    const target = this.bySlot(slot)
+    if (target) this.send(target.ws, { type: 'calibration-profile', profile: stored })
   }
 
   private assignSlot(msg: Extract<ClientMessage, { type: 'hello' }>): SlotId | null {
@@ -344,13 +385,12 @@ export class SessionServer {
           normalizationVersion: telemetry.expression?.normalizationVersion,
           classifierMode: telemetry.expression?.classifierMode,
           classifierVersion: telemetry.expression?.classifierVersion,
-          calibrationState: telemetry.calibration?.state,
-          calibrationDetectionConfidence: telemetry.calibration?.detectionConfidence,
-          calibrationMorphConfidence: telemetry.calibration?.morphConfidence,
-          mouthProportionScale: telemetry.calibration?.mouthProportionScale,
-          smileExpressivenessScale: telemetry.calibration?.smileExpressivenessScale,
-          frownExpressivenessScale: telemetry.calibration?.frownExpressivenessScale,
-          activeMorphScale: telemetry.calibration?.activeMorphScale,
+          calibrated: telemetry.calibration?.calibrated,
+          commandedAlpha: telemetry.alpha,
+          appliedAlpha: telemetry.calibration?.appliedAlpha,
+          liveLevel: telemetry.calibration?.liveLevel,
+          headroom: telemetry.calibration?.headroom,
+          talking: telemetry.calibration?.talking,
           rawMouthSmileLeft: telemetry.expression?.rawMouthSmileLeft,
           rawMouthSmileRight: telemetry.expression?.rawMouthSmileRight,
           rawMouthFrownLeft: telemetry.expression?.rawMouthFrownLeft,
@@ -414,23 +454,31 @@ export class SessionServer {
         return
       }
       // ---- Admin-only commands ----
-      case 'calibration-result': {
+      case 'calibration-phase': {
         if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
         const admin = this.bySlot('ADMIN')
         if (admin) {
-          this.send(admin.ws, { type: 'calibration-result', slot: ctx.slot, result: msg.result })
+          this.send(admin.ws, { type: 'calibration-phase', slot: ctx.slot, message: msg.message })
         }
+        // The screenshot is a data URL of a real participant's face — it goes
+        // to the researcher's screen and to disk, never into the event log.
+        if (msg.message.screenshotDataUrl) {
+          const shots = this.calibrationShots.get(ctx.slot) ?? {}
+          shots[msg.message.summary.phase] = msg.message.screenshotDataUrl
+          this.calibrationShots.set(ctx.slot, shots)
+        }
+        const { screenshotDataUrl: _omitted, ...loggable } = msg.message
         this.log({
           event:
-            msg.result.status === 'needs-retake'
+            msg.message.summary.status === 'needs-redo'
               ? 'calibration_retake_recommended'
               : 'calibration_step_completed',
           actorRole: ctx.role,
           actorSlot: ctx.slot,
           actorName: ctx.identity.name,
-          param: 'step',
-          value: msg.result.step,
-          detail: msg.result,
+          param: 'phase',
+          value: msg.message.summary.phase,
+          detail: loggable,
         })
         return
       }
@@ -518,7 +566,7 @@ export class SessionServer {
       }
       case 'calibration-start': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        const steps = normalizeCalibrationSteps(msg.steps)
+        const phases = normalizeCalibrationPhases(msg.phases)
         const slots = msg.target === 'both' ? (['P1', 'P2'] as const) : ([msg.target] as const)
 
         if (this.phase !== 'waiting') {
@@ -530,7 +578,7 @@ export class SessionServer {
             target: msg.target,
             param: 'phase',
             value: this.phase,
-            detail: { reason: 'Calibration can only run in the waiting room.', steps },
+            detail: { reason: 'Calibration can only run in the waiting room.', phases },
           })
           return
         }
@@ -539,7 +587,7 @@ export class SessionServer {
           const target = this.bySlot(slot)
           const requestId = `cal_${Date.now()}_${slot}_${Math.random().toString(36).slice(2, 8)}`
           if (target) {
-            this.send(target.ws, { type: 'calibration-start', requestId, steps })
+            this.send(target.ws, { type: 'calibration-start', requestId, phases })
           }
           this.log({
             event: 'calibration_started',
@@ -547,9 +595,9 @@ export class SessionServer {
             actorSlot: 'ADMIN',
             actorName: ctx.identity.name,
             target: slot,
-            param: 'steps',
-            value: steps.join('|'),
-            detail: { requestId, steps, targetConnected: !!target },
+            param: 'phases',
+            value: phases.join('|'),
+            detail: { requestId, phases, targetConnected: !!target },
           })
         }
         return
@@ -557,16 +605,37 @@ export class SessionServer {
       case 'calibration-apply': {
         if (!this.requireAdmin(ctx, msg.type)) return
         const target = this.bySlot(msg.target)
+        // Remembered against the participant ID, not the seat, so a reconnect
+        // can only get its own calibration back (see restoreCalibration).
+        this.calibrationBySlot.set(msg.target, msg.profile)
         if (target) {
           this.send(target.ws, { type: 'calibration-profile', profile: msg.profile })
         }
+        void this.logger?.writeCalibration(msg.target, msg.profile, this.calibrationShots.get(msg.target) ?? {})
         this.log({
           event: 'calibration_applied',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
           target: msg.target,
+          param: 'participant_id',
+          value: msg.profile.participantId,
           detail: { ...msg.profile, targetConnected: !!target },
+        })
+        return
+      }
+      case 'calibration-clear': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        this.calibrationBySlot.delete(msg.target)
+        this.calibrationShots.delete(msg.target)
+        const target = this.bySlot(msg.target)
+        if (target) this.send(target.ws, { type: 'calibration-profile', profile: null })
+        this.log({
+          event: 'calibration_cleared',
+          actorRole: 'admin',
+          actorSlot: 'ADMIN',
+          actorName: ctx.identity.name,
+          target: msg.target,
         })
         return
       }
@@ -732,10 +801,10 @@ function stripEmpty(identity: Identity): Partial<Identity> {
   return out
 }
 
-function normalizeCalibrationSteps(input: unknown): CalibrationStep[] {
-  const allowed: CalibrationStep[] = ['neutral', 'smile', 'frown']
+function normalizeCalibrationPhases(input: unknown): CalibrationPhase[] {
+  const allowed: CalibrationPhase[] = ['neutral', 'smileClosed', 'smileOpen', 'frown']
   const steps = Array.isArray(input)
-    ? input.filter((step): step is CalibrationStep => allowed.includes(step))
+    ? input.filter((phase): phase is CalibrationPhase => allowed.includes(phase))
     : []
   return steps.length > 0 ? steps : allowed
 }

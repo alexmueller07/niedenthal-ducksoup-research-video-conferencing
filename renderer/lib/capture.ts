@@ -1,12 +1,14 @@
 // CaptureStation: the self-contained, single-person capture engine.
 //
 // Owns the camera, runs the facial morph (canvas), renders the participant-
-// facing "altered" view, and records both the clean and altered streams. On
-// start, it also runs an automatic neutral/smile/frown setup check (see
-// runCalibration below) before recording begins, so detection is judged
-// against this person's own baseline rather than generic thresholds. It works
-// in a plain browser (records download to disk) and in Electron (records save
-// to a structured session folder via window.ipc).
+// facing "altered" view, and records both the clean and altered streams. It
+// works in a plain browser (records download to disk) and in Electron (records
+// save to a structured session folder via window.ipc).
+//
+// Calibration is explicit here rather than automatic: the person at the
+// keyboard presses "Run calibration" and is guided through the same four
+// phases the three-seat app uses (renderer/lib/calibrationRunner.ts), so the
+// measurements, the maths and the saved files are identical in both modes.
 //
 // Deliberately no cross-window IPC bus: one page owns everything, which is
 // simpler and does not crash outside Electron.
@@ -14,21 +16,15 @@
 import { FaceMorphProcessor } from './faceMorph'
 import { getPreset } from './presets'
 import { pickRecorderFormat, type RecorderFormat } from './recording'
-import {
-  CALIBRATION_STEPS,
-  CALIBRATION_PROMPTS,
-  CALIBRATION_PREP_MS,
-  CALIBRATION_COLLECT_MS,
-  CALIBRATION_SAMPLE_MS,
-  CALIBRATION_READY_TIMEOUT_MS,
-  CALIBRATION_MAX_AUTO_RETRIES,
-  CALIBRATION_RETRY_PAUSE_MS,
-  calibrationStepReadiness,
-  summarizeCalibrationStep,
-  buildExpressionCalibrationProfile,
-  type CalibrationSample,
-} from './calibration'
-import type { ExpressionState, CalibrationStep, CalibrationStepResult, Telemetry } from './protocol'
+import { buildCalibrationProfile } from './calibration'
+import { runCalibrationPhases, type CalibrationProgress } from './calibrationRunner'
+import { CALIBRATION_PHASES } from './protocol'
+import type {
+  CalibrationPhase,
+  CalibrationPhaseSummary,
+  CalibrationProfile,
+  ExpressionState,
+} from './protocol'
 import type {
   ConnectionStatus,
   RecordingFile,
@@ -49,12 +45,13 @@ export interface CaptureCallbacks {
   onSaved: (manifest: SessionManifest) => void
   onFaceState?: (found: boolean) => void
   onExpression?: (state: ExpressionState) => void
-  /** Progress text during the automatic setup-check calibration, or null when not calibrating. */
-  onCalibrationStatus?: (text: string | null) => void
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  /** Prompt + countdown while calibrating, or null when not calibrating. */
+  onCalibrationProgress?: (progress: CalibrationProgress | null) => void
+  /** Fires as each calibration phase finishes, so the review panel can fill in. */
+  onCalibrationPhase?: (
+    summary: CalibrationPhaseSummary,
+    screenshotDataUrl: string | null,
+  ) => void
 }
 
 function hasIpc(): boolean {
@@ -85,6 +82,15 @@ export class CaptureStation {
   private config: SessionConfig | null = null
   private alpha = 0
   private overlay = false
+  private calibrating = false
+  private calibrationPhases: Partial<Record<CalibrationPhase, CalibrationPhaseSummary>> = {}
+  private calibrationShots: Partial<Record<CalibrationPhase, string>> = {}
+  private sessionDir: string | null = null
+  private sessionLabel: string | null = null
+  // Read-only mic tap for the talking detector. This station has no voice
+  // processor of its own, so it opens a minimal audio graph just for the level.
+  private micAnalyser: AnalyserNode | null = null
+  private micBuffer: Float32Array<ArrayBuffer> | null = null
   private lastExpressionKey = ''
 
   private connection: ConnectionStatus = 'disconnected'
@@ -165,9 +171,8 @@ export class CaptureStation {
     const canvasStream = this.alteredCanvas.captureStream(30)
     this.alteredStream = new MediaStream([...canvasStream.getVideoTracks(), ...this.camera.getAudioTracks()])
 
+    this.openMicLevelTap()
     this.startRenderLoop(w, h)
-
-    await this.runCalibration()
 
     this.connection = 'connected'
     this.emit()
@@ -176,83 +181,134 @@ export class CaptureStation {
   }
 
   /**
-   * Automatic neutral/smile/frown setup check, reusing the same pure logic the
-   * three-seat app's waiting room uses (renderer/lib/calibration.ts) — sampled
-   * directly from this.face.expression instead of over a websocket. There is no
-   * researcher here to rescue a stuck participant, so a step that keeps failing
-   * is skipped rather than blocked on: worse detection accuracy beats an app
-   * that never starts.
+   * Run the guided calibration, or redo just the phases passed in.
+   *
+   * Exactly the same runner the three-seat app uses, so the two modes cannot
+   * drift apart: what differs is only that here the results go straight into
+   * this station instead of to a researcher on another machine.
    */
-  private async runCalibration() {
-    const results: Partial<Record<CalibrationStep, CalibrationStepResult>> = {}
-    for (const step of CALIBRATION_STEPS) {
-      const prompt = CALIBRATION_PROMPTS[step]
-      const maxAttempts = CALIBRATION_MAX_AUTO_RETRIES + 1
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        this.cb.onCalibrationStatus?.(`Setting up: ${prompt.instruction}`)
-        await sleep(CALIBRATION_PREP_MS)
-        const result = await this.collectCalibrationStep(step)
-        if (result.status === 'complete') {
-          results[step] = result
-          break
-        }
-        if (attempt < maxAttempts) {
-          this.cb.onCalibrationStatus?.(`Setting up: let's try that again — ${prompt.instruction.toLowerCase()}`)
-          await sleep(CALIBRATION_RETRY_PAUSE_MS)
-          continue
-        }
-        this.log(`Setup check for "${step}" did not pass after retries — continuing without it`, 'warn')
-        results[step] = result
-      }
-    }
-    this.cb.onCalibrationStatus?.(null)
-
-    const profile = buildExpressionCalibrationProfile(results)
-    if (profile) {
-      this.face.setCalibrationProfile(profile)
-      this.log('Personal setup check applied', 'success')
-    } else {
-      this.log('Setup check incomplete — using default detection thresholds', 'warn')
+  async runCalibration(
+    phases: CalibrationPhase[] = CALIBRATION_PHASES,
+  ): Promise<Partial<Record<CalibrationPhase, CalibrationPhaseSummary>>> {
+    if (this.calibrating) return this.calibrationPhases
+    this.calibrating = true
+    try {
+      this.calibrationPhases = await runCalibrationPhases(
+        phases,
+        {
+          sample: (tsMs) => this.face.sample(tsMs),
+          snapshot: () => this.face.snapshot(),
+          onProgress: (progress) => this.cb.onCalibrationProgress?.(progress),
+          onPhase: ({ summary, screenshotDataUrl }) => {
+            if (screenshotDataUrl) this.calibrationShots[summary.phase] = screenshotDataUrl
+            this.cb.onCalibrationPhase?.(summary, screenshotDataUrl)
+          },
+          shouldContinue: () => this.connection === 'connected',
+        },
+        this.calibrationPhases,
+      )
+      return this.calibrationPhases
+    } finally {
+      this.calibrating = false
     }
   }
 
-  /** Samples this.face.expression every CALIBRATION_SAMPLE_MS until ready+held, or times out. */
-  private collectCalibrationStep(step: CalibrationStep): Promise<CalibrationStepResult> {
-    return new Promise((resolve) => {
-      const requestId = `local_${Date.now()}`
-      const samples: CalibrationSample[] = []
-      let heldSamples: CalibrationSample[] = []
-      let readyStartedAt: number | null = null
-      const startedAt = performance.now()
-
-      const finish = (fromHeld: boolean) => {
-        clearInterval(interval)
-        resolve(summarizeCalibrationStep(requestId, step, fromHeld ? heldSamples : samples))
-      }
-
-      const interval = setInterval(() => {
-        const expression = this.face.expression
-        const sample: CalibrationSample = {
-          expression,
-          telemetry: expression ? ({ faceFound: true } as Telemetry) : null,
-        }
-        samples.push(sample)
-        const readiness = calibrationStepReadiness(step, sample)
-        const elapsed = performance.now() - startedAt
-
-        if (!readiness.ready) {
-          readyStartedAt = null
-          heldSamples = []
-          if (elapsed >= CALIBRATION_READY_TIMEOUT_MS) finish(false)
-          return
-        }
-
-        if (readyStartedAt === null) readyStartedAt = performance.now()
-        heldSamples.push(sample)
-        const heldMs = performance.now() - readyStartedAt
-        if (heldMs >= CALIBRATION_COLLECT_MS) finish(true)
-      }, CALIBRATION_SAMPLE_MS)
+  /** Apply the measured phases as this person's profile. Returns null if incomplete. */
+  acceptCalibration(): CalibrationProfile | null {
+    const profile = buildCalibrationProfile(this.calibrationPhases, {
+      // The solo station has no participant intake, so the folder is named
+      // for the test rather than for a study ID (see docs §12).
+      participantId: 'self-test',
+      dyadId: '',
+      studyId: '',
+      seat: 'SOLO',
+      appVersion: APP_VERSION,
+      camera: { width: this.alteredCanvas.width, height: this.alteredCanvas.height },
     })
+    if (!profile) {
+      this.log('Calibration incomplete — keeping the default detection thresholds', 'warn')
+      return null
+    }
+    this.face.setCalibrationProfile(profile)
+    this.log('Calibration applied', 'success')
+    void this.saveCalibration(profile)
+    return profile
+  }
+
+  get calibrationResults(): Partial<Record<CalibrationPhase, CalibrationPhaseSummary>> {
+    return this.calibrationPhases
+  }
+
+  get calibrationScreenshots(): Partial<Record<CalibrationPhase, string>> {
+    return this.calibrationShots
+  }
+
+  /**
+   * Write calibration.json and the phase screenshots into the session folder,
+   * so the numbers the morph was scaled against travel with the recordings.
+   */
+  private async saveCalibration(profile: CalibrationProfile) {
+    if (!hasIpc()) return
+    try {
+      const dir = await this.ensureSessionDir()
+      if (!dir) return
+      const ipc = (window as unknown as { ipc: { invoke: <T>(c: string, a?: unknown) => Promise<T> } }).ipc
+      const screenshots: Record<string, string> = {}
+      for (const [phase, dataUrl] of Object.entries(this.calibrationShots)) {
+        if (dataUrl) screenshots[phase] = dataUrl
+      }
+      const written = await ipc.invoke<string | null>('session:write-calibration', {
+        dir,
+        participantId: profile.participantId,
+        profile,
+        screenshots,
+      })
+      if (written) this.log(`Saved calibration: ${written}`, 'success')
+    } catch (err) {
+      this.log(`Could not save calibration: ${err}`, 'warn')
+    }
+  }
+
+  /**
+   * The session folder used to be created only when recordings were saved, but
+   * calibration happens before any recording, so it is created up front now and
+   * reused at save time.
+   */
+  private async ensureSessionDir(): Promise<string | null> {
+    if (this.sessionDir) return this.sessionDir
+    const cfg = this.config
+    if (!hasIpc() || !cfg?.saveRoot) return null
+    const ipc = (window as unknown as { ipc: { invoke: <T>(c: string, a?: unknown) => Promise<T> } }).ipc
+    const { dir, label } = await ipc.invoke<{ dir: string; label: string }>('session:create-dir', {
+      saveRoot: cfg.saveRoot,
+    })
+    this.sessionDir = dir
+    this.sessionLabel = label
+    return dir
+  }
+
+  /** Minimal audio graph: the talking detector needs the mic to agree with the mouth. */
+  private openMicLevelTap() {
+    if (!this.camera || this.camera.getAudioTracks().length === 0) return
+    try {
+      const ctx = new AudioContext()
+      void ctx
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 512
+      ctx.createMediaStreamSource(new MediaStream(this.camera.getAudioTracks())).connect(analyser)
+      this.micAnalyser = analyser
+      this.micBuffer = new Float32Array(new ArrayBuffer(analyser.fftSize * 4))
+    } catch (err) {
+      this.log(`Microphone level unavailable (talking detection off): ${err}`, 'warn')
+    }
+  }
+
+  private readMicLevel(): number {
+    if (!this.micAnalyser || !this.micBuffer) return 0
+    this.micAnalyser.getFloatTimeDomainData(this.micBuffer)
+    let sum = 0
+    for (let i = 0; i < this.micBuffer.length; i++) sum += this.micBuffer[i] ** 2
+    return Math.sqrt(sum / this.micBuffer.length)
   }
 
   private startRenderLoop(w: number, h: number) {
@@ -261,6 +317,7 @@ export class CaptureStation {
       const ts = performance.now()
       const monotonic = ts <= lastTs ? lastTs + 1 : ts
       lastTs = monotonic
+      this.face.setMicLevel(this.readMicLevel())
       const found = this.face.render(this.hiddenVideo, this.alteredCtx, w, h, monotonic)
       if (this.overlay) this.drawOverlay(w, h, found)
       this.cb.onFaceState?.(found)
@@ -385,9 +442,10 @@ export class CaptureStation {
 
     if (hasIpc() && cfg.saveRoot) {
       const ipc = (window as unknown as { ipc: { invoke: <T>(c: string, a?: unknown) => Promise<T> } }).ipc
-      const { dir, label } = await ipc.invoke<{ dir: string; label: string }>('session:create-dir', {
-        saveRoot: cfg.saveRoot,
-      })
+      // Created up front when calibration ran, so the calibration files and the
+      // recordings land in the same folder.
+      const dir = (await this.ensureSessionDir())!
+      const label = this.sessionLabel ?? 'self test'
       for (const [kind, blob] of pairs) {
         const filename = `${kind}.${this.recFormat.ext}`
         const buffer = await blob.arrayBuffer()

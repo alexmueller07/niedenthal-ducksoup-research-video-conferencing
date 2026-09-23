@@ -13,7 +13,8 @@
 
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
-import type { ExpressionCalibrationProfile, ExpressionState, Telemetry } from './protocol'
+import type { CalibrationFrame } from './calibration'
+import type { CalibrationProfile, ExpressionState, Telemetry } from './protocol'
 
 export interface EffectsStatus {
   camera: boolean
@@ -184,6 +185,8 @@ export class LiveEffects {
       if (this.loopStartedAtMs === null) this.loopStartedAtMs = ts
       const monotonic = ts <= lastTs ? lastTs + 1 : ts
       lastTs = monotonic
+      // The talking detector needs the mic to agree with the mouth movement.
+      if (this.voice) this.face.setMicLevel(this.voice.micLevel())
       this.face.render(this.hiddenVideo, this.ctx, w, h, monotonic)
       this.frameTimes.push(ts)
       while (this.frameTimes.length > 0 && this.frameTimes[0] < ts - 1000) {
@@ -204,8 +207,23 @@ export class LiveEffects {
     this.voice?.setSemitones(semitones)
   }
 
-  setCalibrationProfile(profile: ExpressionCalibrationProfile | null) {
+  setCalibrationProfile(profile: CalibrationProfile | null) {
     this.face.setCalibrationProfile(profile)
+  }
+
+  /** One frame in the shape calibration records (see calibrationRunner.ts). */
+  sampleForCalibration(tsMs: number): CalibrationFrame | null {
+    return this.face.sample(tsMs)
+  }
+
+  /** The current raw camera frame as a JPEG data URL, for calibration screenshots. */
+  calibrationSnapshot(): string | null {
+    return this.face.snapshot()
+  }
+
+  /** Negotiated camera resolution, recorded alongside a calibration. */
+  cameraSize(): { width: number; height: number } {
+    return { width: this.canvas.width, height: this.canvas.height }
   }
 
   /** Latest REAL-face expression from the detector (null until a face is seen). */

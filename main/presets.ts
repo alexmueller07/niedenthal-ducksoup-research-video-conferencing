@@ -9,15 +9,29 @@
 // Lives in main/ so the session server's rule engine can resolve a presetId to
 // its effect values; the renderer re-exports from renderer/lib/presets.ts.
 //
-// Intensities were tamped down after the 2026-07 lab demo — the RAs reported the
-// original values ("subtle" 0.6, "strong" 1.4, frown −1.5) read as too strong
-// and often uncanny. These are starting points to calibrate with Randy.
+// Alpha is now a fraction of each participant's OWN calibrated maximum: 1.0
+// moves their mouth exactly as far as their biggest real smile (or frown) and
+// never further, so the same preset produces a proportionate change on a small
+// mouth and a wide one. The values below were rescaled to that meaning when
+// calibration landed — they aim to keep the visible effect roughly where the
+// old fixed-geometry values put it, rather than to mean the same numbers.
+//
+// Because the cap is on the TOTAL, a preset also delivers less than its number
+// while the participant is already smiling: their real expression has taken
+// part of the budget. effect_state_<seat>.csv records what was actually
+// applied, which is the number to analyse.
+//
+// Still pilot settings. No psychophysical validation (detection threshold,
+// naturalness, believability) has been run — see docs §12.
 
 export interface ModificationPreset {
   id: string
   label: string
   description: string
-  /** Smile intensity. 0 neutral, >0 more smile, <0 toward a frown. */
+  /**
+   * Smile intensity as a fraction of this participant's calibrated maximum.
+   * 0 neutral, 1 their biggest real smile, −1 their biggest real frown.
+   */
   alpha: number
   /** Voice pitch shift in semitones. 0 = neutral. */
   voiceSemitones: number
@@ -37,43 +51,43 @@ export const PRESETS: ModificationPreset[] = [
   {
     id: 'smile-subtle',
     label: 'Smile (subtle)',
-    description: 'Mildly increases smile intensity. Often below conscious detection.',
-    alpha: 0.35,
+    description: 'Adds a fifth of their own maximum smile. Often below conscious detection.',
+    alpha: 0.2,
     voiceSemitones: 0,
   },
   {
     id: 'smile-strong',
     label: 'Smile (strong)',
-    description: 'Clearly increases smile intensity.',
-    alpha: 0.9,
+    description: 'Adds half of their own maximum smile. Clearly visible.',
+    alpha: 0.5,
     voiceSemitones: 0,
   },
   {
     id: 'frown-subtle',
     label: 'Frown (subtle)',
-    description: 'Mildly dampens the smile toward neutral/negative.',
-    alpha: -0.4,
+    description: 'Adds a quarter of their own maximum frown.',
+    alpha: -0.25,
     voiceSemitones: 0,
   },
   {
     id: 'frown-strong',
     label: 'Frown (strong)',
-    description: 'Clearly shifts the mouth toward a frown.',
-    alpha: -0.9,
+    description: 'Adds just over half of their own maximum frown.',
+    alpha: -0.55,
     voiceSemitones: 0,
   },
   {
     id: 'warm-voice',
     label: 'Lower voice',
     description: 'Subtle smile lift paired with a slightly lower voice.',
-    alpha: 0.25,
+    alpha: 0.15,
     voiceSemitones: -2,
   },
   {
     id: 'bright-voice',
     label: 'Higher voice',
     description: 'Subtle smile lift paired with a slightly higher voice.',
-    alpha: 0.25,
+    alpha: 0.15,
     voiceSemitones: 2,
   },
 ]

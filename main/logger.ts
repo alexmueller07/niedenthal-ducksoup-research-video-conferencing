@@ -85,13 +85,16 @@ export interface EffectStateInput {
   normalizationVersion?: string
   classifierMode?: string
   classifierVersion?: string
-  calibrationState?: string
-  calibrationDetectionConfidence?: number
-  calibrationMorphConfidence?: number
-  mouthProportionScale?: number
-  smileExpressivenessScale?: number
-  frownExpressivenessScale?: number
-  activeMorphScale?: number
+  calibrated?: boolean
+  /** What the researcher asked for, before the per-person cap. */
+  commandedAlpha?: number
+  /** What was actually applied after the cap and the fades — the number to analyse. */
+  appliedAlpha?: number
+  /** How far their real face was toward their own maximum, 0..1. */
+  liveLevel?: number
+  /** Morph budget left after their real expression took its share, 0..1. */
+  headroom?: number
+  talking?: boolean
   /** Raw MediaPipe facial-movement scores (0..1) behind the expression label — not OpenFace/FACS AUs. */
   rawMouthSmileLeft?: number
   rawMouthSmileRight?: number
@@ -127,7 +130,7 @@ export interface RecordingStopInput {
 
 const EVENT_HEADER = 'seat,name,role,date,time,elapsed_ms,event,target,parameter,value,details\n'
 const STATE_HEADER =
-  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,normalized_smile,normalized_frown,normalized_openness,smile_margin,frown_margin,normalization_applied,normalization_version,calibration_state,calibration_detection_confidence,calibration_morph_confidence,mouth_proportion_scale,smile_expressiveness_scale,frown_expressiveness_scale,active_morph_scale,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
+  'pair_id,participant_id,partner_id,seat,date,time,elapsed_ms,conversation_elapsed_ms,phase,self_face_change,self_voice_change,partner_face_change,partner_voice_change,expression,smile_type,expression_confidence,smile_type_confidence,smile_type_trusted,normalized_smile,normalized_frown,normalized_openness,smile_margin,frown_margin,normalization_applied,normalization_version,calibrated,commanded_alpha,applied_alpha,live_level,headroom,talking,raw_mouth_smile_left,raw_mouth_smile_right,raw_mouth_frown_left,raw_mouth_frown_right,raw_lip_press_left,raw_lip_press_right,raw_upper_lip_raise_left,raw_upper_lip_raise_right,raw_jaw_open,raw_lower_lip_drop_left,raw_lower_lip_drop_right,raw_eye_squint_left,raw_eye_squint_right,raw_cheek_squint_left,raw_cheek_squint_right,face_detected,camera_on,frames_per_second\n'
 const RECORDINGS_HEADER =
   'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
@@ -200,33 +203,69 @@ false if it's a low-confidence guess, blank if the person isn't smiling
 
 normalized_smile / normalized_frown / normalized_openness /
 smile_margin / frown_margin: this participant's raw expression readings
-compared against their own waiting-room setup baseline, instead of a
-one-size-fits-all threshold. Blank if this participant didn't go through a
-setup check that session (normalization_applied will be false/blank in
-that case). normalization_version identifies which normalization formula
-produced these values.
+placed on their OWN scale, where 0 is their relaxed face and 1 is the
+biggest expression they made during calibration. Blank if this participant
+wasn't calibrated that session (normalization_applied will be false/blank
+in that case). normalization_version identifies which formula produced
+these values.
 
-Where the setup check itself is recorded
+talking: true while the participant was speaking. Frowns are deliberately
+not reported during speech — ordinary talking makes the same mouth shapes
+the frown reading keys on, so a frown logged mid-sentence would usually be
+a false alarm. Smiles are still reported while talking.
+
+How much modification was really applied
 ------------------------------------------
-Before the conversation, a participant can be asked to hold a relaxed face,
-a small smile, and a small frown for a few seconds each (the "video setup
-check") so the numbers above are judged against their own face instead of a
-generic cutoff. The result of each step — including the raw smile/frown/
-open/mouth/yaw readings the researcher saw on screen — is written to
-events.csv as its own row (event calibration_step_completed or
-calibration_retake_recommended, with the numbers packed into the "details"
-column as JSON). The moment the researcher accepts the values, another row
-(calibration_applied) logs the final accepted profile. From that point on,
-the normalized_* / smile_margin / frown_margin columns above reflect it for
-the rest of the session.
+commanded_alpha is what the researcher asked for. applied_alpha is what was
+actually put on the participant's face, and it is the number to analyse.
+The two differ because the cap is on the TOTAL: a participant's own
+expression plus the modification is never allowed to go past the biggest
+expression they made during calibration.
+
+live_level is how far their real face was toward their own maximum at that
+moment (0 to 1), and headroom is what was left over for the modification
+(1 minus live_level). So a participant who is already grinning receives
+less added smile than the same preset would give them at rest — by design.
+applied_alpha is also reduced while the mouth is open, where this kind of
+mouth-corner reshaping looks least convincing.
+
+calibrated: true if this participant had been calibrated by this point in
+the session. When false, the modification falls back to one fixed amount
+for everybody, which is the old behaviour.
+
+Where calibration itself is recorded
+------------------------------------------
+Before the conversation, each participant is guided through four short
+takes: relax your face (3s), biggest smile with lips together (4s),
+biggest smile showing teeth (4s), and biggest frown (4s). Two different
+things come out of it — the range their expressions are judged against, and
+how far their mouth corners actually move, which is what the modification
+is scaled to.
+
+Each take is written to events.csv as its own row (event
+calibration_step_completed or calibration_retake_recommended, with the
+numbers in the "details" column as JSON). When the researcher accepts the
+result, a calibration_applied row logs the final profile, and the full
+measurements plus a photo of each take are saved to:
+
+  calibration/<participant_id>/calibration.json
+  calibration/<participant_id>/neutral.jpg
+  calibration/<participant_id>/max_smile_closed.jpg
+  calibration/<participant_id>/max_smile_open.jpg
+  calibration/<participant_id>/max_frown.jpg
+
+Those files hold every individual facial-movement reading for each take
+(average and spread), so the numbers the modification was scaled against
+travel with the session they were used in.
 
 raw_* columns: the individual facial-movement readings the app actually
 measures (0 to 1 each) — the "ingredients" that expression/smile_type/etc.
 are built from. These come from this app's face-tracking software
 (MediaPipe); they are NOT OpenFace or FACS-coded Action Units, so please
-don't cite them as such. Roughly: the app calls someone "smiling" once the
-left/right mouth-corner-raise readings average above about 0.6, and once
-smiling, "reward" means the mouth is opening (teeth showing), "dominance"
+don't cite them as such. Roughly: the app calls someone "smiling" once
+their mouth-corner-raise reading rises clearly above their own relaxed
+face (or above about 0.6 if they weren't calibrated), and once smiling,
+"reward" means the mouth is opening (teeth showing), "dominance"
 means the two sides of the face disagree with each other, and
 "affiliative" is a strong, even, closed-mouth smile that's neither of
 those. See docs/for-technical-users.md section 4 in the project's GitHub
@@ -277,6 +316,23 @@ interface PendingRecording {
   path: string
 }
 
+/** Strip anything that is not safe in a folder name (participant IDs are free text). */
+function sanitizeName(value: string): string {
+  const cleaned = value.trim().replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^\.+/, '')
+  return cleaned || 'unknown'
+}
+
+/** Decode a `data:image/jpeg;base64,…` URL. Returns null if it is not one. */
+function decodeDataUrl(dataUrl: string): Buffer | null {
+  const match = /^data:image\/[a-z+]+;base64,(.+)$/i.exec(dataUrl)
+  if (!match) return null
+  try {
+    return Buffer.from(match[1], 'base64')
+  } catch {
+    return null
+  }
+}
+
 export class SessionLogger {
   readonly dir: string
   readonly eventsPath: string
@@ -312,6 +368,40 @@ export class SessionLogger {
 
   get recordingsDir(): string {
     return path.join(this.dir, 'recordings')
+  }
+
+  /**
+   * Write one participant's accepted calibration into the session folder:
+   * calibration/<participant_id>/calibration.json plus the peak-frame
+   * screenshot of each phase.
+   *
+   * It lives with the session's own data rather than in a shared store, so a
+   * folder of results always carries the measurements the morph was actually
+   * scaled against, and no session can be analysed using numbers that were
+   * silently recorded somewhere else.
+   */
+  async writeCalibration(
+    slot: string,
+    profile: { participantId?: string; phases?: Record<string, { screenshot?: string }> },
+    screenshots: Record<string, string>,
+  ): Promise<string | null> {
+    try {
+      const key = sanitizeName(profile.participantId || slot)
+      const dir = path.join(this.dir, 'calibration', key)
+      await fsp.mkdir(dir, { recursive: true })
+      const jsonPath = path.join(dir, 'calibration.json')
+      await fsp.writeFile(jsonPath, JSON.stringify(profile, null, 2), 'utf-8')
+      for (const [phase, dataUrl] of Object.entries(screenshots)) {
+        const filename = profile.phases?.[phase]?.screenshot
+        const bytes = decodeDataUrl(dataUrl)
+        if (!filename || !bytes) continue
+        await fsp.writeFile(path.join(dir, filename), bytes)
+      }
+      return jsonPath
+    } catch (err) {
+      console.warn('[logger] could not write calibration', err)
+      return null
+    }
   }
 
   /** Append one event row. Returns the row so it can be streamed to the admin UI. */
@@ -406,13 +496,12 @@ export class SessionLogger {
         csvField(input.frownMargin ?? ''),
         csvField(input.normalizationApplied ?? ''),
         csvField(input.normalizationVersion ?? ''),
-        csvField(input.calibrationState ?? ''),
-        csvField(input.calibrationDetectionConfidence ?? ''),
-        csvField(input.calibrationMorphConfidence ?? ''),
-        csvField(input.mouthProportionScale ?? ''),
-        csvField(input.smileExpressivenessScale ?? ''),
-        csvField(input.frownExpressivenessScale ?? ''),
-        csvField(input.activeMorphScale ?? ''),
+        csvField(input.calibrated ?? ''),
+        csvField(input.commandedAlpha ?? ''),
+        csvField(input.appliedAlpha ?? ''),
+        csvField(input.liveLevel ?? ''),
+        csvField(input.headroom ?? ''),
+        csvField(input.talking ?? ''),
         input.rawMouthSmileLeft ?? '',
         input.rawMouthSmileRight ?? '',
         input.rawMouthFrownLeft ?? '',

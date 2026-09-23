@@ -11,20 +11,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { LiveEffects } from '../lib/effects'
-import {
-  CALIBRATION_SAMPLE_MS,
-  PASSIVE_CALIBRATION_COLLECT_MS,
-  PASSIVE_CALIBRATION_STEP_COLLECT_MS,
-  summarizePassiveCalibration,
-  type CalibrationSample,
-} from '../lib/calibration'
+import { runCalibrationPhases, type CalibrationProgress } from '../lib/calibrationRunner'
 import { SignalClient, SignalStatus, normalizeServerUrl } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { APP_VERSION, DEFAULT_PORT } from '../lib/protocol'
 import type {
   ClientMessage,
-  CalibrationQualityFlag,
-  CalibrationStep,
+  CalibrationPhase,
   Identity,
   Phase,
   RosterState,
@@ -47,26 +40,6 @@ interface BannerState {
   key: number
 }
 
-interface SetupCheckState {
-  title: string
-  instruction: string
-  step: CalibrationStep | 'done'
-  index: number
-  total: number
-  attempt: number
-  maxAttempts: number
-  phase:
-    | 'prepare'
-    | 'waiting'
-    | 'collecting'
-    | 'complete'
-    | 'needs-retake'
-    | 'retrying'
-    | 'paused'
-    | 'done'
-  progress: number
-  qualityFlags: CalibrationQualityFlag[]
-}
 
 // Example faces available in test mode (sign-in access code "test"). Starts on
 // the straight face; the panel on the right switches between them live.
@@ -77,10 +50,6 @@ const TEST_FACES = [
   { id: 'dominance', label: 'Dominance smile', url: '/images/test-faces/dominance.jpg' },
   { id: 'frown', label: 'Frown', url: '/images/test-faces/frown.png' },
 ]
-
-const CAMERA_QUALITY_MESSAGE =
-  'Please look toward the screen while we finish checking camera quality.'
-const CAMERA_QUALITY_MESSAGE_SEC = 5
 
 export default function ParticipantSession() {
   const router = useRouter()
@@ -100,7 +69,7 @@ export default function ParticipantSession() {
   const [escapeShake, setEscapeShake] = useState(0)
   const [testFaceMode, setTestFaceMode] = useState(false)
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
-  const [setupCheck, setSetupCheck] = useState<SetupCheckState | null>(null)
+  const [setupCheck, setSetupCheck] = useState<CalibrationProgress | null>(null)
   // Hide the cursor only in the real Electron kiosk. In a plain browser tab
   // (dev/testing) a hidden cursor is just an annoyance with no lockdown value.
   const [browserMode, setBrowserMode] = useState(false)
@@ -338,12 +307,14 @@ export default function ParticipantSession() {
           return
         }
         case 'calibration-start':
-          startSetupCheck(msg.requestId, msg.steps)
+          startSetupCheck(msg.requestId, msg.phases)
           return
         case 'calibration-profile':
           effectsRef.current?.setCalibrationProfile(msg.profile)
-          sendEvent('calibration_profile_received', {
-            detail: { version: msg.profile.version, acceptedAt: msg.profile.acceptedAt },
+          sendEvent(msg.profile ? 'calibration_profile_received' : 'calibration_profile_cleared', {
+            detail: msg.profile
+              ? { version: msg.profile.version, acceptedAt: msg.profile.acceptedAt }
+              : {},
           })
           return
         case 'phase':
@@ -359,69 +330,60 @@ export default function ParticipantSession() {
       }
     }
 
-    function startSetupCheck(requestId: string, steps: CalibrationStep[]) {
+    function startSetupCheck(requestId: string, phases: CalibrationPhase[]) {
       const runId = setupRunRef.current + 1
       setupRunRef.current = runId
-      showParticipantBanner(CAMERA_QUALITY_MESSAGE, CAMERA_QUALITY_MESSAGE_SEC)
-      sendEvent('message_shown', {
-        detail: { text: CAMERA_QUALITY_MESSAGE, durationSec: CAMERA_QUALITY_MESSAGE_SEC },
+      void runSetupCheck(requestId, phases, runId)
+    }
+
+    async function runSetupCheck(
+      requestId: string,
+      phases: CalibrationPhase[],
+      runId: number,
+    ) {
+      sendEvent('calibration_started', {
+        param: 'phases',
+        value: phases.join('|'),
+        detail: { requestId, phases },
       })
-      void runSetupCheck(requestId, steps, runId)
-    }
 
-    function showParticipantBanner(text: string, durationSec: number) {
-      if (bannerTimer.current) clearTimeout(bannerTimer.current)
-      setBanner({ text, key: Date.now() })
-      bannerTimer.current = setTimeout(
-        () => setBanner(null),
-        Math.max(1, durationSec) * 1000,
-      )
-    }
+      await runCalibrationPhases(phases, {
+        sample: (tsMs) => effectsRef.current?.sampleForCalibration(tsMs) ?? null,
+        snapshot: () => effectsRef.current?.calibrationSnapshot() ?? null,
+        onProgress: (progress) => setSetupCheck(progress),
+        onPhase: ({ summary, screenshotDataUrl }) => {
+          // Sent as each phase finishes rather than in one batch at the end, so
+          // the researcher's review panel fills in while the participant is
+          // still going.
+          client.send({
+            type: 'calibration-phase',
+            message: {
+              requestId,
+              summary,
+              camera: effectsRef.current?.cameraSize(),
+              screenshotDataUrl: screenshotDataUrl ?? undefined,
+            },
+          })
+          sendEvent(
+            summary.status === 'needs-redo'
+              ? 'calibration_retake_recommended'
+              : 'calibration_step_completed',
+            {
+              param: 'phase',
+              value: summary.phase,
+              detail: { requestId, summary },
+            },
+          )
+        },
+        shouldContinue: () => setupRunRef.current === runId,
+      })
 
-    async function runSetupCheck(requestId: string, steps: CalibrationStep[], runId: number) {
+      if (setupRunRef.current !== runId) return
       setSetupCheck(null)
-      sendEvent('passive_calibration_started', {
-        param: 'steps',
-        value: steps.join('|'),
-        detail: { requestId, steps },
-      })
-      const samples = await collectPassiveSetupSamples(runId, steps.length > 1)
-      if (!samples || setupRunRef.current !== runId) return
-      const results = summarizePassiveCalibration(requestId, samples, steps)
-      for (const step of steps) {
-        const result = results[step]
-        if (result) client.send({ type: 'calibration-result', result })
-      }
-      sendEvent('passive_calibration_completed', {
-        param: 'steps',
-        value: steps.join('|'),
-        detail: { requestId, steps, samples: samples.length, results },
-      })
-    }
-
-    function collectPassiveSetupSamples(runId: number, fullRun: boolean) {
-      const observedSamples: CalibrationSample[] = []
-      const started = performance.now()
-      const duration = fullRun ? PASSIVE_CALIBRATION_COLLECT_MS : PASSIVE_CALIBRATION_STEP_COLLECT_MS
-      return new Promise<CalibrationSample[] | null>((resolve) => {
-        const timer = setInterval(() => {
-          if (setupRunRef.current !== runId) {
-            clearInterval(timer)
-            resolve(null)
-            return
-          }
-          const now = performance.now()
-          const fx = effectsRef.current
-          const sample: CalibrationSample = {
-            expression: fx?.currentExpression() ?? null,
-            telemetry: fx?.telemetry() ?? null,
-          }
-          observedSamples.push(sample)
-          if (now - started >= duration) {
-            clearInterval(timer)
-            resolve(observedSamples)
-          }
-        }, CALIBRATION_SAMPLE_MS)
+      sendEvent('calibration_finished', {
+        param: 'phases',
+        value: phases.join('|'),
+        detail: { requestId, phases },
       })
     }
 
@@ -834,47 +796,27 @@ function StatusDot({ ok, label }: { ok: boolean; label: string }) {
   )
 }
 
-function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
-  const statusText =
-    setup.phase === 'collecting'
-      ? 'Hold steady'
-      : setup.phase === 'complete'
-        ? 'Step recorded'
-        : setup.phase === 'needs-retake'
-          ? 'Setup check recorded'
-          : setup.phase === 'retrying'
-            ? 'Trying once more'
-            : setup.phase === 'paused'
-              ? 'Researcher check needed'
-              : setup.phase === 'done'
-                ? 'Complete'
-                : setup.phase === 'waiting'
-                  ? 'Ready when you are'
-                  : 'Get ready'
-  const isRetrying = setup.phase === 'retrying'
-  const isPaused = setup.phase === 'paused'
-  const isComplete = setup.phase === 'complete' || setup.phase === 'done'
-  const accentClass = isPaused
-    ? 'border-amber-500/35 ring-amber-500/20'
-    : isComplete
-      ? 'border-emerald-500/35 ring-emerald-500/20'
-    : isRetrying
+/**
+ * Full-screen prompt during calibration: what to do, and how long is left.
+ *
+ * The countdown matters more than the progress bar here — someone holding a
+ * big smile needs to know when they can stop, and a bar they cannot read at a
+ * glance while grinning at a camera is no help.
+ */
+function SetupCheckOverlay({ setup }: { setup: CalibrationProgress }) {
+  const recording = setup.stage === 'recording'
+  const settling = setup.stage === 'settling'
+  const statusText = recording ? 'Hold it' : settling ? 'Recorded' : 'Get ready'
+  const accentClass = settling
+    ? 'border-emerald-500/35 ring-emerald-500/20'
+    : recording
       ? 'border-sky-400/35 ring-sky-400/20'
       : 'border-sky-500/25 ring-white/10'
-  const iconClass = isPaused
-    ? 'bg-amber-500/15 ring-amber-400/35'
-    : isComplete
-      ? 'bg-emerald-500/15 ring-emerald-400/35'
-    : isRetrying
-      ? 'bg-sky-500/20 ring-sky-400/40'
-      : 'bg-sky-600/20 ring-sky-500/40'
-  const statusClass = isPaused
-    ? 'text-amber-200'
-    : isComplete
-      ? 'text-emerald-200'
-      : 'text-sky-300'
-  const barClass = isComplete ? 'bg-emerald-400' : setup.phase === 'waiting' ? 'bg-sky-500/70' : 'bg-sky-400'
-  const progressText = setup.phase === 'waiting' ? 'Ready' : `${Math.round(setup.progress * 100)}%`
+  const iconClass = settling
+    ? 'bg-emerald-500/15 ring-emerald-400/35'
+    : 'bg-sky-600/20 ring-sky-500/40'
+  const statusClass = settling ? 'text-emerald-200' : 'text-sky-300'
+  const barClass = settling ? 'bg-emerald-400' : 'bg-sky-400'
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-950/50 px-6 backdrop-blur-sm">
@@ -889,18 +831,24 @@ function SetupCheckOverlay({ setup }: { setup: SetupCheckState }) {
         </p>
         <h2 className="mt-2 text-xl font-semibold text-white">{setup.title}</h2>
         <p className="mt-3 text-base leading-relaxed text-gray-200">{setup.instruction}</p>
+
+        {!settling && (
+          <p className="mt-5 font-mono text-5xl font-bold tabular-nums text-white">
+            {setup.secondsLeft}
+          </p>
+        )}
+
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-gray-500">
-            <span>Step {setup.index} of {setup.total}</span>
-            {setup.step !== 'done' && setup.maxAttempts > 1 ? (
-              <span>Attempt {setup.attempt} of {setup.maxAttempts}</span>
-            ) : null}
-            <span>{progressText}</span>
+            <span>
+              Step {setup.index} of {setup.total}
+            </span>
+            <span>{recording ? 'Recording' : settling ? 'Done' : 'Starting'}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-gray-800">
             <div
               className={`h-full rounded-full transition-[width] duration-150 ${barClass}`}
-              style={{ width: setup.phase === 'waiting' ? '8%' : `${Math.max(8, Math.round(setup.progress * 100))}%` }}
+              style={{ width: `${Math.max(6, Math.round(setup.progress * 100))}%` }}
             />
           </div>
         </div>

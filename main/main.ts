@@ -471,6 +471,39 @@ ipcMain.handle(
   },
 )
 
+ipcMain.handle(
+  'session:write-calibration',
+  async (
+    _e,
+    {
+      dir,
+      participantId,
+      profile,
+      screenshots,
+    }: {
+      dir: string
+      participantId: string
+      profile: { phases?: Record<string, { screenshot?: string }> }
+      screenshots: Record<string, string>
+    },
+  ) => {
+    const fsp = await import('fs/promises')
+    // Participant IDs are free text, so they cannot go straight into a path.
+    const key = (participantId || 'unknown').trim().replace(/[^A-Za-z0-9._-]+/g, '_') || 'unknown'
+    const target = path.join(dir, 'calibration', key)
+    await fsp.mkdir(target, { recursive: true })
+    const jsonPath = path.join(target, 'calibration.json')
+    await fsp.writeFile(jsonPath, JSON.stringify(profile, null, 2), 'utf-8')
+    for (const [phase, dataUrl] of Object.entries(screenshots ?? {})) {
+      const filename = profile.phases?.[phase]?.screenshot
+      const match = /^data:image\/[a-z+]+;base64,(.+)$/i.exec(dataUrl ?? '')
+      if (!filename || !match) continue
+      await fsp.writeFile(path.join(target, filename), Buffer.from(match[1], 'base64'))
+    }
+    return jsonPath
+  },
+)
+
 ipcMain.handle('session:write-manifest', async (_e, { dir, manifest }) => {
   const fsp = await import('fs/promises')
   const filePath = path.join(dir, 'session.json')

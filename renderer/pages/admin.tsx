@@ -15,24 +15,25 @@ import { useRouter } from 'next/router'
 import { SignalClient, SignalStatus } from '../lib/signaling'
 import { PeerLink } from '../lib/rtc'
 import { PRESETS, getPreset } from '../lib/presets'
+import { buildCalibrationProfile } from '../lib/calibration'
 import {
-  buildExpressionCalibrationProfile,
-  CALIBRATION_PROMPTS,
-  CALIBRATION_STEPS,
-  estimateCalibrationConfidence,
-} from '../lib/calibration'
+  CalibrationPanel,
+  calibrationComplete,
+  emptyCalibrationUiState,
+  type CalibrationUiState,
+} from '../components/CalibrationPanel'
 import { pickRecorderFormat } from '../lib/recording'
 import {
   APP_VERSION,
+  CALIBRATION_PHASES,
   DEFAULT_PORT,
   NEUTRAL_EFFECTS,
 } from '../lib/protocol'
 import type {
   AutomationRule,
-  CalibrationQualityFlag,
+  CalibrationPhase,
+  CalibrationPhaseMessage,
   CalibrationRuntimeState,
-  CalibrationStep,
-  CalibrationStepResult,
   EffectState,
   ExpressionState,
   Identity,
@@ -76,45 +77,13 @@ interface BannerSent {
   at: string
 }
 
-type CalibrationUiStatus = 'idle' | 'running' | 'needs-retake' | 'complete' | 'accepted'
-
-interface CalibrationSlotState {
-  status: CalibrationUiStatus
-  currentStep: CalibrationStep | null
-  results: Partial<Record<CalibrationStep, CalibrationStepResult>>
-  acceptedAt: string | null
-}
-
 const EMPTY_STREAMS: Record<PSlot, SlotStreams> = {
   P1: { altered: null, clean: null },
   P2: { altered: null, clean: null },
 }
 
-const QUALITY_FLAG_LABELS: Record<CalibrationQualityFlag, string> = {
-  insufficient_samples: 'Too few samples',
-  face_not_visible: 'Face not visible',
-  off_axis_face: 'Face angled',
-  not_relaxed: 'Retake relaxed face',
-  teeth_detected: 'Teeth/open mouth',
-  weak_smile: 'Smile too subtle',
-  weak_frown: 'Frown too subtle',
-  passive_low_expression_range: 'Limited expression range',
-}
-
-function emptyCalibrationSlot(): CalibrationSlotState {
-  return {
-    status: 'idle',
-    currentStep: null,
-    results: {},
-    acceptedAt: null,
-  }
-}
-
-function initialCalibrationState(): Record<PSlot, CalibrationSlotState> {
-  return {
-    P1: emptyCalibrationSlot(),
-    P2: emptyCalibrationSlot(),
-  }
+function initialCalibrationState(): Record<PSlot, CalibrationUiState> {
+  return { P1: emptyCalibrationUiState(), P2: emptyCalibrationUiState() }
 }
 
 export default function AdminDashboard() {
@@ -143,7 +112,7 @@ export default function AdminDashboard() {
   const [bannerDuration, setBannerDuration] = useState(8)
   const [bannersSent, setBannersSent] = useState<BannerSent[]>([])
   const [calibration, setCalibration] =
-    useState<Record<PSlot, CalibrationSlotState>>(initialCalibrationState)
+    useState<Record<PSlot, CalibrationUiState>>(initialCalibrationState)
   const [recState, setRecState] = useState<Record<string, RecState>>({})
   const [nowTick, setNowTick] = useState(Date.now())
   const [endConfirm, setEndConfirm] = useState(false)
@@ -302,9 +271,9 @@ export default function AdminDashboard() {
                 setExpressions((prev) => ({ ...prev, [msg.slot]: msg.data }))
               }
               return
-            case 'calibration-result':
+            case 'calibration-phase':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
-                receiveCalibrationResult(msg.slot, msg.result)
+                receiveCalibrationPhase(msg.slot, msg.message)
               }
               return
             case 'rules':
@@ -578,59 +547,76 @@ export default function AdminDashboard() {
     if (text === undefined) setBannerText('')
   }
 
-  function receiveCalibrationResult(slot: PSlot, result: CalibrationStepResult) {
+  function receiveCalibrationPhase(slot: PSlot, message: CalibrationPhaseMessage) {
     setCalibration((prev) => {
       const current = prev[slot]
-      const results = { ...current.results, [result.step]: result }
-      const hasRetake = CALIBRATION_STEPS.some((step) => results[step]?.status === 'needs-retake')
-      const hasAll = CALIBRATION_STEPS.every((step) => results[step]?.status === 'complete')
-      const status: CalibrationUiStatus = hasRetake ? 'needs-retake' : hasAll ? 'complete' : 'running'
-      return {
-        ...prev,
-        [slot]: {
-          ...current,
-          status,
-          currentStep: result.step,
-          results,
-          acceptedAt: null,
-        },
+      const summary = message.summary
+      const phases = { ...current.phases, [summary.phase]: summary }
+      const screenshots = { ...current.screenshots }
+      if (message.screenshotDataUrl) screenshots[summary.phase] = message.screenshotDataUrl
+      const next: CalibrationUiState = {
+        ...current,
+        camera: message.camera ?? current.camera,
+        currentPhase: summary.phase,
+        phases,
+        screenshots,
+        profile: null,
+        acceptedAt: undefined,
+        status: 'running',
       }
+      const anyRedo = CALIBRATION_PHASES.some((p) => phases[p]?.status === 'needs-redo')
+      const allDone = CALIBRATION_PHASES.every((p) => phases[p])
+      next.status = anyRedo ? 'needs-redo' : allDone ? 'complete' : 'running'
+      return { ...prev, [slot]: next }
     })
   }
 
-  function requestCalibration(target: PSlot | 'both', steps: CalibrationStep[]) {
+  function requestCalibration(target: PSlot | 'both', phases: CalibrationPhase[]) {
     const slots = target === 'both' ? PSLOTS : [target]
+    const fullRun = phases.length > 1
     setCalibration((prev) => {
       const next = { ...prev }
       for (const slot of slots) {
-        const fullRun = steps.length > 1
         next[slot] = {
           status: 'running',
-          currentStep: steps[0] ?? null,
-          results: fullRun ? {} : { ...prev[slot].results },
-          acceptedAt: null,
+          currentPhase: phases[0] ?? null,
+          // A redo keeps the phases already measured and replaces only the one
+          // being retaken, so the participant does not sit through all four.
+          phases: fullRun ? {} : { ...prev[slot].phases },
+          screenshots: fullRun ? {} : { ...prev[slot].screenshots },
+          profile: null,
         }
       }
       return next
     })
-    clientRef.current?.send({ type: 'calibration-start', target, steps })
+    clientRef.current?.send({ type: 'calibration-start', target, phases })
   }
 
   function acceptCalibration(slot: PSlot) {
     const state = calibration[slot]
-    if (!calibrationReady(state)) return
+    if (!calibrationComplete(state)) return
+    const identity = roster?.slots[slot]?.identity
     const acceptedAt = new Date().toISOString()
-    const profile = buildExpressionCalibrationProfile(state.results, acceptedAt)
+    const profile = buildCalibrationProfile(
+      state.phases,
+      {
+        // Stamped with who it was measured on, so the server can refuse to
+        // hand it to a different participant later.
+        participantId: identity?.participantId ?? '',
+        dyadId: identity?.dyadId ?? '',
+        studyId: identity?.studyId ?? '',
+        seat: slot,
+        appVersion: APP_VERSION,
+        camera: state.camera ?? { width: 0, height: 0 },
+      },
+      acceptedAt,
+    )
     if (!profile) return
     setCalibration((prev) => ({
       ...prev,
-      [slot]: { ...prev[slot], status: 'accepted', acceptedAt },
+      [slot]: { ...prev[slot], status: 'accepted', acceptedAt, profile },
     }))
-    clientRef.current?.send({
-      type: 'calibration-apply',
-      target: slot,
-      profile,
-    })
+    clientRef.current?.send({ type: 'calibration-apply', target: slot, profile })
   }
 
   function setMic(live: boolean, mode: 'toggle' | 'hold') {
@@ -852,8 +838,8 @@ export default function AdminDashboard() {
               phase={phase}
               calibrationState={calibration[slot]}
               calibrationRuntime={telemetry[slot]?.calibration}
-              onRunCalibration={() => requestCalibration(slot, CALIBRATION_STEPS)}
-              onRetakeCalibration={(step) => requestCalibration(slot, [step])}
+              onRunCalibration={() => requestCalibration(slot, CALIBRATION_PHASES)}
+              onRetakeCalibration={(phase) => requestCalibration(slot, [phase])}
               onAcceptCalibration={() => acceptCalibration(slot)}
             />
           ))}
@@ -1110,215 +1096,6 @@ export default function AdminDashboard() {
   )
 }
 
-// ===== Waiting-room setup check =====
-
-function CalibrationSlotRow({
-  slot,
-  name,
-  connected,
-  state,
-  runtime,
-  onRetake,
-  onAccept,
-}: {
-  slot: PSlot
-  name: string
-  connected: boolean
-  state: CalibrationSlotState
-  runtime?: CalibrationRuntimeState
-  onRetake: (slot: PSlot, step: CalibrationStep) => void
-  onAccept: (slot: PSlot) => void
-}) {
-  const ready = calibrationReady(state) && state.status !== 'accepted'
-  const flags = CALIBRATION_STEPS.flatMap((step) => state.results[step]?.qualityFlags ?? [])
-  const uniqueFlags = Array.from(new Set(flags))
-  const pendingConfidence = Object.keys(state.results).length > 0
-    ? estimateCalibrationConfidence(state.results)
-    : null
-  const detectionConfidence =
-    runtime?.detectionConfidence ?? pendingConfidence?.detectionConfidence ?? 0
-  const morphConfidence = runtime?.morphConfidence ?? pendingConfidence?.morphConfidence ?? 0
-  const calibrationKind = state.status === 'accepted' ? runtime?.state ?? 'usable' : pendingConfidence?.state ?? state.status
-
-  return (
-    <div className="rounded-xl border border-gray-800 bg-gray-950/45 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-gray-100">
-            {slot} · {name}
-          </p>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            {connected ? calibrationStatusText(state) : 'Waiting for participant'}
-          </p>
-        </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${calibrationStatusClass(state.status, connected)}`}>
-          {connected ? calibrationKind.replace('-', ' ') : 'offline'}
-        </span>
-      </div>
-
-      {(pendingConfidence || runtime) && (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[10.5px]">
-          <CalibrationMeter label="Detection" value={detectionConfidence} />
-          <CalibrationMeter label="Morph" value={morphConfidence} />
-          <div className="rounded-lg bg-gray-900/80 px-2 py-1.5 text-gray-400">
-            <p className="font-medium text-gray-300">Mouth scale</p>
-            <p>{formatScale(runtime?.mouthProportionScale ?? pendingMorphScale(state, 'mouth'))}</p>
-          </div>
-          <div className="rounded-lg bg-gray-900/80 px-2 py-1.5 text-gray-400">
-            <p className="font-medium text-gray-300">Active scale</p>
-            <p>{formatScale(runtime?.activeMorphScale ?? 1)}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-3 grid grid-cols-3 gap-1.5">
-        {CALIBRATION_STEPS.map((step) => (
-          <StepPill key={step} step={step} result={state.results[step]} />
-        ))}
-      </div>
-
-      {uniqueFlags.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {uniqueFlags.map((flag) => (
-            <span
-              key={flag}
-              className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-200 ring-1 ring-red-500/25"
-            >
-              {QUALITY_FLAG_LABELS[flag]}
-            </span>
-          ))}
-        </div>
-      )}
-      {state.status === 'accepted' && (
-        <p className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-medium text-emerald-100">
-          Face-shape normalization active for this participant.
-        </p>
-      )}
-
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[10.5px] text-gray-500">
-        {CALIBRATION_STEPS.map((step) => {
-          const result = state.results[step]
-          return (
-            <div key={step} className="rounded-lg bg-gray-900/80 px-2 py-1.5">
-              <p className="font-medium text-gray-400">{CALIBRATION_PROMPTS[step].shortLabel}</p>
-              <p>smile {metric(result, 'smileMean')}</p>
-              <p>frown {metric(result, 'frownMean')}</p>
-              <p>open {metric(result, 'opennessMax')}</p>
-              <p>mouth {metric(result, 'mouthOpenRatioMax')}</p>
-              <p>yaw {metric(result, 'yawSymmetryMean')}</p>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {CALIBRATION_STEPS.map((step) => (
-          <button
-            key={step}
-            type="button"
-            onClick={() => onRetake(slot, step)}
-            disabled={!connected}
-            className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-[11px] font-medium text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
-          >
-            Collect {CALIBRATION_PROMPTS[step].shortLabel}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => onAccept(slot)}
-          disabled={!ready}
-          className="ml-auto rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition enabled:hover:bg-emerald-500 disabled:opacity-40"
-        >
-          {state.status === 'accepted' ? 'Accepted' : 'Accept values'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function CalibrationMeter({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100)
-  const tone =
-    pct >= 80
-      ? 'bg-emerald-500 text-emerald-100'
-      : pct >= 60
-        ? 'bg-sky-500 text-sky-100'
-        : pct >= 35
-          ? 'bg-amber-500 text-amber-100'
-          : 'bg-red-500 text-red-100'
-  return (
-    <div className="rounded-lg bg-gray-900/80 px-2 py-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-medium text-gray-300">{label}</p>
-        <p className="font-mono text-gray-200">{pct}%</p>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-800">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function pendingMorphScale(state: CalibrationSlotState, kind: 'mouth'): number {
-  if (kind !== 'mouth') return 1
-  const neutral = state.results.neutral
-  const value = neutral?.metrics.mouthWidthToFaceWidthMean
-  if (!value) return 1
-  return Math.min(1.15, Math.max(0.85, 0.38 / value))
-}
-
-function formatScale(value: number): string {
-  return Number.isFinite(value) ? `${value.toFixed(2)}x` : '--'
-}
-
-function StepPill({
-  step,
-  result,
-}: {
-  step: CalibrationStep
-  result: CalibrationStepResult | undefined
-}) {
-  const label = CALIBRATION_PROMPTS[step].shortLabel
-  const style = !result
-    ? 'bg-gray-800 text-gray-500 ring-gray-700'
-    : result.status === 'complete'
-      ? 'bg-emerald-600/20 text-emerald-300 ring-emerald-500/30'
-      : 'bg-red-600/20 text-red-200 ring-red-500/30'
-  return (
-    <span className={`rounded-full px-2 py-1 text-center text-[10px] font-semibold ring-1 ${style}`}>
-      {label}
-    </span>
-  )
-}
-
-function calibrationReady(state: CalibrationSlotState): boolean {
-  return CALIBRATION_STEPS.every((step) => state.results[step]?.status === 'complete')
-}
-
-function calibrationStatusText(state: CalibrationSlotState): string {
-  if (state.status === 'idle') return 'Not run yet'
-  if (state.status === 'running') return state.currentStep ? `Checking ${CALIBRATION_PROMPTS[state.currentStep].shortLabel.toLowerCase()}` : 'Checking'
-  if (state.status === 'needs-retake') return 'Retake recommended before accepting'
-  if (state.status === 'complete') return 'All setup values recorded'
-  return state.acceptedAt ? `Accepted ${new Date(state.acceptedAt).toLocaleTimeString()}` : 'Accepted'
-}
-
-function calibrationStatusClass(status: CalibrationUiStatus, connected: boolean): string {
-  if (!connected) return 'bg-gray-800 text-gray-500 ring-gray-700'
-  if (status === 'accepted') return 'bg-emerald-600/25 text-emerald-200 ring-emerald-500/35'
-  if (status === 'complete') return 'bg-sky-600/25 text-sky-200 ring-sky-500/35'
-  if (status === 'needs-retake') return 'bg-red-600/25 text-red-200 ring-red-500/35'
-  if (status === 'running') return 'bg-amber-600/25 text-amber-200 ring-amber-500/35'
-  return 'bg-gray-800 text-gray-400 ring-gray-700'
-}
-
-function metric(
-  result: CalibrationStepResult | undefined,
-  key: keyof CalibrationStepResult['metrics'],
-): string {
-  return typeof result?.metrics[key] === 'number' ? result.metrics[key].toFixed(2) : '--'
-}
-
 // ===== Participant panel =====
 
 interface PanelProps {
@@ -1332,10 +1109,10 @@ interface PanelProps {
   onPreset: (id: string) => void
   onIdentity: (identity: Identity) => void
   phase: Phase
-  calibrationState: CalibrationSlotState
+  calibrationState: CalibrationUiState
   calibrationRuntime?: CalibrationRuntimeState
   onRunCalibration: () => void
-  onRetakeCalibration: (step: CalibrationStep) => void
+  onRetakeCalibration: (phase: CalibrationPhase) => void
   onAcceptCalibration: () => void
 }
 
@@ -1569,32 +1346,21 @@ function ParticipantPanel({
           )}
         </div>
 
-        {/* Video setup check */}
+        {/* Calibration, directly under this participant's video */}
         <div className="border-t border-gray-800 pt-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-300">Video setup check</p>
-            <button
-              type="button"
-              onClick={onRunCalibration}
-              disabled={phase !== 'waiting' || !info}
-              className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold transition enabled:hover:bg-sky-500 disabled:opacity-40"
-            >
-              Run
-            </button>
-          </div>
           {phase !== 'waiting' && (
             <p className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-              Setup checks are available only in the waiting room.
+              Calibration is available only in the waiting room.
             </p>
           )}
-          <CalibrationSlotRow
-            slot={slot}
-            name={info?.identity.name || (slot === 'P1' ? 'Participant 1' : 'Participant 2')}
-            connected={!!info}
+          <CalibrationPanel
             state={calibrationState}
             runtime={calibrationRuntime}
-            onRetake={(_slot, step) => onRetakeCalibration(step)}
-            onAccept={() => onAcceptCalibration()}
+            enabled={phase === 'waiting' && !!info}
+            disabledReason={info ? 'live' : 'offline'}
+            onRun={onRunCalibration}
+            onRedo={onRetakeCalibration}
+            onAccept={onAcceptCalibration}
           />
         </div>
       </div>

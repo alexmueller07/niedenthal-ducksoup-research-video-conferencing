@@ -29,10 +29,21 @@
 //   affiliative — everything else (often with a lip-press component)
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
-import { normalizeExpressionFeatures } from './calibration'
+import {
+  BLENDSHAPE_KEYS,
+  TalkingDetector,
+  cappedAlpha,
+  exceedsCalibratedMax,
+  geometricLevel,
+  morphDirectionFor,
+  normalizedLevel,
+  openMouthScale,
+  type CalibrationFrame,
+  type GeometryFrame,
+} from './calibration'
 import type {
+  CalibrationProfile,
   CalibrationRuntimeState,
-  ExpressionCalibrationProfile,
   ExpressionLabel,
   ExpressionState,
   FaceShapeMetrics,
@@ -57,6 +68,8 @@ const LEFT_CORNER = 61
 const RIGHT_CORNER = 291
 const UPPER_INNER_LIP = 13
 const LOWER_INNER_LIP = 14
+// Outer centre of the lower lip — the point a frown's pout drags down.
+const LOWER_LIP_CENTER = 17
 const LEFT_OUTER_EYE = 33
 const RIGHT_OUTER_EYE = 263
 // Yaw estimation: nose tip vs. the two face-oval cheek extremes.
@@ -64,18 +77,13 @@ const NOSE_TIP = 1
 const LEFT_FACE_EDGE = 234
 const RIGHT_FACE_EDGE = 454
 
-// ---- Morph tuning (calibrate with Randy; all displacements scale with mouth width) ----
-const SMILE_ANGLE_RAD = (25 * Math.PI) / 180 // corners move out+up at ~25° above horizontal
-const SMILE_GAIN = 0.17 // total corner travel per unit of alpha
-const FROWN_GAIN = 0.13 // corner-down travel per unit of -alpha
-const FROWN_INWARD = 0.25 // slight inward pull of the corners while frowning
-const FROWN_POUT = 0.5 // lower-lip-centre drop relative to corner drop
+// ---- Morph tuning ----
+//
+// Corner travel and direction are per participant, measured by calibration
+// (renderer/lib/calibration.ts) so alpha 1.0 moves THIS person's mouth exactly
+// as far as their own biggest expression and never further. Without a profile
+// the fallbacks in calibration.ts reproduce the old fixed geometry exactly.
 const ALPHA_TWEEN_TAU_MS = 350 // preset transitions ease in over ~1 s
-const MORPH_SCALE_MIN = 0.85
-const MORPH_SCALE_MAX = 1.15
-const REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH = 0.38
-const REFERENCE_SMILE_RANGE = 0.16
-const REFERENCE_FROWN_RANGE = 0.075
 // Below this left/right face-half symmetry the morph fades out (side profile).
 const YAW_FADE_START = 0.65
 const YAW_FADE_END = 0.35
@@ -111,10 +119,43 @@ export const DETECTION_TUNING = {
   dominanceRelAsymmetry: 0.12,
   /** Below this, a smile is published without a trusted sub-type. */
   minPublishedSubtypeConfidence: 0.55,
-  /** EMA time constant for blendshape smoothing. */
-  emaTauMs: 220,
+  /**
+   * EMA time constant for blendshape smoothing. Short on purpose: with a
+   * per-person dead zone from calibration there is no longer any need to
+   * average away a global threshold's false positives, and long averaging was
+   * most of the old ~0.6 s reporting lag.
+   */
+  emaTauMs: 80,
   /** A new label/sub-type must persist this long before it is published. */
-  debounceMs: 350,
+  debounceMs: 100,
+  /** While the participant is speaking, the smile dead zone is raised by this. */
+  talkingDeadZoneMultiplier: 1.5,
+}
+
+/**
+ * Which smoothing slot below holds each MediaPipe blendshape. The slots are
+ * named for readability in the maths; calibration needs them back under their
+ * MediaPipe names.
+ */
+const EMA_KEY_FOR: Record<string, string> = {
+  mouthSmileLeft: 'smileL',
+  mouthSmileRight: 'smileR',
+  mouthFrownLeft: 'frownL',
+  mouthFrownRight: 'frownR',
+  mouthPressLeft: 'pressL',
+  mouthPressRight: 'pressR',
+  mouthUpperUpLeft: 'upperUpL',
+  mouthUpperUpRight: 'upperUpR',
+  jawOpen: 'jawOpen',
+  mouthLowerDownLeft: 'lowerDownL',
+  mouthLowerDownRight: 'lowerDownR',
+  eyeSquintLeft: 'eyeSquintL',
+  eyeSquintRight: 'eyeSquintR',
+  cheekSquintLeft: 'cheekSquintL',
+  cheekSquintRight: 'cheekSquintR',
+  mouthPucker: 'pucker',
+  mouthFunnel: 'funnel',
+  mouthShrugLower: 'shrugLower',
 }
 
 interface Pt {
@@ -142,8 +183,17 @@ export class FaceMorphProcessor {
   private candidateSince = 0
   private lastExpression: ExpressionState | null = null
   private lastFaceTs = 0
-  private calibrationProfile: ExpressionCalibrationProfile | null = null
-  private activeMorphScale = 1
+  private calibrationProfile: CalibrationProfile | null = null
+  private lastGeometry: GeometryFrame | null = null
+  private lastBlendshapes: Record<string, number> = {}
+  private talkingDetector = new TalkingDetector()
+  private micRms = 0
+  private reportedExceeded = false
+  // Live cap state, reported in telemetry so the logs show what was actually
+  // applied rather than only what was commanded.
+  private liveLevel = 0
+  private headroom = 1
+  private appliedAlpha = 0
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -177,9 +227,60 @@ export class FaceMorphProcessor {
     this.alphaTarget = alpha
   }
 
-  /** Apply a session-only participant baseline from the waiting-room setup check. */
-  setCalibrationProfile(profile: ExpressionCalibrationProfile | null) {
+  /** Apply this participant's calibration. Null clears it back to the fallbacks. */
+  setCalibrationProfile(profile: CalibrationProfile | null) {
     this.calibrationProfile = profile
+    this.talkingDetector.setBaseline(profile?.derived.talking.openRatioStdNeutral ?? 0.006)
+    this.talkingDetector.reset()
+  }
+
+  get calibrationProfile_(): CalibrationProfile | null {
+    return this.calibrationProfile
+  }
+
+  /**
+   * Latest short-window microphone level, 0..1. The talking detector needs the
+   * mic to agree with the mouth movement — geometry alone mistakes chewing,
+   * laughing and yawning for speech.
+   */
+  setMicLevel(rms: number) {
+    this.micRms = Number.isFinite(rms) ? rms : 0
+  }
+
+  /** One frame in the shape calibration records. Null until a face has been seen. */
+  sample(tsMs: number): CalibrationFrame | null {
+    const e = this.lastExpression
+    if (!e || !this.lastGeometry) return null
+    return {
+      tsMs,
+      faceFound: this.lastFaceFound,
+      blendshapes: { ...this.lastBlendshapes },
+      scores: {
+        smile: e.smile,
+        frown: e.frown,
+        openness: e.openness,
+        lipPress: e.lipPress,
+        asymmetry: e.asymmetry,
+      },
+      geometry: { ...this.lastGeometry },
+    }
+  }
+
+  /** The current RAW camera frame as a JPEG data URL, for calibration screenshots. */
+  snapshot(maxWidth = 480, quality = 0.7): string | null {
+    if (!this.src.width || !this.src.height) return null
+    const scale = Math.min(1, maxWidth / this.src.width)
+    const out = document.createElement('canvas')
+    out.width = Math.round(this.src.width * scale)
+    out.height = Math.round(this.src.height * scale)
+    const ctx = out.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(this.src, 0, 0, out.width, out.height)
+    try {
+      return out.toDataURL('image/jpeg', quality)
+    } catch {
+      return null
+    }
   }
 
   get ready() {
@@ -196,28 +297,14 @@ export class FaceMorphProcessor {
   }
 
   get calibration(): CalibrationRuntimeState {
-    const profile = this.calibrationProfile
-    if (!profile) {
-      return {
-        state: 'uncalibrated',
-        detectionConfidence: 0,
-        morphConfidence: 0,
-        mouthProportionScale: 1,
-        smileExpressivenessScale: 1,
-        frownExpressivenessScale: 1,
-        activeMorphScale: 1,
-      }
-    }
     return {
-      state: profile.confidence?.state ?? 'usable',
-      detectionConfidence: profile.confidence?.detectionConfidence ?? 0.65,
-      morphConfidence: profile.confidence?.morphConfidence ?? 0.65,
-      mouthProportionScale: profile.morph?.mouthProportionScale ?? 1,
-      smileExpressivenessScale: profile.morph?.smileExpressivenessScale ?? 1,
-      frownExpressivenessScale: profile.morph?.frownExpressivenessScale ?? 1,
-      activeMorphScale: round2(this.activeMorphScale),
-      acceptedAt: profile.acceptedAt,
-      warnings: profile.confidence?.warnings,
+      calibrated: this.calibrationProfile !== null,
+      acceptedAt: this.calibrationProfile?.acceptedAt,
+      participantId: this.calibrationProfile?.participantId,
+      liveLevel: round2(this.liveLevel),
+      headroom: round2(this.headroom),
+      appliedAlpha: round2(this.appliedAlpha),
+      talking: this.talkingDetector.talking,
     }
   }
 
@@ -276,11 +363,25 @@ export class FaceMorphProcessor {
 
     const lm = faces[0]
     const toPx = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height })
-    const faceShape = this.computeFaceShape(toPx)
+    const geometry = this.computeGeometry(toPx)
+    this.lastGeometry = geometry
 
-    this.updateExpressionFromRaw(tsMs, result.faceBlendshapes?.[0]?.categories ?? null, faceShape)
+    this.updateExpressionFromRaw(
+      tsMs,
+      result.faceBlendshapes?.[0]?.categories ?? null,
+      geometry,
+    )
 
-    if (Math.abs(this.alphaCurrent) < 0.02) return false
+    // Measured every frame, not only while morphing, so the dashboard readout
+    // and the logs keep tracking the participant's real face at neutral alpha.
+    const direction = this.alphaCurrent >= 0 ? 'smile' : 'frown'
+    this.liveLevel = geometricLevel(this.calibrationProfile, geometry, direction)
+    this.headroom = Math.max(0, 1 - this.liveLevel)
+
+    if (Math.abs(this.alphaCurrent) < 0.02) {
+      this.appliedAlpha = 0
+      return false
+    }
 
     // Mouth geometry.
     const lc = toPx(LEFT_CORNER)
@@ -323,9 +424,15 @@ export class FaceMorphProcessor {
       h: Math.min(height, maxY + padY) - Math.max(0, minY - padY),
     }
 
-    const morphScale = this.calibratedMorphScale(this.alphaCurrent)
-    this.activeMorphScale = morphScale
-    const strength = this.alphaCurrent * yawScale * morphScale
+    // The cap is on the TOTAL: what their real face is already doing plus what
+    // the morph adds must not exceed their own calibrated maximum. So the morph
+    // only gets the headroom that is left.
+    const capped = cappedAlpha(this.alphaCurrent, this.liveLevel)
+    this.appliedAlpha = capped
+    if (Math.abs(capped) < 0.02) return false
+
+    const openScale = openMouthScale(this.calibrationProfile, geometry.mouthOpenRatio)
+    const strength = capped * yawScale * openScale
     this.warp(dstCtx, roi, centerX, centerY, mouthWidth, strength)
     return true
   }
@@ -335,7 +442,7 @@ export class FaceMorphProcessor {
   private updateExpressionFromRaw(
     tsMs: number,
     categories: Array<{ categoryName: string; score: number }> | null,
-    faceShape: FaceShapeMetrics | null,
+    geometry: GeometryFrame | null,
   ) {
     // Raw scores (0 when the face is lost → everything decays to neutral).
     const raw: Record<string, number> = {}
@@ -403,48 +510,97 @@ export class FaceMorphProcessor {
       'eye',
       (g('eyeSquintLeft') + g('eyeSquintRight') + g('cheekSquintLeft') + g('cheekSquintRight')) / 4,
     )
-    const smoothedFaceShape = faceShape
+    const smoothedGeometry: GeometryFrame | null = geometry
       ? {
-          mouthWidthToFaceWidth: round2(ema('shapeMouthFace', faceShape.mouthWidthToFaceWidth)),
-          mouthWidthToEyeSpan: round2(ema('shapeMouthEye', faceShape.mouthWidthToEyeSpan)),
-          mouthOpenRatio: round2(ema('shapeOpenRatio', faceShape.mouthOpenRatio)),
-          mouthCornerTilt: round2(ema('shapeCornerTilt', faceShape.mouthCornerTilt)),
-          yawSymmetry: round2(ema('shapeYawSymmetry', faceShape.yawSymmetry)),
+          cornerSpreadX: ema('geoSpreadX', geometry.cornerSpreadX),
+          cornerLiftY: ema('geoLiftY', geometry.cornerLiftY),
+          lowerLipDropY: ema('geoLipDrop', geometry.lowerLipDropY),
+          mouthOpenRatio: ema('geoOpenRatio', geometry.mouthOpenRatio),
+          mouthWidthToFaceWidth: ema('geoMouthFace', geometry.mouthWidthToFaceWidth),
+          mouthCornerTilt: ema('geoCornerTilt', geometry.mouthCornerTilt),
+          yawSymmetry: ema('geoYawSymmetry', geometry.yawSymmetry),
+        }
+      : null
+    const smoothedFaceShape: FaceShapeMetrics | undefined = smoothedGeometry
+      ? {
+          mouthWidthToFaceWidth: round2(smoothedGeometry.mouthWidthToFaceWidth),
+          mouthOpenRatio: round2(smoothedGeometry.mouthOpenRatio),
+          mouthCornerTilt: round2(smoothedGeometry.mouthCornerTilt),
+          yawSymmetry: round2(smoothedGeometry.yawSymmetry),
         }
       : undefined
-    const rawExpression = {
-      smile,
-      frown,
-      openness,
-      faceShape: smoothedFaceShape,
+
+    // Keep the smoothed raw scores around so calibration records every
+    // blendshape the pipeline reads, not just the combined ones.
+    this.lastBlendshapes = {}
+    for (const key of BLENDSHAPE_KEYS) this.lastBlendshapes[key] = this.ema[EMA_KEY_FOR[key]] ?? 0
+
+    // Talking: speech is a modulated mouth shape, an expression is a sustained
+    // one. Both the mouth wobble and the microphone have to agree.
+    const talking = smoothedGeometry
+      ? this.talkingDetector.push(tsMs, smoothedGeometry.mouthOpenRatio, this.micRms)
+      : this.talkingDetector.talking
+
+    // ---- Per-person levels ----
+    //
+    // With a calibration profile, "smiling" means well past THIS person's own
+    // resting noise, on their own neutral..max scale. Without one we fall back
+    // to the global thresholds tuned against the lab's example photos.
+    const profile = this.calibrationProfile
+    const neutralScores = profile?.phases.neutral?.scores
+    const T = DETECTION_TUNING
+    let labelSmile: number
+    let labelFrown: number
+    let smileOn: number
+    let smileOff: number
+    let frownOn: number
+    let frownOff: number
+    let rewardOpenness: number
+
+    if (profile && neutralScores) {
+      labelSmile = normalizedLevel(smile, neutralScores.smile.mean, profile.derived.smile.range)
+      labelFrown = normalizedLevel(frown, neutralScores.frown.mean, profile.derived.frown.range)
+      // Smiling while talking is real and common, so the smile bar is only
+      // raised. Frowning is suppressed outright below: the pout heuristic
+      // fires on the pucker and funnel shapes of ordinary speech.
+      smileOn = profile.derived.smile.deadZone * (talking ? T.talkingDeadZoneMultiplier : 1)
+      smileOff = smileOn * 0.6
+      frownOn = profile.derived.frown.deadZone
+      frownOff = frownOn * 0.6
+      rewardOpenness = normalizedLevel(
+        openness,
+        profile.derived.openness.neutral,
+        Math.max(0.05, profile.derived.openness.max - profile.derived.openness.neutral),
+      )
+      if (
+        exceedsCalibratedMax(smile, neutralScores.smile.mean, profile.derived.smile.range) &&
+        !this.reportedExceeded
+      ) {
+        this.reportedExceeded = true
+        console.info('[faceMorph] real smile exceeded the calibrated maximum')
+      }
+    } else {
+      labelSmile = smile
+      labelFrown = frown
+      smileOn = T.smileOn
+      smileOff = T.smileOff
+      frownOn = T.frownOn
+      frownOff = T.frownOff
+      rewardOpenness = openness
     }
-    const normalized = this.calibrationProfile
-      ? normalizeExpressionFeatures(rawExpression, this.calibrationProfile)
-      : null
-    const labelSmile = normalized?.normalizedSmile ?? smile
-    const labelFrown = normalized?.normalizedFrown ?? frown
-    const rewardOpenness = normalized?.normalizedOpenness ?? openness
 
     // Label with hysteresis: harder to enter a state than to stay in it (the
     // "off" bar only applies to whichever state is currently published).
     //
     // Smile and frown are checked independently rather than smile-first: a
-    // relaxed face's raw mouthSmile score can sit high enough (comment above)
-    // that a fixed smile-then-frown order could keep a stale "smiling" label
-    // (or block "frowning" outright) whenever that baseline noise stayed over
-    // smile's low "stay" bar — reported as "I frown after calibration and it
-    // never shows frowning." When both cross their bar at once, trust
-    // whichever is over it by the larger margin instead of always picking
-    // smile.
-    const T = DETECTION_TUNING
-    const smileOn = this.calibrationProfile?.thresholds.smileOn ?? T.smileOn
-    const smileOff = this.calibrationProfile?.thresholds.smileOff ?? T.smileOff
-    const frownOn = this.calibrationProfile?.thresholds.frownOn ?? T.frownOn
-    const frownOff = this.calibrationProfile?.thresholds.frownOff ?? T.frownOff
+    // relaxed face's raw mouthSmile score can sit high enough that a fixed
+    // smile-then-frown order could keep a stale "smiling" label (or block
+    // "frowning" outright). When both cross their bar at once, trust whichever
+    // is over it by the larger margin.
     const smileBar = this.publishedLabel === 'smiling' ? smileOff : smileOn
     const frownBar = this.publishedLabel === 'frowning' ? frownOff : frownOn
     const smileCandidate = labelSmile >= smileBar
-    const frownCandidate = labelFrown >= frownBar
+    const frownCandidate = !talking && labelFrown >= frownBar
     let label: ExpressionLabel
     if (smileCandidate && frownCandidate) {
       label = labelSmile - smileBar >= labelFrown - frownBar ? 'smiling' : 'frowning'
@@ -452,6 +608,9 @@ export class FaceMorphProcessor {
       label = 'smiling'
     } else if (frownCandidate) {
       label = 'frowning'
+    } else if (talking && this.publishedLabel === 'frowning') {
+      // Do not let a frown published before speech started hang around.
+      label = 'neutral'
     } else {
       label = 'neutral'
     }
@@ -498,13 +657,22 @@ export class FaceMorphProcessor {
       lipPress: round2(lipPress),
       openness: round2(openness),
       faceShape: smoothedFaceShape,
-      normalizedSmile: normalized?.normalizedSmile,
-      normalizedFrown: normalized?.normalizedFrown,
-      normalizedOpenness: normalized?.normalizedOpenness,
-      smileMargin: normalized?.smileMargin,
-      frownMargin: normalized?.frownMargin,
-      normalizationApplied: !!normalized,
-      normalizationVersion: this.calibrationProfile?.version,
+      normalizedSmile: profile ? round2(labelSmile) : undefined,
+      normalizedFrown: profile ? round2(labelFrown) : undefined,
+      normalizedOpenness: profile ? round2(rewardOpenness) : undefined,
+      smileMargin: profile ? round2(labelSmile - smileOn) : undefined,
+      frownMargin: profile ? round2(labelFrown - frownOn) : undefined,
+      normalizationApplied: !!profile,
+      normalizationVersion: profile?.version,
+      geometricSmileLevel:
+        profile && smoothedGeometry
+          ? round2(geometricLevel(profile, smoothedGeometry, 'smile'))
+          : undefined,
+      geometricFrownLevel:
+        profile && smoothedGeometry
+          ? round2(geometricLevel(profile, smoothedGeometry, 'frown'))
+          : undefined,
+      talking,
       labelConfidence: round2(labelConfidence),
       smileTypeConfidence:
         this.publishedLabel === 'smiling' && this.publishedType ? round2(smileTypeConfidence ?? 0) : undefined,
@@ -513,7 +681,7 @@ export class FaceMorphProcessor {
           ? !subtypeUntrustworthy && this.publishedType !== null && (smileTypeConfidence ?? 0) > 0
           : undefined,
       classifierMode: CLASSIFIER_MODE,
-      classifierVersion: normalized ? NORMALIZED_CLASSIFIER_VERSION : CLASSIFIER_VERSION,
+      classifierVersion: profile ? NORMALIZED_CLASSIFIER_VERSION : CLASSIFIER_VERSION,
       rawMouthSmileLeft: round2(smileL),
       rawMouthSmileRight: round2(smileR),
       rawMouthFrownLeft: round2(frownL),
@@ -585,74 +753,46 @@ export class FaceMorphProcessor {
     }
   }
 
-  private computeFaceShape(toPx: (i: number) => Pt): FaceShapeMetrics {
+  /**
+   * Landmark geometry for one frame, normalized by face width so it does not
+   * change when the participant leans toward or away from the camera. This is
+   * what calibration measures the morph in — blendshape scores describe how
+   * much of an expression is present, not how far the mouth actually moved.
+   */
+  private computeGeometry(toPx: (i: number) => Pt): GeometryFrame {
     const lc = toPx(LEFT_CORNER)
     const rc = toPx(RIGHT_CORNER)
     const upperLip = toPx(UPPER_INNER_LIP)
     const lowerLip = toPx(LOWER_INNER_LIP)
+    const lowerLipCenter = toPx(LOWER_LIP_CENTER)
     const lEye = toPx(LEFT_OUTER_EYE)
     const rEye = toPx(RIGHT_OUTER_EYE)
     const nose = toPx(NOSE_TIP)
     const lEdge = toPx(LEFT_FACE_EDGE)
     const rEdge = toPx(RIGHT_FACE_EDGE)
 
+    const faceWidth = Math.max(1e-3, distance(lEdge, rEdge))
     const mouthWidth = distance(lc, rc)
-    const faceWidth = distance(lEdge, rEdge)
-    const eyeSpan = distance(lEye, rEye)
+    const cornerMeanY = (lc.y + rc.y) / 2
+    const eyeMeanY = (lEye.y + rEye.y) / 2
     const mouthOpen = Math.abs(lowerLip.y - upperLip.y)
     const dl = Math.abs(nose.x - lEdge.x)
     const dr = Math.abs(rEdge.x - nose.x)
 
     return {
-      mouthWidthToFaceWidth: safeRatio(mouthWidth, faceWidth),
-      mouthWidthToEyeSpan: safeRatio(mouthWidth, eyeSpan),
+      cornerSpreadX: Math.abs(rc.x - lc.x) / faceWidth,
+      // Corners rising toward the eyes makes this grow, in image coordinates
+      // where y increases downward.
+      cornerLiftY: (eyeMeanY - cornerMeanY) / faceWidth,
+      lowerLipDropY: (lowerLipCenter.y - cornerMeanY) / faceWidth,
       mouthOpenRatio: safeRatio(mouthOpen, mouthWidth),
+      mouthWidthToFaceWidth: mouthWidth / faceWidth,
       mouthCornerTilt: safeRatio(Math.abs(lc.y - rc.y), mouthWidth),
       yawSymmetry: Math.min(dl, dr) / Math.max(1e-3, Math.max(dl, dr)),
     }
   }
 
   // ---- Warp ----
-
-  private calibratedMorphScale(alpha: number): number {
-    const profile = this.calibrationProfile
-    if (!profile) return 1
-
-    if (profile.morph) {
-      const expressionScale =
-        alpha >= 0 ? profile.morph.smileExpressivenessScale : profile.morph.frownExpressivenessScale
-      return clamp(
-        profile.morph.mouthProportionScale * expressionScale,
-        profile.morph.minScale,
-        profile.morph.maxScale,
-      )
-    }
-
-    const neutral = profile.steps.neutral
-    const active = alpha >= 0 ? profile.steps.smile : profile.steps.frown
-    const minimum = alpha >= 0 ? 0.08 : 0.025
-    const referenceRange = alpha >= 0 ? REFERENCE_SMILE_RANGE : REFERENCE_FROWN_RANGE
-    const activeValue =
-      alpha >= 0
-        ? Math.max(active.smileMean, active.smileMax * 0.85, neutral.smileMean + minimum)
-        : Math.max(active.frownMean, active.frownMax * 0.85, neutral.frownMean + minimum)
-    const neutralValue = alpha >= 0 ? neutral.smileMean : neutral.frownMean
-    const expressionRange = Math.max(minimum, activeValue - neutralValue)
-    const expressivenessScale = clamp(
-      referenceRange / Math.max(minimum, expressionRange),
-      MORPH_SCALE_MIN,
-      MORPH_SCALE_MAX,
-    )
-    const mouthScale = neutral.mouthWidthToFaceWidthMean
-      ? clamp(
-          REFERENCE_MOUTH_WIDTH_TO_FACE_WIDTH / neutral.mouthWidthToFaceWidthMean,
-          MORPH_SCALE_MIN,
-          MORPH_SCALE_MAX,
-        )
-      : 1
-
-    return clamp(mouthScale * expressivenessScale, MORPH_SCALE_MIN, MORPH_SCALE_MAX)
-  }
 
   /**
    * Mesh-warp the ROI. `strength` is alpha after yaw attenuation:
@@ -669,6 +809,14 @@ export class FaceMorphProcessor {
     const sigmaY = mouthWidth * 0.6
     const smiling = strength > 0
     const mag = Math.abs(strength) * mouthWidth
+    // Corner travel and direction come from this participant's calibration, so
+    // the same alpha moves a small mouth and a wide one by their own amounts.
+    const { cornerTravel, cornerAngleRad, poutDrop } = morphDirectionFor(
+      this.calibrationProfile,
+      strength,
+    )
+    const travelX = Math.cos(cornerAngleRad)
+    const travelY = -Math.sin(cornerAngleRad)
     // The lower-lip pout centre sits slightly below the mouth line.
     const poutY = centerY + mouthWidth * 0.22
     const poutSigma = mouthWidth * 0.35
@@ -683,24 +831,17 @@ export class FaceMorphProcessor {
       // Corner weight: strongest at the mouth corners (xn² → 1), ~0 mid-mouth.
       const cornerW = Math.min(1.6, xn * xn) * vy * win
 
-      let dx = 0
-      let dy = 0
-      if (smiling) {
-        // Corners travel out+up at ~25° above horizontal — out first, then up
-        // (RA feedback: straight-vertical lift looked unnatural).
-        const d = mag * SMILE_GAIN * cornerW
-        dx = Math.sign(xn) * Math.cos(SMILE_ANGLE_RAD) * d
-        dy = -Math.sin(SMILE_ANGLE_RAD) * d
-      } else {
-        // Frown: outer nodes pull down and slightly inward…
-        const d = mag * FROWN_GAIN * cornerW
-        dx = -Math.sign(xn) * FROWN_INWARD * d
-        dy = d
-        // …while the centre of the lower lip drops a little → a parabolic
-        // mouth with a hint of protruding lower lip, not a straight shift.
+      // One formula for both directions: the calibrated angle already points
+      // out+up for a smile and down+in for a frown.
+      const d = mag * cornerTravel * cornerW
+      let dx = Math.sign(xn) * travelX * d
+      let dy = travelY * d
+      if (!smiling) {
+        // The centre of the lower lip also drops → a parabolic mouth with a
+        // hint of protruding lower lip, not a straight shift.
         const centerW = Math.max(0, 1 - xn * xn)
         const vb = Math.exp(-((sy - poutY) ** 2) / (2 * poutSigma * poutSigma))
-        dy += mag * FROWN_GAIN * FROWN_POUT * centerW * vb * win
+        dy += mag * poutDrop * centerW * vb * win
       }
       return { x: dx, y: dy }
     })
@@ -811,10 +952,6 @@ export class FaceMorphProcessor {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
-}
-
-function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v
 }
 
 function round2(v: number): number {

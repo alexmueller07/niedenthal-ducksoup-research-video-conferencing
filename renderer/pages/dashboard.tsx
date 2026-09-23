@@ -2,8 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { CaptureStation } from '../lib/capture'
+import type { CalibrationProgress } from '../lib/calibrationRunner'
+import {
+  CalibrationPanel,
+  emptyCalibrationUiState,
+  type CalibrationUiState,
+} from '../components/CalibrationPanel'
 import { NORMALIZED_CLASSIFIER_VERSION } from '../lib/faceMorph'
-import type { ExpressionState } from '../lib/protocol'
+import { CALIBRATION_PHASES } from '../lib/protocol'
+import type { CalibrationPhase, ExpressionState } from '../lib/protocol'
 import { PRESETS, getPreset, DEFAULT_PRESET_ID } from '../lib/presets'
 import type {
   ConnectionStatus,
@@ -43,7 +50,8 @@ export default function DashboardPage() {
   const [recTime, setRecTime] = useState(0)
   const [faceFound, setFaceFound] = useState(false)
   const [expression, setExpression] = useState<ExpressionState | null>(null)
-  const [calibrationStatus, setCalibrationStatus] = useState<string | null>(null)
+  const [calibrationProgress, setCalibrationProgress] = useState<CalibrationProgress | null>(null)
+  const [calibration, setCalibration] = useState<CalibrationUiState>(emptyCalibrationUiState)
   const [lastSaved, setLastSaved] = useState<SessionManifest | null>(null)
   // Determined after mount so the first client render matches the server-rendered
   // HTML (window.ipc only exists in Electron). Avoids a hydration mismatch.
@@ -63,7 +71,24 @@ export default function DashboardPage() {
       onSaved: (m) => setLastSaved(m),
       onFaceState: (f) => setFaceFound(f),
       onExpression: (e) => setExpression(e),
-      onCalibrationStatus: (t) => setCalibrationStatus(t),
+      onCalibrationProgress: (p) => setCalibrationProgress(p),
+      onCalibrationPhase: (summary, screenshotDataUrl) =>
+        setCalibration((prev) => {
+          const phases = { ...prev.phases, [summary.phase]: summary }
+          const screenshots = { ...prev.screenshots }
+          if (screenshotDataUrl) screenshots[summary.phase] = screenshotDataUrl
+          const anyRedo = CALIBRATION_PHASES.some((p) => phases[p]?.status === 'needs-redo')
+          const allDone = CALIBRATION_PHASES.every((p) => phases[p])
+          return {
+            ...prev,
+            currentPhase: summary.phase,
+            phases,
+            screenshots,
+            profile: null,
+            acceptedAt: undefined,
+            status: anyRedo ? 'needs-redo' : allDone ? 'complete' : 'running',
+          }
+        }),
     })
     stationRef.current = station
     return () => station.stop()
@@ -107,8 +132,32 @@ export default function DashboardPage() {
     await stationRef.current?.stopRecording()
     stationRef.current?.stop()
     setExpression(null)
-    setCalibrationStatus(null)
+    setCalibrationProgress(null)
   }, [])
+
+  const runCalibration = (phases: CalibrationPhase[] = CALIBRATION_PHASES) => {
+    const fullRun = phases.length > 1
+    setCalibration((prev) => ({
+      status: 'running',
+      currentPhase: phases[0] ?? null,
+      // A redo replaces only the phase being retaken.
+      phases: fullRun ? {} : { ...prev.phases },
+      screenshots: fullRun ? {} : { ...prev.screenshots },
+      profile: null,
+    }))
+    void stationRef.current?.runCalibration(phases)
+  }
+
+  const acceptCalibration = () => {
+    const profile = stationRef.current?.acceptCalibration() ?? null
+    if (!profile) return
+    setCalibration((prev) => ({
+      ...prev,
+      status: 'accepted',
+      acceptedAt: profile.acceptedAt,
+      profile,
+    }))
+  }
   const backHome = async () => {
     if (recording === 'saving') return
     if (recording === 'recording' || connection === 'connected' || connection === 'connecting') {
@@ -131,7 +180,7 @@ export default function DashboardPage() {
   const busy = connection === 'connecting' || recording === 'recording' || recording === 'saving'
   const startLabel =
     connection === 'connecting'
-      ? calibrationStatus ?? 'Starting…'
+      ? 'Starting…'
       : recording === 'saving'
         ? 'Saving…'
         : 'Start'
@@ -172,7 +221,7 @@ export default function DashboardPage() {
           </div>
           <div className="status">
             <span className={`dot ${connection}`} />
-            {connection === 'connecting' ? calibrationStatus ?? 'Starting…' : recording === 'recording' ? 'Recording' : connection === 'connected' ? 'Live' : connection === 'error' ? 'Error' : 'Idle'}
+            {connection === 'connecting' ? 'Starting…' : recording === 'recording' ? 'Recording' : connection === 'connected' ? 'Live' : connection === 'error' ? 'Error' : 'Idle'}
             {connection === 'connected' && (
               <span className={`face ${faceFound ? 'ok' : 'no'}`}>
                 {faceFound ? 'face tracked' : 'no face'}
@@ -208,7 +257,7 @@ export default function DashboardPage() {
 
               <div className="slider">
                 <div className="slider-head"><span>Smile (face)</span><span className="val">{alpha.toFixed(2)}</span></div>
-                <input type="range" min={-0.75} max={0.75} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
+                <input type="range" min={-1} max={1} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
                 <div className="ticks"><span>Frown</span><span>Neutral</span><span>Smile</span></div>
               </div>
             </section>
@@ -225,8 +274,39 @@ export default function DashboardPage() {
                 <div className="vid-label">Altered (participant sees this)</div>
                 <canvas ref={alteredRef} />
                 <button className="fs" onClick={goFullscreen} title="Participant fullscreen">Fullscreen</button>
+                {calibrationProgress && (
+                  <div className="cal-overlay">
+                    <p className="cal-stage">
+                      {calibrationProgress.stage === 'recording'
+                        ? 'Hold it'
+                        : calibrationProgress.stage === 'settling'
+                          ? 'Recorded'
+                          : 'Get ready'}
+                    </p>
+                    <p className="cal-title">{calibrationProgress.title}</p>
+                    <p className="cal-instruction">{calibrationProgress.instruction}</p>
+                    {calibrationProgress.stage !== 'settling' && (
+                      <p className="cal-count">{calibrationProgress.secondsLeft}</p>
+                    )}
+                    <p className="cal-step">
+                      Step {calibrationProgress.index} of {calibrationProgress.total}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Calibration, directly under the video — same panel the
+                researcher dashboard shows under each participant. */}
+            <CalibrationPanel
+              state={calibration}
+              runtime={undefined}
+              enabled={connection === 'connected'}
+              disabledReason="start first"
+              onRun={() => runCalibration()}
+              onRedo={(phase) => runCalibration([phase])}
+              onAccept={acceptCalibration}
+            />
 
             <div className="ops">
               <div
@@ -329,6 +409,12 @@ export default function DashboardPage() {
         .vid { position: relative; background: #000; border: 1px solid #232831; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
         .vid video, .vid canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
         .vid-label { position: absolute; top: 8px; left: 8px; z-index: 2; font-size: 11px; padding: 3px 8px; background: rgba(0,0,0,0.55); border-radius: 4px; color: #cdd3da; }
+        .cal-overlay { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; background: rgba(9,12,17,0.82); backdrop-filter: blur(3px); }
+        .cal-stage { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #7dd3fc; }
+        .cal-title { font-size: 16px; font-weight: 600; color: #f3f6fa; }
+        .cal-instruction { max-width: 34ch; font-size: 13px; line-height: 1.45; color: #cdd3da; }
+        .cal-count { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+        .cal-step { font-size: 11px; color: #7b8593; }
         .fs { position: absolute; bottom: 8px; right: 8px; z-index: 2; font-size: 11px; padding: 4px 9px; background: rgba(0,0,0,0.55); border: 1px solid #3a4250; border-radius: 5px; color: #cdd3da; cursor: pointer; }
         .fs:hover { background: rgba(0,0,0,0.8); }
 

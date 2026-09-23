@@ -85,6 +85,16 @@ export interface ExpressionState {
   frownMargin?: number
   normalizationApplied?: boolean
   normalizationVersion?: string
+  /**
+   * How far toward this person's own calibrated maximum their face is right
+   * now, 0..1, measured from landmark geometry rather than blendshapes. This
+   * is what caps the morph, so it has to be in the same units as the warp.
+   * Clamps at 1 if they exceed what calibration measured.
+   */
+  geometricSmileLevel?: number
+  geometricFrownLevel?: number
+  /** True while the participant is speaking; frown labels are held back then. */
+  talking?: boolean
   /** Confidence that the top-level label is correct, 0..1. */
   labelConfidence?: number
   /** Confidence that `smileType` is correct, 0..1. Omitted when no subtype is trusted. */
@@ -119,8 +129,6 @@ export interface ExpressionState {
 export interface FaceShapeMetrics {
   /** Mouth-corner distance divided by cheek-to-cheek face width. */
   mouthWidthToFaceWidth: number
-  /** Mouth-corner distance divided by outer-eye distance. */
-  mouthWidthToEyeSpan: number
   /** Inner-lip vertical opening divided by mouth-corner distance. */
   mouthOpenRatio: number
   /** Mouth-corner vertical mismatch divided by mouth width. */
@@ -154,93 +162,178 @@ export interface Telemetry extends EffectState {
 
 export type PSlot = 'P1' | 'P2'
 
-// ---- Waiting-room setup check ----
+// ---- Calibration ----
+//
+// Each participant is calibrated before the conversation: a short guided
+// sequence (relaxed face, biggest closed-mouth smile, biggest open-mouth
+// smile, biggest frown) measures what THAT person's face actually does. Two
+// different things come out of it:
+//
+//   detection — their own neutral..max range, so "smiling" means "well past
+//               this person's resting noise", not past a global constant.
+//   morphing  — the real mouth-corner displacement of their maximum
+//               expression, so alpha 1.0 moves their mouth exactly that far
+//               and never further.
+//
+// The closed-mouth smile sets the morph gain (the warp only moves corners, and
+// an open grin's corner travel is partly jaw drop). The open-mouth smile sets
+// the detection range and, together with the closed one, this person's
+// jaw-to-corner coupling — which is what lets us subtract talking out of the
+// live signal.
 
-export type CalibrationStep = 'neutral' | 'smile' | 'frown'
+export type CalibrationPhase = 'neutral' | 'smileClosed' | 'smileOpen' | 'frown'
+export const CALIBRATION_PHASES: CalibrationPhase[] = [
+  'neutral',
+  'smileClosed',
+  'smileOpen',
+  'frown',
+]
 export type CalibrationTarget = PSlot | 'both'
-export type CalibrationStepStatus = 'complete' | 'needs-retake'
-export type CalibrationConfidenceState =
-  | 'uncalibrated'
-  | 'collecting'
-  | 'usable'
-  | 'strong'
-  | 'weak'
-  | 'invalid'
+export type CalibrationPhaseStatus = 'ok' | 'needs-redo'
 export type CalibrationQualityFlag =
   | 'insufficient_samples'
   | 'face_not_visible'
   | 'off_axis_face'
   | 'not_relaxed'
-  | 'teeth_detected'
-  | 'weak_smile'
-  | 'weak_frown'
-  | 'passive_low_expression_range'
+  | 'mouth_open_during_closed_smile'
+  | 'too_close_to_neutral'
 
-export interface CalibrationMetrics {
-  smileMean: number
-  smileMax: number
-  frownMean: number
-  frownMax: number
-  opennessMean: number
-  opennessMax: number
-  faceVisibleRatio: number
-  mouthWidthToFaceWidthMean: number
-  mouthWidthToEyeSpanMean: number
-  mouthOpenRatioMean: number
-  mouthOpenRatioMax: number
-  mouthCornerTiltMean: number
-  yawSymmetryMean: number
+/** Mean and spread of one measured quantity over a calibration phase. */
+export interface Stat {
+  mean: number
+  std: number
 }
 
-export interface CalibrationStepResult {
-  requestId: string
-  step: CalibrationStep
-  status: CalibrationStepStatus
-  samples: number
+/**
+ * Every MediaPipe blendshape the pipeline reads, keyed by its MediaPipe name.
+ * Stored per phase so a researcher can see the ingredients, not just a score.
+ */
+export type BlendshapeStats = Record<string, Stat>
+
+/** Combined scores derived from the blendshapes above. */
+export interface ScoreStats {
+  smile: Stat
+  frown: Stat
+  openness: Stat
+  lipPress: Stat
+  asymmetry: Stat
+}
+
+/**
+ * Landmark geometry, scale-normalized by face width so it is invariant to how
+ * far the participant sits from the camera. This is what the morph is measured
+ * in — blendshape scores cannot drive a geometric warp.
+ */
+export interface GeometryStats {
+  /** Mouth-corner horizontal spread ÷ face width. Grows with a smile. */
+  cornerSpreadX: Stat
+  /** Eye-line to mouth-corner height ÷ face width. Grows as corners rise. */
+  cornerLiftY: Stat
+  /** Lower-lip-centre drop below the mouth line ÷ face width. */
+  lowerLipDropY: Stat
+  /** Inner-lip vertical opening ÷ mouth width. */
+  mouthOpenRatio: Stat
+  /** Mouth width ÷ face width. */
+  mouthWidthToFaceWidth: Stat
+  /** Mouth-corner vertical mismatch ÷ mouth width. */
+  mouthCornerTilt: Stat
+  /** Nose-to-cheek left/right symmetry; near 1 is frontal, near 0 is profile. */
+  yawSymmetry: Stat
+}
+
+/** The peak of an expression phase: the mean of the top N frames, not one frame. */
+export interface CalibrationPeak {
+  /** How many top frames were averaged. */
+  topFrames: number
+  /** Index of the single strongest frame (the one the screenshot shows). */
+  peakFrameIndex: number
+  peakTsMs: number
+  blendshapes: BlendshapeStats
+  scores: ScoreStats
+  geometry: GeometryStats
+}
+
+export interface CalibrationPhaseSummary {
+  phase: CalibrationPhase
+  status: CalibrationPhaseStatus
   capturedAt: string
-  metrics: CalibrationMetrics
+  durationMs: number
+  frames: number
+  faceVisibleRatio: number
+  blendshapes: BlendshapeStats
+  scores: ScoreStats
+  geometry: GeometryStats
+  /** Absent for the neutral phase, which has no peak. */
+  peak?: CalibrationPeak
   qualityFlags: CalibrationQualityFlag[]
+  /** Filename of this phase's screenshot inside the participant's folder. */
+  screenshot?: string
 }
 
-export interface ExpressionCalibrationProfile {
+/** One phase's result on its way from a participant to the researcher. */
+export interface CalibrationPhaseMessage {
+  requestId: string
+  summary: CalibrationPhaseSummary
+  /** The participant's negotiated camera resolution; only they know it. */
+  camera?: { width: number; height: number }
+  /** Peak-frame JPEG as a base64 data URL, for the dashboard thumbnail. */
+  screenshotDataUrl?: string
+}
+
+/** Per-direction numbers the detector and the morph actually run on. */
+export interface CalibrationDirection {
+  /** Detection: peak score minus neutral score. The normalization denominator. */
+  range: number
+  /** Detection: normalized level below which this counts as neutral. */
+  deadZone: number
+  /** Morph: corner travel at this person's maximum, in mouth-widths. */
+  cornerTravel: number
+  /** Morph: direction the corners travel, radians above horizontal. */
+  cornerAngleRad: number
+}
+
+export interface CalibrationProfile {
+  schemaVersion: number
   version: string
+  participantId: string
+  dyadId: string
+  studyId: string
+  seat: PSlot | 'SOLO'
+  appVersion: string
+  capturedAt: string
   acceptedAt: string
-  steps: Record<CalibrationStep, CalibrationMetrics>
-  confidence?: {
-    state: CalibrationConfidenceState
-    detectionConfidence: number
-    morphConfidence: number
-    neutralConfidence: number
-    expressionRangeConfidence: number
-    warnings: CalibrationQualityFlag[]
+  camera: { width: number; height: number }
+  phases: Partial<Record<CalibrationPhase, CalibrationPhaseSummary>>
+  derived: {
+    smile: CalibrationDirection
+    /** Frown also drops the centre of the lower lip; in mouth-widths. */
+    frown: CalibrationDirection & { poutDrop: number }
+    openness: { neutral: number; max: number }
+    /** Corner travel per unit of mouth-open ratio; used to subtract jaw movement. */
+    jawCoupling: number
+    /** Mouth-open range the morph's open-mouth fade is scaled against. */
+    openScaleRange: { neutralOpen: number; openSmileOpen: number }
+    /** Resting spread of mouth opening; the talking detector's per-person baseline. */
+    talking: { openRatioStdNeutral: number }
   }
-  morph?: {
-    mouthProportionScale: number
-    smileExpressivenessScale: number
-    frownExpressivenessScale: number
-    minScale: number
-    maxScale: number
-  }
-  thresholds: {
-    smileOn: number
-    smileOff: number
-    frownOn: number
-    frownOff: number
-    rewardOpenness: number
-    rewardMouthOpenRatio: number
+  validation: {
+    phases: Partial<Record<CalibrationPhase, CalibrationPhaseStatus>>
+    flags: CalibrationQualityFlag[]
   }
 }
 
+/** Live calibration/morph health, reported in telemetry for the dashboard. */
 export interface CalibrationRuntimeState {
-  state: CalibrationConfidenceState
-  detectionConfidence: number
-  morphConfidence: number
-  mouthProportionScale: number
-  smileExpressivenessScale: number
-  frownExpressivenessScale: number
-  activeMorphScale: number
+  calibrated: boolean
   acceptedAt?: string
-  warnings?: CalibrationQualityFlag[]
+  participantId?: string
+  /** How far toward their own maximum their real face is right now, 0..1. */
+  liveLevel: number
+  /** Headroom left for the morph after their real expression, 0..1. */
+  headroom: number
+  /** Alpha actually applied this frame, after the cap and the fades. */
+  appliedAlpha: number
+  talking: boolean
 }
 
 export type RuleExpression =
@@ -332,9 +425,10 @@ export type ClientMessage =
   | { type: 'set-effect'; slot: SlotId; param: keyof EffectState; value: number }
   | { type: 'apply-preset'; slot: SlotId; presetId: string; effects: EffectState }
   | { type: 'banner'; text: string; durationSec: number }
-  | { type: 'calibration-start'; target: CalibrationTarget; steps: CalibrationStep[] }
-  | { type: 'calibration-result'; result: CalibrationStepResult }
-  | { type: 'calibration-apply'; target: PSlot; profile: ExpressionCalibrationProfile }
+  | { type: 'calibration-start'; target: CalibrationTarget; phases: CalibrationPhase[] }
+  | { type: 'calibration-phase'; message: CalibrationPhaseMessage }
+  | { type: 'calibration-apply'; target: PSlot; profile: CalibrationProfile }
+  | { type: 'calibration-clear'; target: PSlot }
   | { type: 'set-phase'; phase: Phase }
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
@@ -371,9 +465,9 @@ export type ServerMessage =
   | { type: 'effect-command'; effects: EffectState; cause: string }
   | { type: 'identity-assigned'; identity: Identity }
   | { type: 'banner'; text: string; durationSec: number }
-  | { type: 'calibration-start'; requestId: string; steps: CalibrationStep[] }
-  | { type: 'calibration-result'; slot: SlotId; result: CalibrationStepResult }
-  | { type: 'calibration-profile'; profile: ExpressionCalibrationProfile }
+  | { type: 'calibration-start'; requestId: string; phases: CalibrationPhase[] }
+  | { type: 'calibration-phase'; slot: SlotId; message: CalibrationPhaseMessage }
+  | { type: 'calibration-profile'; profile: CalibrationProfile | null }
   | { type: 'phase'; phase: Phase; sessionStartedAt: string | null }
   | { type: 'peer-left'; slot: SlotId }
   | { type: 'telemetry'; slot: SlotId; data: Telemetry }
@@ -508,7 +602,6 @@ function normalizeFaceShapeMetrics(input: unknown): FaceShapeMetrics | undefined
   if (!isRecord(input)) return undefined
   return {
     mouthWidthToFaceWidth: clamp01(input.mouthWidthToFaceWidth),
-    mouthWidthToEyeSpan: clamp01(input.mouthWidthToEyeSpan),
     mouthOpenRatio: clamp01(input.mouthOpenRatio),
     mouthCornerTilt: clamp01(input.mouthCornerTilt),
     yawSymmetry: clamp01(input.yawSymmetry),

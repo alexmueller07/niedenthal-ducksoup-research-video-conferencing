@@ -11,6 +11,8 @@
     "server:dev": "tsx main/server-standalone.ts",
     "renderer:dev": "next dev renderer -p 8888",
     "typecheck": "tsc -p renderer/tsconfig.json --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "test": "tsx tests/calibration_contract_test.ts && tsx tests/morph_contract_test.ts && tsx tests/expression_contract_test.ts && tsx tests/calibration_replay_test.ts",
+    "test:fixture": "tsx tests/make_calibration_fixture.ts",
     "clean": "node -e \"require('fs').rmSync('renderer/.next',{recursive:true,force:true})\"",
     "build": "npm run clean && nextron build",
     "build:win": "npm run clean && nextron build --win",
