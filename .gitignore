@@ -14,3 +14,9 @@ next-env.d.ts
 *.csv
 session_*/
 
+# screen recordings and video of faces must never be committed (IRB 2020-1657)
+*.mov
+*.mp4
+*.webm
+*.m4v
+*.y4m
