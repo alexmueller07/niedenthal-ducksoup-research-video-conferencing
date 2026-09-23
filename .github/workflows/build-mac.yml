@@ -24,15 +24,6 @@ permissions:
 jobs:
   build-mac:
     runs-on: macos-latest
-    env:
-      # Do not attempt to discover/use a code-signing identity in CI. Without
-      # this, electron-builder can hang or fail looking for an Apple cert.
-      CSC_IDENTITY_AUTO_DISCOVERY: false
-      # Free Apple ID personal-team certificate (.p12), used to sign the app
-      # so its code identity stays stable across builds/reinstalls.
-      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -45,6 +36,21 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Import signing certificate
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$MAC_CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MAC_CSC_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
 
       - name: Build macOS app (universal)
         run: npm run build:mac
