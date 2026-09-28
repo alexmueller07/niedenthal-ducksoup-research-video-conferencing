@@ -13,6 +13,7 @@
 
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
+import type { VoiceCondition, VoiceSeat, VoiceTurn } from '../../main/voiceProtocol'
 import type { ExpressionCalibrationProfile, ExpressionState, Telemetry } from './protocol'
 
 export interface EffectsStatus {
@@ -86,7 +87,7 @@ export class LiveEffects {
     } else {
       this.camera = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 },
       })
     }
     this.status.camera = true
@@ -203,6 +204,14 @@ export class LiveEffects {
     this.semitones = semitones
     this.voice?.setSemitones(semitones)
   }
+
+  voiceReport() { return this.voice?.report() ?? null }
+  setVoiceCondition(condition: VoiceCondition) { this.voice?.setCondition(condition) }
+  setVoiceSlot(slot: VoiceSeat) { this.voice?.setSlot(slot) }
+  setVoiceClock(offset: number, uncertainty: number) { this.voice?.setClock(offset, uncertainty) }
+  setVoicePhase(phase: 'waiting' | 'live' | 'ended') { this.voice?.setPhase(phase) }
+  setPartnerVoiceTurn(turn: VoiceTurn | null) { this.voice?.setPartnerTurn(turn) }
+  resetVoiceCalibration() { this.voice?.resetCalibration() }
 
   setCalibrationProfile(profile: ExpressionCalibrationProfile | null) {
     this.face.setCalibrationProfile(profile)

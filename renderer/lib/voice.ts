@@ -1,193 +1,206 @@
-// Real-time voice pitch/formant shifter for a live microphone stream.
-//
-// Uses the delay-line modulation technique (Chris Wilson's "Jungle" pitch
-// shifter): two crossfaded delay lines whose delay time is swept linearly, which
-// shifts pitch without changing tempo and works on a live stream. This is a
-// genuine, audible effect that gets recorded into the altered track — the audio
-// counterpart to the facial morph. On lab hardware the same control can drive a
-// DuckSoup audio FX instead.
+import type { FormantCorrectionNode } from '@soundtouchjs/formant-correction-worklet'
+import { DEFAULT_VOICE_CONDITION, VOICE_VERSION, clamp } from '../../main/voiceProtocol'
+import type { VoiceApplied, VoiceCondition, VoiceFeatures, VoiceHealth, VoiceReport, VoiceSeat, VoiceTurn } from '../../main/voiceProtocol'
+import { VoiceAnalysis, IDENTITY_VOICE, voiceAdjustment } from './voiceAnalysis'
+import type { AcousticFrame } from './voiceAnalysis'
+import { VOICE_STRETCH } from './voiceDspConfig'
 
-const DELAY_TIME = 0.1
-const FADE_TIME = 0.05
-const BUFFER_TIME = 0.1
-
-function createFadeBuffer(ctx: AudioContext, activeTime: number, fadeTime: number): AudioBuffer {
-  const length1 = activeTime * ctx.sampleRate
-  const length2 = (activeTime - 2 * fadeTime) * ctx.sampleRate
-  const length = length1 + length2
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
-  const p = buffer.getChannelData(0)
-  const fadeLength = fadeTime * ctx.sampleRate
-  const fadeIndex1 = fadeLength
-  const fadeIndex2 = length1 - fadeLength
-  for (let i = 0; i < length1; ++i) {
-    let value: number
-    if (i < fadeIndex1) value = Math.sqrt(i / fadeLength)
-    else if (i >= fadeIndex2) value = Math.sqrt(1 - (i - fadeIndex2) / fadeLength)
-    else value = 1
-    p[i] = value
-  }
-  for (let i = length1; i < length; ++i) p[i] = 0
-  return buffer
-}
-
-function createDelayTimeBuffer(
-  ctx: AudioContext,
-  activeTime: number,
-  fadeTime: number,
-  shiftUp: boolean,
-): AudioBuffer {
-  const length1 = activeTime * ctx.sampleRate
-  const length2 = (activeTime - 2 * fadeTime) * ctx.sampleRate
-  const length = length1 + length2
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
-  const p = buffer.getChannelData(0)
-  for (let i = 0; i < length1; ++i) {
-    p[i] = shiftUp ? (length1 - i) / length : i / length1
-  }
-  for (let i = length1; i < length; ++i) p[i] = 0
-  return buffer
-}
-
-/**
- * Wraps a microphone MediaStream and exposes a pitch-shifted output stream.
- * `setSemitones(n)` shifts by n semitones (0 = bypass/neutral).
- */
 export class VoiceProcessor {
   readonly context: AudioContext
   readonly outputStream: MediaStream
-  private mod1Gain: GainNode
-  private mod2Gain: GainNode
-  private mod3Gain: GainNode
-  private mod4Gain: GainNode
-  private modGain1: GainNode
-  private modGain2: GainNode
+  private source: MediaStreamAudioSourceNode
+  private destination: MediaStreamAudioDestinationNode
+  private dry: GainNode
+  private wet: GainNode
+  private gain: GainNode
+  private shifter: FormantCorrectionNode | null = null
+  private limiter: AudioWorkletNode | null = null
+  private tap: AudioWorkletNode | null = null
+  private worker: Worker | null = null
+  private watchdog: ReturnType<typeof setInterval> | null = null
+  private analysis = new VoiceAnalysis()
+  private alteredAnalysis = new VoiceAnalysis()
+  private clean: VoiceFeatures | null = null
+  private altered: VoiceFeatures | null = null
+  private condition: VoiceCondition = { ...DEFAULT_VOICE_CONDITION }
+  private applied: VoiceApplied = { ...IDENTITY_VOICE }
+  private partner: VoiceTurn | null = null
+  private pendingPartner: VoiceTurn | null = null
+  private slot: VoiceSeat | null = null
+  private sequence = 0
+  private legacySemitones = 0
+  private lastFrame = 0
   private started = false
-  private sources: AudioBufferSourceNode[] = []
+  private closed = false
+  private epochOffset = 0
+  private clockUncertainty: number | null = null
+  private phase: 'waiting' | 'live' | 'ended' = 'waiting'
+  private underrunBaseline = 0
+  private startedAt = 0
+  private rampTargets = new WeakMap<AudioParam, number>()
+  private limiterReductionDb = 0
+  private health: VoiceHealth = { state: 'loading', reason: null, engineVersion: 'soundtouch-formant-2.1.1',
+    analysisDroppedFrames: 0, underruns: 0, bufferedMs: null, measuredLatencyMs: null, sampleRate: 0 }
 
-  constructor(micStream: MediaStream) {
-    const ctx = new AudioContext()
-    this.context = ctx
-    const input = ctx.createGain()
-    const output = ctx.createGain()
-
-    const source = ctx.createMediaStreamSource(micStream)
-    source.connect(input)
-
-    const shiftDown = createDelayTimeBuffer(ctx, BUFFER_TIME, FADE_TIME, false)
-    const shiftUp = createDelayTimeBuffer(ctx, BUFFER_TIME, FADE_TIME, true)
-    const fadeBuffer = createFadeBuffer(ctx, BUFFER_TIME, FADE_TIME)
-
-    const mod1 = ctx.createBufferSource()
-    const mod2 = ctx.createBufferSource()
-    const mod3 = ctx.createBufferSource()
-    const mod4 = ctx.createBufferSource()
-    mod1.buffer = shiftDown
-    mod2.buffer = shiftDown
-    mod3.buffer = shiftUp
-    mod4.buffer = shiftUp
-    ;[mod1, mod2, mod3, mod4].forEach((m) => (m.loop = true))
-
-    this.mod1Gain = ctx.createGain()
-    this.mod2Gain = ctx.createGain()
-    this.mod3Gain = ctx.createGain()
-    this.mod4Gain = ctx.createGain()
-    this.mod3Gain.gain.value = 0
-    this.mod4Gain.gain.value = 0
-
-    mod1.connect(this.mod1Gain)
-    mod2.connect(this.mod2Gain)
-    mod3.connect(this.mod3Gain)
-    mod4.connect(this.mod4Gain)
-
-    this.modGain1 = ctx.createGain()
-    this.modGain2 = ctx.createGain()
-    const delay1 = ctx.createDelay()
-    const delay2 = ctx.createDelay()
-    this.mod1Gain.connect(this.modGain1)
-    this.mod2Gain.connect(this.modGain2)
-    this.mod3Gain.connect(this.modGain1)
-    this.mod4Gain.connect(this.modGain2)
-    this.modGain1.connect(delay1.delayTime)
-    this.modGain2.connect(delay2.delayTime)
-
-    const fade1 = ctx.createBufferSource()
-    const fade2 = ctx.createBufferSource()
-    fade1.buffer = fadeBuffer
-    fade2.buffer = fadeBuffer
-    fade1.loop = true
-    fade2.loop = true
-    const mix1 = ctx.createGain()
-    const mix2 = ctx.createGain()
-    mix1.gain.value = 0
-    mix2.gain.value = 0
-    fade1.connect(mix1.gain)
-    fade2.connect(mix2.gain)
-
-    input.connect(delay1)
-    input.connect(delay2)
-    delay1.connect(mix1)
-    delay2.connect(mix2)
-    mix1.connect(output)
-    mix2.connect(output)
-
-    const dest = ctx.createMediaStreamDestination()
-    output.connect(dest)
-    this.outputStream = dest.stream
-
-    const t = ctx.currentTime + 0.05
-    const t2 = t + BUFFER_TIME - FADE_TIME
-    mod1.start(t)
-    mod2.start(t2)
-    mod3.start(t)
-    mod4.start(t2)
-    fade1.start(t)
-    fade2.start(t2)
-    this.sources = [mod1, mod2, mod3, mod4, fade1, fade2]
-
-    this.setSemitones(0)
-  }
-
-  private setDelay(delayTime: number) {
-    const now = this.context.currentTime
-    this.modGain1.gain.setTargetAtTime(0.5 * delayTime, now, 0.01)
-    this.modGain2.gain.setTargetAtTime(0.5 * delayTime, now, 0.01)
-  }
-
-  /** Shift by `semitones` (±12 ≈ ±1 octave). 0 = neutral. */
-  setSemitones(semitones: number) {
-    const mult = Math.max(-1, Math.min(1, semitones / 12)) // octaves
-    if (mult > 0) {
-      this.mod1Gain.gain.value = 0
-      this.mod2Gain.gain.value = 0
-      this.mod3Gain.gain.value = 1
-      this.mod4Gain.gain.value = 1
-    } else {
-      this.mod1Gain.gain.value = 1
-      this.mod2Gain.gain.value = 1
-      this.mod3Gain.gain.value = 0
-      this.mod4Gain.gain.value = 0
-    }
-    this.setDelay(DELAY_TIME * Math.abs(mult))
+  constructor(private micStream: MediaStream) {
+    this.context = new AudioContext({ latencyHint: 'interactive' })
+    const ctx = this.context
+    this.source = ctx.createMediaStreamSource(micStream)
+    this.destination = ctx.createMediaStreamDestination()
+    this.dry = ctx.createGain(); this.wet = ctx.createGain(); this.gain = ctx.createGain()
+    this.wet.gain.value = 0
+    this.source.connect(this.dry).connect(this.gain).connect(this.destination)
+    this.outputStream = this.destination.stream
+    this.health.sampleRate = ctx.sampleRate
   }
 
   async resume() {
-    if (this.context.state === 'suspended') await this.context.resume()
+    await this.context.resume()
     this.started = true
-  }
-
-  isStarted() {
-    return this.started
-  }
-
-  close() {
-    this.sources.forEach((s) => {
-      try {
-        s.stop()
-      } catch {
-        /* already stopped */
+    this.startedAt = this.context.currentTime
+    const assets = new URL('/voice/', window.location.href).href
+    try {
+      const { FormantCorrectionNode: Shifter } = await import('@soundtouchjs/formant-correction-worklet')
+      await Shifter.register(this.context, `${assets}formant-processor.js`)
+      await this.context.audioWorklet.addModule(`${assets}voice.worklet.js`)
+      if (this.closed) return
+      this.shifter = new Shifter({ context: this.context, outputChannelCount: 1 })
+      this.shifter.setStretchParameters(VOICE_STRETCH)
+      this.shifter.formantStrength.value = 1
+      this.source.connect(this.shifter).connect(this.wet).connect(this.gain)
+      this.limiter = new AudioWorkletNode(this.context, 'voice-limiter', { outputChannelCount: [1] })
+      this.limiter.port.onmessage = ({ data }) => {
+        if (data?.type === 'limiter' && Number.isFinite(data.reductionDb)) this.limiterReductionDb = data.reductionDb
       }
-    })
+      this.gain.disconnect()
+      this.gain.connect(this.limiter).connect(this.destination)
+      this.tap = new AudioWorkletNode(this.context, 'voice-tap', { numberOfInputs: 2, outputChannelCount: [1] })
+      this.source.connect(this.tap, 0, 0)
+      this.limiter.connect(this.tap, 0, 1)
+      this.tap.connect(this.context.destination)
+      this.worker = new Worker(`${assets}analysis.worker.js`, { type: 'module' })
+      this.worker.postMessage({ type: 'init', assets, sampleRate: this.context.sampleRate })
+      this.tap.port.onmessage = ({ data }) => {
+        if (this.closed) return
+        const at = Date.now() + this.epochOffset - (this.context.currentTime - data.audioTime) * 1000
+        this.worker?.postMessage({ ...data, at }, [data.clean.buffer, data.altered.buffer])
+      }
+      this.worker.onmessage = ({ data }) => {
+        if (this.closed) return
+        if (data.type === 'error') this.fail(`Voice analysis failed: ${data.message}`)
+        if (data.type === 'ready') { this.health.state = 'ready'; this.health.reason = null; this.lastFrame = performance.now() }
+        if (data.type === 'features') this.onFrame(data)
+      }
+      this.worker.onerror = () => this.fail('Voice analysis worker stopped')
+      this.shifter.onprocessorerror = () => this.fail('Pitch processor stopped')
+      this.limiter.onprocessorerror = () => {
+        this.fail('Output limiter stopped')
+        this.gain.disconnect(); this.gain.connect(this.destination)
+      }
+      this.watchdog = setInterval(() => {
+        if (this.health.state === 'ready' && performance.now() - this.lastFrame > 1000) this.fail('Voice analysis stalled')
+        if (this.health.state === 'loading' && this.context.currentTime - this.startedAt > 30) this.fail('Voice initialization timed out')
+        if (this.context.state !== 'running') this.fail('Audio context suspended')
+      }, 250)
+    } catch (error) { this.fail(`Voice processor unavailable: ${String(error)}`) }
+  }
+
+  private onFrame(data: { at: number; durationMs: number; clean: Omit<AcousticFrame, 'at' | 'durationMs' | 'speechProbability'>;
+    altered: Omit<AcousticFrame, 'at' | 'durationMs' | 'speechProbability'>; speechProbability: number; dropped: number }) {
+    this.lastFrame = performance.now()
+    this.health.analysisDroppedFrames = data.dropped
+    const wasSpeaking = this.clean?.speechActive ?? false
+    this.clean = this.analysis.ingest({ ...data.clean, at: data.at, durationMs: data.durationMs, speechProbability: data.speechProbability })
+    this.altered = this.alteredAnalysis.ingest({ ...data.altered, at: data.at, durationMs: data.durationMs, speechProbability: data.speechProbability })
+    if (!wasSpeaking && this.clean.speechActive) this.partner = this.pendingPartner
+    const metrics = this.shifter?.metrics
+    if (metrics) {
+      if (this.context.currentTime - this.startedAt < 2) this.underrunBaseline = metrics.underrunCount
+      this.health.underruns = Math.max(0, metrics.underrunCount - this.underrunBaseline)
+      this.health.bufferedMs = metrics.framesBuffered / this.context.sampleRate * 1000
+    }
+    const target = this.slot !== null && this.condition.targetSlot === this.slot
+    this.applied = voiceAdjustment(this.condition, target, this.clean, this.analysis.calibration, this.partner,
+      data.at, this.health.state === 'ready')
+    if (this.phase === 'ended') this.applied = { ...IDENTITY_VOICE }
+    const legacy = this.condition.mode === 'bypass' && this.health.state === 'ready' && this.phase !== 'ended' ? this.legacySemitones : 0
+    // Keep one path across phonemes. Switching dry/wet for every unvoiced
+    // consonant would splice together signals with different processing delays.
+    const expressiveRoute = target && ['match','detone'].includes(this.condition.mode) &&
+      this.analysis.calibration.frozen && this.health.state==='ready' && this.phase!=='ended'
+    this.applyAudio(this.applied.pitchSemitones + legacy, this.applied.gainDb,
+      expressiveRoute || Math.abs(legacy) > .001)
+  }
+
+  private ramp(param: AudioParam, target: number, seconds: number, lo = -Infinity, hi = Infinity) {
+    if (this.rampTargets.get(param) === target) return
+    this.rampTargets.set(param, target)
+    const now = this.context.currentTime
+    // Some Chromium builds extrapolate cancelAndHoldAtTime through a replaced
+    // linear ramp. Explicitly anchor and clamp the current value so rapidly
+    // changing speech features can never push the real AudioParam past policy.
+    const current = clamp(Number.isFinite(param.value) ? param.value : target, lo, hi)
+    param.cancelScheduledValues(now)
+    param.setValueAtTime(current, now)
+    param.linearRampToValueAtTime(clamp(target, lo, hi), now + seconds)
+  }
+  private applyAudio(pitch: number, gainDb: number, wet: boolean) {
+    if (this.shifter) this.ramp(this.shifter.pitchSemitones, pitch, .35, -.75, .75)
+    this.ramp(this.gain.gain, 10 ** (clamp(gainDb,-2,2) / 20), .35, 10 ** (-2/20), 10 ** (2/20))
+    this.ramp(this.wet.gain, wet ? 1 : 0, .03, 0, 1)
+    this.ramp(this.dry.gain, wet ? 0 : 1, .03, 0, 1)
+  }
+  private fail(reason: string) {
+    this.health.state = 'failed'; this.health.reason = reason
+    this.applied = { ...IDENTITY_VOICE, fallbackReason: reason }
+    this.applyAudio(0, 0, false)
+  }
+
+  setSemitones(v: number) { this.legacySemitones = Number.isFinite(v) ? clamp(v, -12, 12) : 0 }
+  setSlot(slot: VoiceSeat) { this.slot = slot }
+  setClock(offset: number, uncertaintyMs: number) { this.epochOffset = offset; this.clockUncertainty = uncertaintyMs }
+  setPhase(phase: 'waiting' | 'live' | 'ended') {
+    this.phase = phase
+    if (phase === 'live') this.analysis.setLive(Date.now() + this.epochOffset)
+    if (phase === 'ended') { this.analysis.flush(); this.applyAudio(0, 0, false) }
+  }
+  setCondition(condition: VoiceCondition) {
+    this.condition = { ...condition }
+    if (condition.mode !== 'bypass' || condition.audibility) { this.analysis.freeze(); this.legacySemitones = 0 }
+    if (condition.mode === 'bypass' && !condition.audibility) {
+      this.legacySemitones = 0
+      this.applied = { ...IDENTITY_VOICE }
+      this.applyAudio(0, 0, false)
+    }
+  }
+  setPartnerTurn(turn: VoiceTurn | null) { this.pendingPartner = turn; if (!this.clean?.speechActive) this.partner = turn }
+  resetCalibration() { this.analysis.reset(); this.alteredAnalysis.reset(); this.partner = this.pendingPartner = null }
+  isStarted() { return this.started }
+  report(): VoiceReport | null {
+    const empty: VoiceFeatures = { speechActive: false, speechProbability: 0, rmsDbfs: -160,
+      peakDbfs: -160, relativeIntensityDb: null, f0Hz: null, f0Semitones: null, relativePitchZ: null,
+      pitchClarity: 0, rollingPitchRangeSt: null, rollingIntensityRangeDb: null, voicedFraction: 0,
+      noiseFloorDbfs: -90, clippingRate: 0 }
+    const settings = this.micStream.getAudioTracks()[0]?.getSettings() ?? {}
+    const actual: VoiceApplied = { ...this.applied,
+      limiterReductionDb: this.limiterReductionDb,
+      pitchSemitones: this.shifter?.pitchSemitones.value ?? 0,
+      gainDb: 20 * Math.log10(Math.max(1e-8, this.gain.gain.value)),
+      active: (this.wet.gain.value > .99 || Math.abs(this.gain.gain.value-1)>.001) && this.health.state === 'ready',
+    }
+    return { version: VOICE_VERSION, sequence: this.sequence++, capturedAt: Date.now() + this.epochOffset,
+      clockUncertaintyMs: this.clockUncertainty, clean: this.clean ?? empty, altered: this.altered ?? empty,
+      calibration: { ...this.analysis.calibration }, condition: { ...this.condition }, applied: actual,
+      health: { ...this.health }, turns: this.analysis.takeTurns(),
+      settings: { sampleRate: settings.sampleRate, channelCount: settings.channelCount, echoCancellation: settings.echoCancellation,
+        noiseSuppression: settings.noiseSuppression, autoGainControl: settings.autoGainControl } }
+  }
+  close() {
+    this.closed = true
+    if (this.watchdog) clearInterval(this.watchdog)
+    this.worker?.terminate()
+    this.source.disconnect(); this.tap?.disconnect(); this.shifter?.disconnect()
+    this.limiter?.disconnect(); this.dry.disconnect(); this.wet.disconnect(); this.gain.disconnect()
     void this.context.close()
   }
 }

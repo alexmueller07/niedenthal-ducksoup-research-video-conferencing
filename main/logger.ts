@@ -23,6 +23,8 @@
 import path from 'path'
 import fs from 'fs'
 import fsp from 'fs/promises'
+import { VoiceLogger } from './voiceLogger'
+import type { VoiceReport } from './voiceProtocol'
 
 export interface EventInput {
   actorRole?: string
@@ -50,6 +52,7 @@ export interface LoggedEvent {
 }
 
 export interface EffectStateInput {
+  voice?: VoiceReport
   slot: string
   participantId: string
   /** The pair (dyad) this participant belongs to. */
@@ -158,6 +161,13 @@ effect_state_P2.csv      per second — the ground truth of what was applied,
                           not just what was commanded. One file per person.
 recordings.csv           One row per saved video/audio file, with its start
                           and stop time.
+voice_features_P1.csv    Clean and altered acoustic measurements for
+voice_features_P2.csv    each participant, including baseline quality,
+                          requested settings, actual applied pitch/gain,
+                          safety fallback, limiter, and processor health.
+voice_turns.csv          One row per detected speech turn, with pitch and
+                          intensity ranges relative to each speaker's own
+                          baseline. These are acoustic measures, not emotion.
 session.json             Summary written when the session ends (who was in
                           it, which recordings were made, what detection
                           software version was used).
@@ -186,6 +196,17 @@ self_voice_change / partner_voice_change: 0 = normal (no change). Positive
 = pitched up. Negative = pitched down.
 "self" is this file's own participant; "partner" is what was being done to
 the other participant, at that same moment.
+
+Voice synchrony columns
+------------------------
+Voice levels use digital dBFS, not room loudness or acoustic SPL. Pitch is
+stored in semitones and normalized relative to each participant's baseline.
+"clean" is the microphone measurement before alteration; "altered" is the
+signal sent to the partner. requested_* records the researcher's condition,
+while applied_* records what the processor actually produced. A non-empty
+fallback_reason means the app conservatively sent natural audio instead.
+The synchrony index is exploratory engineering telemetry, not a validated
+measure of rapport, emotion, or participant intent.
 
 Facial expression columns
 --------------------------
@@ -278,6 +299,7 @@ interface PendingRecording {
 }
 
 export class SessionLogger {
+  readonly voice: VoiceLogger
   readonly dir: string
   readonly eventsPath: string
   readonly startedAtIso: string
@@ -296,6 +318,7 @@ export class SessionLogger {
     this.eventsPath = path.join(dir, 'events.csv')
     this.startedAtMs = Date.now()
     this.startedAtIso = new Date(this.startedAtMs).toISOString()
+    this.voice = new VoiceLogger(dir, this.startedAtMs)
     this.events = fs.createWriteStream(this.eventsPath, { flags: 'a' })
     this.events.write(EVENT_HEADER)
     this.recordings = fs.createWriteStream(path.join(dir, 'recordings.csv'), { flags: 'a' })
@@ -355,7 +378,7 @@ export class SessionLogger {
     let s = this.stateStreams.get(key)
     if (!s) {
       s = fs.createWriteStream(path.join(this.dir, `effect_state_${key}.csv`), { flags: 'a' })
-      s.write(STATE_HEADER)
+      s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason\n')
       this.stateStreams.set(key, s)
     }
     return s
@@ -431,6 +454,14 @@ export class SessionLogger {
         input.faceFound,
         input.cameraOn,
         Math.round(input.fps * 10) / 10,
+        csvField(input.voice?.condition.mode ?? ''),
+        csvField(input.voice?.condition.targetSlot ?? ''),
+        csvField(input.voice?.calibration.state ?? ''),
+        csvField(input.voice?.calibration.confidence ?? ''),
+        csvField(input.voice?.applied.pitchSemitones ?? ''),
+        csvField(input.voice?.applied.gainDb ?? ''),
+        csvField(input.voice?.applied.active ?? ''),
+        csvField(input.voice?.applied.fallbackReason ?? ''),
       ].join(',') + '\n',
     )
   }
@@ -484,6 +515,7 @@ export class SessionLogger {
     const withDetection = {
       ...(manifest as Record<string, unknown>),
       detection: Object.fromEntries(this.detectorInfo),
+      voice: this.voice.manifest(),
     }
     await fsp.writeFile(p, JSON.stringify(withDetection, null, 2), 'utf-8')
     return p
@@ -506,5 +538,6 @@ export class SessionLogger {
       ends.push(new Promise<void>((r) => s.end(() => r())))
     }
     await Promise.all(ends)
+    await this.voice.close()
   }
 }

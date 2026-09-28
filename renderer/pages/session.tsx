@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { LiveEffects } from '../lib/effects'
+import { DEFAULT_VOICE_CONDITION } from '../../main/voiceProtocol'
 import {
   CALIBRATION_SAMPLE_MS,
   PASSIVE_CALIBRATION_COLLECT_MS,
@@ -154,6 +155,9 @@ export default function ParticipantSession() {
     const mySlot = () => mySlotRef.current
     const partnerSlot = (): SlotId | null =>
       mySlot() === 'P1' ? 'P2' : mySlot() === 'P2' ? 'P1' : null
+    let voiceCondition = { ...DEFAULT_VOICE_CONDITION }
+    let voicePhase: Phase = 'waiting'
+    let bestClockRtt = Infinity
 
     const client = new SignalClient({
       url: normalizeServerUrl(cfg.serverAddr, DEFAULT_PORT),
@@ -165,6 +169,11 @@ export default function ParticipantSession() {
       },
       onStatus: (status) => {
         setSignalStatus(status)
+        if (status !== 'connected') {
+          voiceCondition={...DEFAULT_VOICE_CONDITION}
+          effectsRef.current?.setVoiceCondition(voiceCondition)
+          effectsRef.current?.setPartnerVoiceTurn(null)
+        }
         // The server forgets a seat's readiness across a reconnect, and a
         // ready sent before the socket ever opened was silently dropped —
         // re-announce whenever the connection (re)establishes. Without this,
@@ -281,8 +290,26 @@ export default function ParticipantSession() {
 
     function handleMessage(msg: ServerMessage) {
       switch (msg.type) {
+        case 'voice-condition':
+          voiceCondition=msg.condition
+          effectsRef.current?.setVoiceCondition(msg.condition)
+          return
+        case 'voice-clock': {
+          const now=Date.now(), rtt=now-msg.sentAt
+          if (rtt>=0 && rtt<bestClockRtt) {
+            bestClockRtt=rtt
+            effectsRef.current?.setVoiceClock(msg.serverAt-(msg.sentAt+now)/2,rtt/2)
+          }
+          return
+        }
+        case 'voice-partner-turn': effectsRef.current?.setPartnerVoiceTurn(msg.turn);return
+        case 'voice-reset': effectsRef.current?.resetVoiceCalibration();return
         case 'welcome':
           mySlotRef.current = msg.slot
+          voicePhase=msg.phase
+          if (msg.slot==='P1'||msg.slot==='P2') effectsRef.current?.setVoiceSlot(msg.slot)
+          effectsRef.current?.setVoicePhase(msg.phase)
+          client.send({type:'voice-clock',sentAt:Date.now()})
           setPhase(msg.phase)
           handleRoster(msg.roster)
           return
@@ -348,6 +375,8 @@ export default function ParticipantSession() {
           return
         case 'phase':
           setPhase(msg.phase)
+          voicePhase=msg.phase
+          effectsRef.current?.setVoicePhase(msg.phase)
           return
         case 'peer-left':
           dropLink(msg.slot)
@@ -440,6 +469,12 @@ export default function ParticipantSession() {
       })
       .then(() => {
         effectsReadyRef.current = true
+        const slot=mySlotRef.current
+        if (slot==='P1'||slot==='P2') effects.setVoiceSlot(slot)
+        effects.setVoicePhase(voicePhase)
+        effects.setVoiceCondition(voiceCondition)
+        bestClockRtt=Infinity
+        client.send({type:'voice-clock',sentAt:Date.now()})
         setCameraReady(true)
         setSelfStream(effects.cleanStream)
         // Flag simulated video in the session log — a real session must
@@ -464,6 +499,15 @@ export default function ParticipantSession() {
         client.send({ type: 'telemetry', data: fx.telemetry() })
       }
     }, 1000)
+
+    const voiceTelemetry=setInterval(()=>{
+      if (!client.isOpen || !effectsReadyRef.current) return
+      const data=effectsRef.current?.voiceReport()
+      if (data) client.send({type:'voice-report',data})
+    },250)
+    const voiceClock=setInterval(()=>{
+      if (client.isOpen) client.send({type:'voice-clock',sentAt:Date.now()})
+    },5000)
 
     // Real-face expression stream for the researcher dashboard and the
     // automation rules. Checked at 5 Hz but only sent when the state actually
@@ -517,6 +561,8 @@ export default function ParticipantSession() {
 
     return () => {
       clearInterval(telemetry)
+      clearInterval(voiceTelemetry)
+      clearInterval(voiceClock)
       clearInterval(expression)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)

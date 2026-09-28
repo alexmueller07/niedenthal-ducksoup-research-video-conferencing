@@ -46,6 +46,8 @@ import type {
   Telemetry,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
+import { VoiceControls } from '../components/VoiceControls'
+import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
 const PSLOTS: PSlot[] = ['P1', 'P2']
@@ -122,6 +124,8 @@ export default function AdminDashboard() {
 
   const [server, setServer] = useState<ServerStatus | null>(null)
   const [serverError, setServerError] = useState('')
+  const [voiceState,setVoiceState]=useState<VoicePairState|null>(null)
+  const [voiceError,setVoiceError]=useState('')
   const [signalStatus, setSignalStatus] = useState<SignalStatus>('connecting')
   const [roster, setRoster] = useState<RosterState | null>(null)
   const [telemetry, setTelemetry] = useState<Partial<Record<PSlot, Telemetry>>>({})
@@ -297,6 +301,8 @@ export default function AdminDashboard() {
                 setTelemetry((prev) => ({ ...prev, [msg.slot]: msg.data }))
               }
               return
+            case 'voice-state': setVoiceState(msg.state);return
+            case 'voice-error': setVoiceError(msg.reason);return
             case 'expression':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
                 setExpressions((prev) => ({ ...prev, [msg.slot]: msg.data }))
@@ -835,6 +841,9 @@ export default function AdminDashboard() {
 
       {/* ===== Body ===== */}
       <main className="grid grid-cols-12 gap-4 p-4">
+        <VoiceControls state={voiceState} error={voiceError} phase={phase} connected={signalStatus==='connected'}
+          onApply={condition=>{setVoiceError('');clientRef.current?.send({type:'voice-condition',condition})}}
+          onReset={slot=>{setVoiceError('');clientRef.current?.send({type:'voice-reset',slot})}}/>
         {/* --- Participant panels --- */}
         <div className="col-span-12 grid grid-cols-1 gap-4 xl:col-span-8 xl:grid-cols-2">
           {PSLOTS.map((slot) => (

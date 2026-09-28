@@ -37,6 +37,9 @@ import {
 } from './protocol'
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule } from './rules'
+import { VoiceSession } from './voiceSession'
+import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
+import type { VoiceReport } from './voiceProtocol'
 
 interface ClientCtx {
   ws: WebSocket
@@ -51,6 +54,8 @@ interface ClientCtx {
   /** Last logged expression key, so events.csv records changes, not 5 Hz spam. */
   lastExprKey?: string
   alive: boolean
+  voice?: VoiceReport
+  voiceReceivedAt?: number
 }
 
 export interface ServerStatus {
@@ -76,6 +81,7 @@ const RULE_EVENT_NAMES: Record<'fired' | 'released' | 'reverted', string> = {
 }
 
 export class SessionServer {
+  private voiceSession = new VoiceSession()
   private wss: WebSocketServer | null = null
   private clients = new Map<WebSocket, ClientCtx>()
   /** Identities remembered per slot so a reconnecting participant keeps their seat. */
@@ -97,6 +103,10 @@ export class SessionServer {
         this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null,
       effectsOf: (slot: PSlot) => this.bySlot(slot)?.effects ?? { ...NEUTRAL_EFFECTS },
       applyEffects: (slot, effects, rule, why) => {
+        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && effects.voiceSemitones!==0) {
+          this.log({event:'voice_rule_blocked',target:slot,detail:{rule:rule.id,reason:'Voice condition active'}})
+          return
+        }
         const target = this.bySlot(slot)
         if (target) {
           target.effects = effects
@@ -238,6 +248,7 @@ export class SessionServer {
     // edits survive an admin reconnect.
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
+      this.send(ws, { type: 'voice-state', state: this.voiceSession.snapshot() })
     }
     this.broadcastRoster()
   }
@@ -267,6 +278,11 @@ export class SessionServer {
     const ctx = this.clients.get(ws)
     if (!ctx) return
     this.clients.delete(ws)
+    if (ctx.slot === 'P1' || ctx.slot === 'P2') {
+      this.voiceSession.disconnect(ctx.slot)
+      const other=this.bySlot(otherSlot(ctx.slot))
+      if (other) this.send(other.ws,{type:'voice-partner-turn',turn:null})
+    }
     this.log({
       event: 'person_left',
       actorRole: ctx.role,
@@ -293,6 +309,66 @@ export class SessionServer {
 
   private onMessage(ctx: ClientCtx, msg: ClientMessage) {
     switch (msg.type) {
+      case 'voice-clock': {
+        if (finite(msg.sentAt)) this.send(ctx.ws,{type:'voice-clock',sentAt:msg.sentAt,serverAt:Date.now()})
+        return
+      }
+      case 'voice-report': {
+        if ((ctx.slot !== 'P1' && ctx.slot !== 'P2') || !validVoiceReport(msg.data)) return
+        const now=Date.now()
+        if (now-(ctx.voiceReceivedAt??0)<150 || msg.data.sequence<=(ctx.voice?.sequence??-1)) return
+        const previous=ctx.voice
+        ctx.voice=msg.data;ctx.voiceReceivedAt=now
+        const turns=this.voiceSession.update(ctx.slot,msg.data)
+        const pair=this.voiceSession.snapshot()
+        this.logger.voice.write({slot:ctx.slot,participantId:ctx.identity.participantId,dyadId:ctx.identity.dyadId,
+          phase:this.phase,liveStartedAtMs:this.sessionStartedAt?Date.parse(this.sessionStartedAt):null},msg.data,pair,turns)
+        const admin=this.bySlot('ADMIN')
+        if (admin) this.send(admin.ws,{type:'voice-state',state:pair})
+        const partner=this.bySlot(otherSlot(ctx.slot))
+        if (partner && turns.some(t=>t.valid)) this.send(partner.ws,{type:'voice-partner-turn',turn:this.voiceSession.lastTurn(ctx.slot)})
+        if (previous?.calibration.state!==msg.data.calibration.state)
+          this.log({event:'voice_calibration_state',actorSlot:ctx.slot,value:msg.data.calibration.state,detail:msg.data.calibration})
+        if (previous?.health.state!==msg.data.health.state)
+          this.log({event:'voice_processor_state',actorSlot:ctx.slot,value:msg.data.health.state,detail:msg.data.health})
+        if (previous?.applied.fallbackReason!==msg.data.applied.fallbackReason)
+          this.log({event:'voice_fallback_changed',actorSlot:ctx.slot,detail:{reason:msg.data.applied.fallbackReason}})
+        return
+      }
+      case 'voice-condition': {
+        if (!this.requireAdmin(ctx,msg.type)) return
+        const condition=parseVoiceCondition(msg.condition)
+        const reason=!condition?'Invalid voice condition':this.phase==='ended'&&condition.mode!=='bypass'?'Session has ended':this.voiceSession.canApply(condition)
+        if (reason || !condition) {this.send(ctx.ws,{type:'voice-error',reason:reason!});return}
+        this.voiceSession.condition=condition
+        if (condition.mode!=='bypass'||condition.audibility) {
+          for (const participant of this.clients.values()) {
+            if (participant.role!=='participant') continue
+            participant.effects={...participant.effects,voiceSemitones:0}
+            this.send(participant.ws,{type:'effect-command',effects:participant.effects,cause:'voice_condition'})
+          }
+          this.broadcastRoster()
+        }
+        this.logger.voice.condition(condition)
+        this.log({event:'voice_condition_changed',actorRole:'admin',actorName:ctx.identity.name,target:condition.targetSlot??'both',detail:condition})
+        this.broadcast({type:'voice-condition',condition})
+        this.send(ctx.ws,{type:'voice-state',state:this.voiceSession.snapshot()})
+        return
+      }
+      case 'voice-reset': {
+        if (!this.requireAdmin(ctx,msg.type) || !['P1','P2'].includes(msg.slot)) return
+        this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
+        this.logger.voice.condition(this.voiceSession.condition)
+        this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
+        const target=this.bySlot(msg.slot)
+        if (target) { this.send(target.ws,{type:'voice-reset'});target.voice=undefined }
+        this.voiceSession.disconnect(msg.slot)
+        const partner=this.bySlot(otherSlot(msg.slot))
+        if (partner) this.send(partner.ws,{type:'voice-partner-turn',turn:null})
+        this.send(ctx.ws,{type:'voice-state',state:this.voiceSession.snapshot()})
+        this.log({event:'voice_calibration_reset',actorRole:'admin',target:msg.slot})
+        return
+      }
       case 'hello':
         return // already greeted
       case 'signal': {
@@ -301,6 +377,7 @@ export class SessionServer {
         return
       }
       case 'ready': {
+        this.send(ctx.ws,{type:'voice-condition',condition:this.voiceSession.condition})
         ctx.ready = msg.camera && msg.voice
         this.log({
           event: 'camera_mic_ready',
@@ -317,6 +394,7 @@ export class SessionServer {
         ctx.telemetry = telemetry
         const partner = ctx.slot === 'P1' || ctx.slot === 'P2' ? this.bySlot(otherSlot(ctx.slot)) : undefined
         this.logger.effectState({
+          voice: ctx.voice,
           slot: ctx.slot,
           participantId: ctx.identity.participantId,
           dyadId: ctx.identity.dyadId,
@@ -456,6 +534,10 @@ export class SessionServer {
       }
       case 'set-effect': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (msg.param==='voiceSemitones' && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
+          this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using legacy pitch controls'})
+          return
+        }
         const target = this.bySlot(msg.slot)
         const effects: EffectState = {
           ...(target?.effects ?? NEUTRAL_EFFECTS),
@@ -480,6 +562,10 @@ export class SessionServer {
       }
       case 'apply-preset': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && msg.effects.voiceSemitones!==0) {
+          this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using a legacy voice preset'})
+          return
+        }
         const target = this.bySlot(msg.slot)
         if (target) {
           target.effects = msg.effects
@@ -609,6 +695,11 @@ export class SessionServer {
     if (phase === this.phase) return
     const from = this.phase
     this.phase = phase
+    if (phase==='ended') {
+      this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
+      this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
+      this.logger.voice.condition(this.voiceSession.condition)
+    }
     // Sessions are restartable (RA request): ended → live starts a fresh clock,
     // and going back to the waiting room clears it entirely. Recordings from
     // the earlier run are safe — restarted recorders write _partN files.

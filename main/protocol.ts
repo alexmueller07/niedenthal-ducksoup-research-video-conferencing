@@ -7,6 +7,7 @@
 //
 // Deliberately DOM-type-free so the Electron main process can import it.
 
+import type { VoiceCondition, VoiceReport, VoicePairState, VoiceTurn } from './voiceProtocol'
 export const PROTOCOL_VERSION = 1
 export const DEFAULT_PORT = 8771
 export const APP_VERSION = '3.0.0'
@@ -311,6 +312,10 @@ export interface StreamMap {
 // ---- Client → Server ----
 
 export type ClientMessage =
+  | { type: 'voice-report'; data: VoiceReport }
+  | { type: 'voice-condition'; condition: VoiceCondition }
+  | { type: 'voice-reset'; slot: PSlot }
+  | { type: 'voice-clock'; sentAt: number }
   | { type: 'hello'; role: Role; identity: Identity; appVersion: string }
   | { type: 'signal'; to: SlotId; data: SignalData }
   | { type: 'ready'; camera: boolean; faceModel: boolean; voice: boolean }
@@ -358,6 +363,12 @@ export interface LogRow {
 }
 
 export type ServerMessage =
+  | { type: 'voice-condition'; condition: VoiceCondition }
+  | { type: 'voice-state'; state: VoicePairState }
+  | { type: 'voice-partner-turn'; turn: VoiceTurn | null }
+  | { type: 'voice-reset' }
+  | { type: 'voice-error'; reason: string }
+  | { type: 'voice-clock'; sentAt: number; serverAt: number }
   | {
       type: 'welcome'
       clientId: string
