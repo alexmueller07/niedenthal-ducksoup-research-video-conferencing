@@ -145,8 +145,15 @@ export class VoiceProcessor {
     param.linearRampToValueAtTime(clamp(target, lo, hi), now + seconds)
   }
   private applyAudio(pitch: number, gainDb: number, wet: boolean) {
-    if (this.shifter) this.ramp(this.shifter.pitchSemitones, pitch, .35, -.75, .75)
-    this.ramp(this.gain.gain, 10 ** (clamp(gainDb,-2,2) / 20), .35, 10 ** (-2/20), 10 ** (2/20))
+    const expressive = this.condition.mode === 'match' || this.condition.mode === 'detone'
+    const audibility = this.condition.audibility || this.condition.mode === 'audibility'
+    // The manual pitch control and audibility correction have their own limits.
+    // Expressive adjustments remain bounded before adding the fixed level correction.
+    const pitchLimit = this.condition.mode === 'bypass' && !audibility ? 12 : .75
+    const gainLimit = (audibility ? 6 : 0) + (expressive ? 2 : 0)
+    if (this.shifter) this.ramp(this.shifter.pitchSemitones, pitch, .35, -pitchLimit, pitchLimit)
+    this.ramp(this.gain.gain, 10 ** (clamp(gainDb,-gainLimit,gainLimit) / 20), .35,
+      10 ** (-gainLimit/20), 10 ** (gainLimit/20))
     this.ramp(this.wet.gain, wet ? 1 : 0, .03, 0, 1)
     this.ramp(this.dry.gain, wet ? 0 : 1, .03, 0, 1)
   }

@@ -83,4 +83,28 @@ async function realtime(seconds=90) {
     return {samples,bypass,conditionApplied}
   } finally {processor.close();source.stop();await input.close()}
 }
-Object.assign(window,{voiceQA:{render,limiterIdentity,realtime}})
+async function manualPitch() {
+  const input=new AudioContext({sampleRate:48000}),destination=input.createMediaStreamDestination()
+  const oscillator=input.createOscillator(),gain=input.createGain()
+  oscillator.frequency.value=200;gain.gain.value=.1
+  oscillator.connect(gain).connect(destination);oscillator.start();await input.resume()
+  const processor=new VoiceProcessor(destination.stream)
+  const monitor=input.createMediaStreamSource(processor.outputStream),analyser=input.createAnalyser()
+  analyser.fftSize=8192;monitor.connect(analyser)
+  const detector=PitchDetector.forFloat32Array(8192),samples=[]
+  try {
+    await processor.resume()
+    const start=performance.now()
+    while(processor.report()?.health.state==='loading'&&performance.now()-start<30000)await wait(100)
+    for(const requested of [-4,0,4]) {
+      processor.setSemitones(requested);await wait(1600)
+      const data=new Float32Array(8192);analyser.getFloatTimeDomainData(data)
+      const [hz,clarity]=detector.findPitch(data,input.sampleRate)
+      samples.push({requested,hz,clarity,applied:processor.report()?.applied.pitchSemitones,
+        errorCents:1200*Math.log2(hz/(200*2**(requested/12))),health:processor.report()?.health})
+    }
+    processor.setCondition({...DEFAULT_VOICE_CONDITION});await wait(600)
+    return {samples,bypass:processor.report()?.applied.pitchSemitones}
+  } finally {monitor.disconnect();processor.close();oscillator.stop();await input.close()}
+}
+Object.assign(window,{voiceQA:{render,limiterIdentity,realtime,manualPitch}})

@@ -19,7 +19,7 @@ const server=createServer(async(req,res)=>{
 })
 await new Promise(r=>server.listen(0,'127.0.0.1',r))
 const browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']})
-const results={tones:[],identity:[],runtime:null,errors:[]}
+const results={tones:[],identity:[],runtime:null,manual:null,errors:[]}
 let failed
 try {
   const page=await browser.newPage()
@@ -44,6 +44,13 @@ try {
     }
   }
   const seconds=Number(process.env.VOICE_QA_SECONDS??150)
+  results.manual=await page.evaluate(()=>window.voiceQA.manualPitch())
+  for(const r of results.manual.samples) {
+    assert.equal(r.health.state,'ready',JSON.stringify(r.health));assert.ok(r.clarity>.8)
+    assert.ok(Math.abs(r.applied-r.requested)<.01,`Manual control failed: ${JSON.stringify(r)}`)
+    assert.ok(Math.abs(r.errorCents)<25,`Rendered manual pitch failed: ${JSON.stringify(r)}`)
+  }
+  assert.ok(Math.abs(results.manual.bypass)<.001)
   if(seconds>0) {
     console.log(`Running real-time speech test for ${seconds}s`)
     results.runtime=await page.evaluate(seconds=>window.voiceQA.realtime(seconds),seconds)
