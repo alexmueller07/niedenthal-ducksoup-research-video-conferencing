@@ -46,7 +46,7 @@ import type {
   Telemetry,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
-import { VoiceControls } from '../components/VoiceControls'
+import { AudioSetupCheck, VoiceControls } from '../components/VoiceControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
@@ -721,7 +721,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* ===== Header ===== */}
       <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-950/95 backdrop-blur">
-        <div className="flex items-center gap-4 px-5 py-3">
+        <div className="flex flex-wrap items-center gap-4 px-5 py-3">
           <button
             type="button"
             onClick={() => void goHome()}
@@ -752,7 +752,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
             {server && (
               <div className="hidden items-center gap-2 rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800 md:flex">
                 <span className="text-gray-500">Participants connect to</span>
@@ -841,9 +841,6 @@ export default function AdminDashboard() {
 
       {/* ===== Body ===== */}
       <main className="grid grid-cols-12 gap-4 p-4">
-        <VoiceControls state={voiceState} error={voiceError} phase={phase} connected={signalStatus==='connected'}
-          onApply={condition=>{setVoiceError('');clientRef.current?.send({type:'voice-condition',condition})}}
-          onReset={slot=>{setVoiceError('');clientRef.current?.send({type:'voice-reset',slot})}}/>
         {/* --- Participant panels --- */}
         <div className="col-span-12 grid grid-cols-1 gap-4 xl:col-span-8 xl:grid-cols-2">
           {PSLOTS.map((slot) => (
@@ -864,8 +861,13 @@ export default function AdminDashboard() {
               onRunCalibration={() => requestCalibration(slot, CALIBRATION_STEPS)}
               onRetakeCalibration={(step) => requestCalibration(slot, [step])}
               onAcceptCalibration={() => acceptCalibration(slot)}
+              audioSetup={<AudioSetupCheck slot={slot} state={voiceState} connected={signalStatus==='connected'}
+                participantConnected={!!roster?.slots[slot]} phase={phase}
+                onReset={()=>{setVoiceError('');clientRef.current?.send({type:'voice-reset',slot})}}/>}
             />
           ))}
+          <VoiceControls state={voiceState} error={voiceError} phase={phase} connected={signalStatus==='connected'}
+            onApply={condition=>{setVoiceError('');clientRef.current?.send({type:'voice-condition',condition})}}/>
         </div>
 
         {/* --- Right rail --- */}
@@ -990,6 +992,7 @@ export default function AdminDashboard() {
           <RulesCard
             rules={rules}
             active={ruleActive}
+            voiceState={voiceState}
             phase={phase}
             names={{
               P1: roster?.slots.P1?.identity.name || 'Participant 1',
@@ -1331,6 +1334,7 @@ function metric(
 // ===== Participant panel =====
 
 interface PanelProps {
+  audioSetup: React.ReactNode
   slot: PSlot
   info: RosterState['slots'][PSlot] | null
   telemetry: Telemetry | undefined
@@ -1349,6 +1353,7 @@ interface PanelProps {
 }
 
 function ParticipantPanel({
+  audioSetup,
   slot,
   info,
   telemetry,
@@ -1606,6 +1611,7 @@ function ParticipantPanel({
             onAccept={() => onAcceptCalibration()}
           />
         </div>
+        {audioSetup}
       </div>
     </section>
   )
@@ -1633,6 +1639,15 @@ const RELEASE_OPTIONS: Array<{ value: RuleRelease; label: string }> = [
   { value: 'none', label: 'leave the change on' },
 ]
 
+const VOICE_RULE_OPTIONS = [
+  { value: 'bypass', label: 'Natural voice' },
+  { value: 'audibility', label: 'Audibility' },
+  { value: 'match', label: 'Match partner' },
+  { value: 'detone', label: 'Detone' },
+  { value: 'lower', label: 'Lower voice (-2 st)' },
+  { value: 'higher', label: 'Higher voice (+2 st)' },
+] as const
+
 function ruleId(): string {
   return `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 }
@@ -1659,15 +1674,22 @@ function newTimerRule(): AutomationRule {
   }
 }
 
+function newVoiceRule(kind: 'expression' | 'timer'): AutomationRule {
+  const base = kind === 'expression' ? newExpressionRule('P1', 'P2') : newTimerRule()
+  return { ...base, action: { kind: 'voice', slot: 'P2', mode: 'detone' } }
+}
+
 function RulesCard({
   rules,
   active,
+  voiceState,
   phase,
   names,
   onChange,
 }: {
   rules: AutomationRule[]
   active: Record<string, boolean>
+  voiceState: VoicePairState | null
   phase: Phase
   names: Record<PSlot, string>
   onChange: (rules: AutomationRule[]) => void
@@ -1701,7 +1723,7 @@ function RulesCard({
   return (
     <Card
       title="Automation rules"
-      subtitle="If this happens, then do that. No code needed. You can edit rules any time, even mid-conversation. Expression rules also run in the waiting room. Timer rules count from when the conversation starts."
+      subtitle="Set a face or voice change when an expression appears or at a point in the conversation. Expression rules also work in the waiting room."
     >
       {rules.length === 0 && (
         <p className="mb-2 text-xs text-gray-600">
@@ -1713,6 +1735,12 @@ function RulesCard({
       <ul className="space-y-2">
         {rules.map((rule) => {
           const firing = (phase === 'live' || phase === 'waiting') && !!active[rule.id]
+          const voiceSeats: PSlot[] = rule.action.kind==='voice'
+            ? rule.action.mode==='audibility'||rule.action.mode==='match'?['P1','P2']:[rule.action.slot]:[]
+          const waitingForVoice = rule.action.kind==='voice' && !['bypass','lower','higher'].includes(rule.action.mode) &&
+            voiceSeats.some(slot=>!voiceState?.available[slot] ||
+              !['usable','strong'].includes(voiceState.reports[slot]?.calibration.state??'') ||
+              voiceState.reports[slot]?.health.state!=='ready')
           return (
             <li
               key={rule.id}
@@ -1832,6 +1860,8 @@ function RulesCard({
                     ● firing
                   </span>
                 )}
+                {!firing && waitingForVoice && rule.enabled &&
+                  <span className="rounded-full bg-amber-600/15 px-2 py-0.5 text-[10px] text-amber-300">Waiting for voice baseline</span>}
                 <button
                   type="button"
                   onClick={() => remove(rule.id)}
@@ -1844,11 +1874,24 @@ function RulesCard({
 
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-[11px] text-gray-400">
                 <span className="font-semibold text-gray-300">THEN</span>
-                {slotSelect(rule.action.slot, (s) =>
+                <select aria-label="Rule action type" className={sel} value={rule.action.kind==='voice'?'voice':'face'}
+                  onChange={e=>patch(rule.id,r=>({ ...r, action:e.target.value==='voice'
+                    ? {kind:'voice',slot:r.action.slot,mode:'detone'}
+                    : {kind:'face',slot:r.action.slot,presetId:'smile-subtle'} }))}>
+                  <option value="face">Face</option><option value="voice">Voice</option>
+                </select>
+                {rule.action.kind === 'voice' && ['audibility','bypass'].includes(rule.action.mode)
+                  ? <span>both voices</span> : slotSelect(rule.action.slot, (s) =>
                   patch(rule.id, (r) => ({ ...r, action: { ...r.action, slot: s } })),
                 )}
-                <span>gets</span>
-                {presetSelect(rule.action.presetId, (id) =>
+                <span>{rule.action.kind === 'voice' && ['audibility','bypass'].includes(rule.action.mode) ? 'use' : 'gets'}</span>
+                {rule.action.kind === 'voice' ? (
+                  <select aria-label="Voice rule condition" className={sel} value={rule.action.mode}
+                    onChange={e=>patch(rule.id, r=>({ ...r, action:{kind:'voice',slot:r.action.slot,
+                      mode:e.target.value as Extract<AutomationRule['action'],{kind:'voice'}>['mode']} }))}>
+                    {VOICE_RULE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : presetSelect(rule.action.presetId, (id) =>
                   patch(rule.id, (r) => ({ ...r, action: { ...r.action, presetId: id } })),
                 )}
                 {rule.trigger.kind === 'expression' ? (
@@ -1897,24 +1940,35 @@ function RulesCard({
       <div className="mt-3 flex flex-wrap gap-1.5">
         <button
           type="button"
+          disabled={rules.length >= 40}
           onClick={() => onChange([...rules, newExpressionRule('P1', 'P2')])}
-          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
         >
           + expression rule
         </button>
         <button
           type="button"
+          disabled={rules.length >= 40}
           onClick={() => onChange([...rules, newTimerRule()])}
-          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
         >
           + timer rule
         </button>
+        <button type="button" disabled={rules.length >= 40} onClick={()=>onChange([...rules,newVoiceRule('expression')])}
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40">
+          + voice expression rule
+        </button>
+        <button type="button" disabled={rules.length >= 40} onClick={()=>onChange([...rules,newVoiceRule('timer')])}
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40">
+          + voice timer rule
+        </button>
         <button
           type="button"
+          disabled={rules.length >= 39}
           onClick={() =>
             onChange([...rules, newExpressionRule('P1', 'P2'), newExpressionRule('P2', 'P1')])
           }
-          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition enabled:hover:bg-gray-700 disabled:opacity-40"
           title="When either participant genuinely smiles, the partner's smile is subtly lifted"
         >
           + template: mirror smiles
@@ -2019,6 +2073,7 @@ function EffectSlider({
       </div>
       <input
         type="range"
+        aria-label={label}
         min={min}
         max={max}
         step={step}
