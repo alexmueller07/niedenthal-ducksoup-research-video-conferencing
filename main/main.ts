@@ -273,6 +273,20 @@ ipcMain.handle('app:open-external', (_e, url: unknown) => {
 // where double-clicking the app again just refocuses the existing window
 // instead of opening a new one.
 ipcMain.handle('app:new-instance', () => {
+  if (process.platform === 'darwin' && app.isPackaged) {
+    // In packaged macOS builds, process.execPath points inside the .app bundle
+    // (Contents/MacOS/...). Opening that binary directly can fail with a
+    // Finder-style "moved or deleted" error. Ask Launch Services to open the
+    // outer app bundle as a new instance instead.
+    const appBundlePath = path.resolve(path.dirname(process.execPath), '..', '..', '..')
+    const child = spawn('open', ['-n', appBundlePath], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+    return true
+  }
+
   const child = spawn(process.execPath, process.argv.slice(1), {
     detached: true,
     stdio: 'ignore',
