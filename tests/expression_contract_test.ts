@@ -120,7 +120,6 @@ assert.deepEqual(
     openness: 0.04,
     faceShape: {
       mouthWidthToFaceWidth: 0.39,
-      mouthWidthToEyeSpan: 0.72,
       mouthOpenRatio: 0.05,
       mouthCornerTilt: 0.01,
       yawSymmetry: 0.86,

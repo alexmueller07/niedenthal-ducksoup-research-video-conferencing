@@ -15,6 +15,7 @@ import path from 'path'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const pkgPath = path.join(root, 'package.json')
+const lockPath = path.join(root, 'package-lock.json')
 const protocolPath = path.join(root, 'main/protocol.ts')
 
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
@@ -24,6 +25,11 @@ const nextVersion = parts.join('.')
 
 pkg.version = nextVersion
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+
+const lock = JSON.parse(readFileSync(lockPath, 'utf8'))
+lock.version = nextVersion
+lock.packages[''].version = nextVersion
+writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n')
 
 const protocol = readFileSync(protocolPath, 'utf8')
 writeFileSync(

@@ -19,6 +19,92 @@
 
 ## Update History
 
+* **Date:** 03-10-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Added calibrated voice controls, audio setup checks, and voice automation
+
+* **Previous behavior:**
+The call had manual pitch controls but no participant-specific voice baseline, automatic match or detone condition, audio readiness display, or voice automation rules. Voice analysis and applied settings were not exported separately.
+
+* **New behavior:**
+The participant's audio processor collects a baseline from natural speech and reports signal quality to the researcher. The researcher can apply bounded Natural, Audibility, Match, or Detone conditions, reset a voice baseline, and create expression- or timer-triggered voice rules alongside face rules. The dashboard shows compact audio setup checks beneath each video panel, with detailed measurements available on demand. Clean and altered voice features, turns, applied pitch/gain, condition changes, and rule events are logged separately. The newer face-calibration flow and its microphone-based talking detector remain in place.
+
+* **Why this matters:**
+Voice changes can be compared to each participant's own speaking range instead of assuming everyone starts with the same pitch and volume. The controls refuse baseline-dependent conditions when the audio signal or processor is not ready, and the logs distinguish requested settings from what was actually applied. Voice synchrony measures are exploratory and still require live dyad testing before research use.
+
+---
+
+* **Date:** 03-10-2026
+* **Author:** Ismam Ferdous
+* **Changes Made:** Fixed packaged macOS multi-instance launch and release version consistency
+
+* **Previous behavior:**
+Opening a second packaged macOS instance could target the executable inside the app bundle directly, and the release version bump did not update the lockfile version.
+
+* **New behavior:**
+macOS opens a second app bundle through Launch Services. The release job now bumps the package, lockfile, and protocol versions together before building installers.
+
+* **Why this matters:**
+Researchers can launch separate local stations more reliably, while clean Windows and macOS release installs use matching version metadata.
+
+---
+
+* **Date:** 23-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** The cheeks and eyebrows now move with the smile, not just the mouth
+
+* **Previous behavior:**
+Only the mouth changed. Everything above it stayed exactly where it was. On someone whose cheeks and eyebrows genuinely move when they smile, that looked wrong — the mouth did all the work while the rest of the face sat frozen, so it read as a stiff, pressed smile rather than a real one. Same on frowns: the mouth pulled down with a completely unmoved brow.
+
+* **New behavior:**
+Calibration now also measures how far that person's cheeks and eyebrows move, from the same four takes they already do — no extra steps for participants. The whole face then moves together by the same share of their own maximum, so a smile raises their cheeks and moves their brows by their own amounts, and a frown pulls their inner brows down and together.
+
+Eyebrow direction is copied rather than assumed. Someone who raises their brows when they smile gets raised brows; someone whose brows drop gets dropped brows.
+
+The eyes themselves are deliberately left alone. A real cheek raise does squeeze the eyes slightly, but eyelids and eyelashes smear badly if a warp goes even slightly wrong there, and that is far more noticeable than a slightly stiff cheek.
+
+Glasses were the other thing to work around. A frame's lower rim sits right on the upper cheek and the top rim sits just under the eyebrows — exactly the areas now moving — and bending a rigid frame looks broken. So the movement is kept low on the cheek, away from where frames sit, the protected zone around each eye is sized to a lens rather than an eye, and the amounts are capped tighter than the mouth's.
+
+The 1-person test tool has a new "Cheek & brow follow" slider to dial this up or down against a real face, from mouth-only to slightly more than measured.
+
+* **Why this matters:**
+This was the remaining thing making the change look artificial. A mouth moving on its own is the clearest giveaway that an expression isn't genuine, so tying the rest of the face to it — by the same per-person measurement, from the same takes — is what makes it hold together.
+
+Two things to know. Anyone calibrated before this update needs calibrating again to get the new movement; nothing will warn you, they will just keep getting the mouth-only version. And if you wear glasses, check how it looks on the altered view before running a session, and turn the new slider down if the frames catch.
+
+---
+
+* **Date:** 22-09-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Rebuilt calibration so the face change fits each person's own face
+
+* **Previous behavior:**
+The app moved every participant's mouth corners by the same fixed amount, no matter whose face it was. Someone whose real smile barely moves their mouth got an obvious, rubbery-looking change, while someone with a wide smile barely noticed anything. The old "video setup check" could not fix this: it quietly watched the participant sit still for 15 seconds and then guessed which moments were their smile and their frown — so its idea of "their biggest smile" was usually just their resting face plus noise. It never measured how far the mouth actually moves, saved nothing to disk, and could only adjust the effect by at most 15% either way.
+
+* **New behavior:**
+The researcher presses "Run calibration" for a participant, who is then guided through four short takes with on-screen prompts and a countdown: relax your face (3s), biggest smile with lips together (4s), biggest smile showing teeth (4s), biggest frown (4s). About 22 seconds in total.
+
+From those takes the app measures how far that person's mouth corners actually travel, and in which direction. The face-change setting now means "a fraction of this person's own maximum": 1.0 moves their mouth exactly as far as their own biggest real smile, and never further. Two people on the same setting get changes that are proportionate to their own faces.
+
+Because of that, the Smile slider now runs from -1 to 1 instead of -2 to 2, and the preset numbers were rescaled to match (Smile (strong) is 0.50 rather than 0.9). The change you see on screen stays about the same as before.
+
+The limit applies to the *total*, not just the change: if a participant is already smiling, the app only adds the amount left over, so their real expression plus the added one never goes past what their face actually does.
+
+Expression detection now uses the same personal range instead of one threshold for everyone, with a dead zone based on how much that person's resting face naturally wobbles. It reacts about three times faster than before, because the long averaging that was there to hide the old thresholds' mistakes is no longer needed.
+
+Two things that used to cause problems are now handled directly. Open-mouth smiles no longer inflate the maximum, because the closed-lip take is what sets it. And talking is detected (from the mouth moving *and* the microphone being live) — frowns are not reported during speech, since ordinary talking makes the same mouth shapes a frown does, and the face change fades as the mouth opens instead of switching off mid-sentence.
+
+The researcher's screen now shows each participant's calibration underneath their video: photos of their neutral, smile and frown takes side by side with the numbers, or "Not calibrated" if they haven't done it yet. Any single take can be redone on its own without repeating the whole thing. Everything — the numbers, every individual facial reading, and the photos — is saved into the session folder under calibration/<participant id>/.
+
+All of this works the same way in the 1-person test tool and the 3-person call, using the same code, and each participant's calibration is tied to their participant ID so it can never be applied to the wrong person.
+
+* **Why this matters:**
+The face change looking unnatural was the main problem with the app, and the cause was that it treated every face as the same face. Tying it to what each person's mouth can really do is what makes it look like their expression instead of an effect applied on top of them. It also means the numbers in the session data describe a real, measured quantity per participant rather than an arbitrary constant, and those measurements are now saved alongside the recordings they applied to.
+
+Two things to know when analysing the data: the amount actually applied now varies with what the participant was doing, so use the applied_alpha column rather than the preset value; and the preset numbers were rescaled to the new meaning, so they are not comparable to sessions recorded before this change.
+
+---
+
 * **Date:** 15-09-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Signed mac builds so camera/mic permission stops resetting

@@ -1,12 +1,25 @@
 # End-to-end test of the 3-seat lab video call (browser harness).
 # Requires: standalone session server on :8771, next dev on :8888.
+#
+# No camera needed. Chromium's fake capture device supplies the video; set
+# CALIBRATION_Y4M to a recorded clip of a face going neutral -> smile -> frown
+# and the calibration checks below will run against real footage instead of the
+# fake device's test pattern (which has no face, so those checks are skipped).
+#
+#   CALIBRATION_Y4M=~/faces.y4m python tests/e2e_test.py
+import os
 import sys
 import time
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:8888"
 ART = "scratchpad"
+CALIBRATION_Y4M = os.environ.get("CALIBRATION_Y4M")
 FAILURES = []
+
+
+def skip(name, why):
+    print(f"SKIP  {name} ({why})")
 
 
 def check(name, cond):
@@ -40,14 +53,15 @@ def panel(page, slot):
 
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--use-fake-ui-for-media-stream",
-            "--use-fake-device-for-media-stream",
-            "--autoplay-policy=no-user-gesture-required",
-        ],
-    )
+    args = [
+        "--use-fake-ui-for-media-stream",
+        "--use-fake-device-for-media-stream",
+        "--autoplay-policy=no-user-gesture-required",
+    ]
+    if CALIBRATION_Y4M:
+        # A recorded face, so MediaPipe has something real to land landmarks on.
+        args.append(f"--use-file-for-fake-video-capture={os.path.expanduser(CALIBRATION_Y4M)}")
+    browser = p.chromium.launch(headless=True, args=args)
     ctx = browser.new_context(permissions=["camera", "microphone"])
     admin = ctx.new_page()
     p1 = ctx.new_page()
@@ -85,6 +99,43 @@ with sync_playwright() as p:
     check("admin sees P2 preview video", video_playing(panel(admin, "P2").locator("video")))
     check("p1 still waiting (no partner view before start)",
           p1.locator("h1:has-text('Please wait for the researcher to start')").is_visible())
+
+    # --- Calibration (waiting room only) ---
+    cal = panel(admin, "P1").locator("text=Calibration").first
+    check("P1 panel shows a calibration section", cal.is_visible())
+    check("uncalibrated participant says so",
+          panel(admin, "P1").locator("text=Not calibrated").is_visible())
+
+    if CALIBRATION_Y4M:
+        panel(admin, "P1").locator("button:has-text('Run calibration')").click()
+        # Four phases: 1.5s prep + 3s/4s record + 0.65s settle each.
+        p1.wait_for_selector("text=Relax your face", timeout=10000)
+        check("participant is prompted to relax", True)
+        p1.wait_for_selector("text=lips closed", timeout=20000)
+        check("participant is prompted for a closed-mouth smile", True)
+        p1.wait_for_selector("text=show your teeth", timeout=20000)
+        check("participant is prompted for an open-mouth smile", True)
+        p1.wait_for_selector("text=Frown as hard", timeout=20000)
+        check("participant is prompted to frown", True)
+
+        accept = panel(admin, "P1").locator("button:has-text('Accept')")
+        for _ in range(30):
+            if accept.is_enabled():
+                break
+            time.sleep(1)
+        check("all four phases measured, Accept enabled", accept.is_enabled())
+        check("thumbnails rendered for each phase",
+              panel(admin, "P1").locator("img").count() >= 4)
+        admin.screenshot(path=f"{ART}/shot_admin_calibration.png", full_page=True)
+
+        if accept.is_enabled():
+            accept.click()
+            time.sleep(1)
+            check("calibration accepted", panel(admin, "P1").locator("text=Accepted").is_visible())
+            check("event log shows calibration applied",
+                  admin.locator("text=calibration_applied").first.is_visible())
+    else:
+        skip("calibration run", "set CALIBRATION_Y4M to a recorded face clip")
 
     admin.screenshot(path=f"{ART}/shot_admin_waiting.png", full_page=True)
     p1.screenshot(path=f"{ART}/shot_p1_waiting.png")

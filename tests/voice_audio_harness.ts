@@ -96,6 +96,7 @@ async function manualPitch() {
     await processor.resume()
     const start=performance.now()
     while(processor.report()?.health.state==='loading'&&performance.now()-start<30000)await wait(100)
+    const micLevel=processor.micLevel()
     for(const requested of [-4,0,4]) {
       processor.setSemitones(requested);await wait(1600)
       const data=new Float32Array(8192);analyser.getFloatTimeDomainData(data)
@@ -104,7 +105,7 @@ async function manualPitch() {
         errorCents:1200*Math.log2(hz/(200*2**(requested/12))),health:processor.report()?.health})
     }
     processor.setCondition({...DEFAULT_VOICE_CONDITION});await wait(600)
-    return {samples,bypass:processor.report()?.applied.pitchSemitones}
+    return {samples,bypass:processor.report()?.applied.pitchSemitones,micLevel}
   } finally {monitor.disconnect();processor.close();oscillator.stop();await input.close()}
 }
 Object.assign(window,{voiceQA:{render,limiterIdentity,realtime,manualPitch}})

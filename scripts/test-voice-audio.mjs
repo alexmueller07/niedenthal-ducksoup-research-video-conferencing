@@ -45,6 +45,7 @@ try {
   }
   const seconds=Number(process.env.VOICE_QA_SECONDS??150)
   results.manual=await page.evaluate(()=>window.voiceQA.manualPitch())
+  assert.ok(results.manual.micLevel>.02,`Raw microphone level lost during voice processing: ${JSON.stringify(results.manual)}`)
   for(const r of results.manual.samples) {
     assert.equal(r.health.state,'ready',JSON.stringify(r.health));assert.ok(r.clarity>.8)
     assert.ok(Math.abs(r.applied-r.requested)<.01,`Manual control failed: ${JSON.stringify(r)}`)

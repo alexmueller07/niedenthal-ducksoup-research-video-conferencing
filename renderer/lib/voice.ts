@@ -32,6 +32,8 @@ export class VoiceProcessor {
   private lastFrame = 0
   private started = false
   private closed = false
+  private levelAnalyser: AnalyserNode
+  private levelBuffer: Float32Array<ArrayBuffer>
   private epochOffset = 0
   private clockUncertainty: number | null = null
   private phase: 'waiting' | 'live' | 'ended' = 'waiting'
@@ -46,6 +48,10 @@ export class VoiceProcessor {
     this.context = new AudioContext({ latencyHint: 'interactive' })
     const ctx = this.context
     this.source = ctx.createMediaStreamSource(micStream)
+    this.levelAnalyser = ctx.createAnalyser()
+    this.levelAnalyser.fftSize = 512
+    this.levelBuffer = new Float32Array(new ArrayBuffer(this.levelAnalyser.fftSize * 4))
+    this.source.connect(this.levelAnalyser)
     this.destination = ctx.createMediaStreamDestination()
     this.dry = ctx.createGain(); this.wet = ctx.createGain(); this.gain = ctx.createGain()
     this.wet.gain.value = 0
@@ -183,6 +189,12 @@ export class VoiceProcessor {
   setPartnerTurn(turn: VoiceTurn | null) { this.pendingPartner = turn; if (!this.clean?.speechActive) this.partner = turn }
   resetCalibration() { this.analysis.reset(); this.alteredAnalysis.reset(); this.partner = this.pendingPartner = null }
   isStarted() { return this.started }
+  micLevel(): number {
+    this.levelAnalyser.getFloatTimeDomainData(this.levelBuffer)
+    let sum = 0
+    for (let i = 0; i < this.levelBuffer.length; i++) sum += this.levelBuffer[i] ** 2
+    return Math.sqrt(sum / this.levelBuffer.length)
+  }
   report(): VoiceReport | null {
     const empty: VoiceFeatures = { speechActive: false, speechProbability: 0, rmsDbfs: -160,
       peakDbfs: -160, relativeIntensityDb: null, f0Hz: null, f0Semitones: null, relativePitchZ: null,
@@ -206,7 +218,7 @@ export class VoiceProcessor {
     this.closed = true
     if (this.watchdog) clearInterval(this.watchdog)
     this.worker?.terminate()
-    this.source.disconnect(); this.tap?.disconnect(); this.shifter?.disconnect()
+    this.source.disconnect(); this.levelAnalyser.disconnect(); this.tap?.disconnect(); this.shifter?.disconnect()
     this.limiter?.disconnect(); this.dry.disconnect(); this.wet.disconnect(); this.gain.disconnect()
     void this.context.close()
   }
