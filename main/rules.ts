@@ -26,7 +26,34 @@ import type {
   RuleExpression,
 } from './protocol'
 import { NEUTRAL_EFFECTS, SUBTYPE_RULE_CONFIDENCE_THRESHOLD } from './protocol'
-import { getPreset } from './presets'
+import { getPreset, PRESETS } from './presets'
+import { DEFAULT_VOICE_CONDITION } from './voiceProtocol'
+import type { VoiceCondition } from './voiceProtocol'
+
+export function validRules(value: unknown): value is AutomationRule[] {
+  if (!Array.isArray(value) || value.length > 40) return false
+  const ids = new Set<string>()
+  return value.every(rule => {
+    if (!rule || typeof rule !== 'object' || typeof rule.id !== 'string' ||
+      rule.id.length > 80 || !rule.id || ids.has(rule.id) || typeof rule.enabled !== 'boolean') return false
+    ids.add(rule.id)
+    if (!['previous','neutral','none'].includes(rule.release) ||
+      (rule.revertAfterSec !== null && (!Number.isFinite(rule.revertAfterSec) || rule.revertAfterSec < 1))) return false
+    const trigger = rule.trigger
+    if (!trigger || typeof trigger !== 'object') return false
+    if (trigger.kind === 'expression') {
+      if (!['P1','P2'].includes(trigger.slot) || !['smiling','frowning','reward-smile','affiliative-smile','dominance-smile'].includes(trigger.expression) ||
+        !Number.isFinite(trigger.holdSec) || trigger.holdSec < 0 || trigger.holdSec > 30) return false
+    } else if (trigger.kind === 'timer') {
+      if (!Number.isFinite(trigger.atSec) || trigger.atSec < 0 || trigger.atSec > 10859) return false
+    } else return false
+    const action = rule.action
+    if (!action || !['P1','P2'].includes(action.slot)) return false
+    return action.kind === 'voice'
+      ? ['bypass','audibility','match','detone','lower','higher'].includes(action.mode)
+      : (action.kind === undefined || action.kind === 'face') && PRESETS.some(p => p.id === action.presetId)
+  })
+}
 
 /** What the engine needs from the session server. */
 export interface RuleHost {
@@ -44,6 +71,9 @@ export interface RuleHost {
   ): void
   /** Push the active-rule map to the dashboard indicator. */
   onActiveChange(active: Record<string, boolean>): void
+  voiceConditionOf?(): VoiceCondition
+  canApplyVoice?(condition: VoiceCondition): boolean
+  applyVoice?(condition: VoiceCondition, rule: AutomationRule, why: 'fired' | 'released' | 'reverted'): void
 }
 
 interface RuleRuntime {
@@ -53,6 +83,10 @@ interface RuleRuntime {
   firedAt: number | null
   /** Effects on the target just before this rule fired (for restore). */
   savedEffects: EffectState | null
+  appliedEffects: EffectState | null
+  savedVoice: VoiceCondition | null
+  appliedVoice: VoiceCondition | null
+  savedLegacyPitch: Partial<Record<PSlot, number>> | null
   /** Timer rules: fully done for this live phase (fired and, if set, reverted). */
   done: boolean
 }
@@ -101,20 +135,22 @@ export class RuleEngine {
     for (const rule of this.rules) {
       const still = rules.find((r) => r.id === rule.id)
       const state = this.rt.get(rule.id)
-      if (state?.fired && (!still || !still.enabled)) {
+      if (state?.fired && (!still || !still.enabled || JSON.stringify(still) !== JSON.stringify(rule))) {
         this.release(rule, state, 'released')
       }
     }
     const next = new Map<string, RuleRuntime>()
     for (const rule of rules) {
-      next.set(rule.id, this.rt.get(rule.id) ?? freshRuntime())
+      const old = this.rules.find(r => r.id === rule.id)
+      next.set(rule.id, old && JSON.stringify(old) === JSON.stringify(rule)
+        ? this.rt.get(rule.id) ?? freshRuntime() : freshRuntime())
     }
     this.rules = rules
     this.rt = next
     this.emitActive()
   }
 
-  onExpression(slot: PSlot, state: ExpressionState) {
+  onExpression(slot: PSlot, state: ExpressionState | null) {
     this.expressions[slot] = state
   }
 
@@ -147,8 +183,8 @@ export class RuleEngine {
         if (phase !== 'live' || liveStart === null || state.done) continue
         const tSec = (nowMs - liveStart) / 1000
         if (!state.fired && tSec >= rule.trigger.atSec) {
-          this.fire(rule, state, nowMs)
-          if (rule.revertAfterSec === null) state.done = true
+          if (!this.fire(rule, state, nowMs)) state.done = true
+          else if (rule.revertAfterSec === null) state.done = true
         } else if (
           state.fired &&
           rule.revertAfterSec !== null &&
@@ -181,7 +217,35 @@ export class RuleEngine {
     this.emitActive()
   }
 
-  private fire(rule: AutomationRule, state: RuleRuntime, nowMs: number) {
+  private fire(rule: AutomationRule, state: RuleRuntime, nowMs: number): boolean {
+    if (rule.action.kind === 'voice') {
+      if ([...this.rt.entries()].some(([id, rt]) => id !== rule.id && rt.fired &&
+        (rt.appliedVoice !== null || rt.appliedEffects !== null))) return false
+      if (rule.action.mode === 'lower' || rule.action.mode === 'higher') {
+        const currentVoice = this.host.voiceConditionOf?.()
+        if (!currentVoice || currentVoice.mode !== 'bypass' || currentVoice.audibility) return false
+        const target = this.host.effectsOf(rule.action.slot)
+        state.savedEffects = { ...target }
+        state.appliedEffects = { ...target, voiceSemitones: rule.action.mode === 'lower' ? -2 : 2 }
+        state.fired = true
+        state.firedAt = nowMs
+        this.host.applyEffects(rule.action.slot, state.appliedEffects, rule, 'fired')
+        return true
+      }
+      const condition: VoiceCondition = { ...DEFAULT_VOICE_CONDITION, mode: rule.action.mode,
+        targetSlot: rule.action.mode === 'match' || rule.action.mode === 'detone' ? rule.action.slot : null,
+        pitchRangeScale: rule.action.mode === 'detone' ? .75 : 1,
+        intensityRangeScale: rule.action.mode === 'detone' ? .8 : 1 }
+      if (!this.host.voiceConditionOf || !this.host.applyVoice || !this.host.canApplyVoice?.(condition)) return false
+      state.savedVoice = { ...this.host.voiceConditionOf() }
+      state.savedLegacyPitch = { P1:this.host.effectsOf('P1').voiceSemitones,
+        P2:this.host.effectsOf('P2').voiceSemitones }
+      state.appliedVoice = condition
+      state.fired = true
+      state.firedAt = nowMs
+      this.host.applyVoice(condition, rule, 'fired')
+      return true
+    }
     const preset = getPreset(rule.action.presetId)
     state.savedEffects = { ...this.host.effectsOf(rule.action.slot) }
     state.fired = true
@@ -192,11 +256,32 @@ export class RuleEngine {
       rule,
       'fired',
     )
+    return true
   }
 
   private release(rule: AutomationRule, state: RuleRuntime, why: 'released' | 'reverted') {
     const mode = rule.trigger.kind === 'timer' ? 'previous' : rule.release
-    if (mode === 'previous') {
+    if (rule.action.kind === 'voice' && state.appliedVoice) {
+      // A later manual command owns the voice condition; never overwrite it.
+      const stillApplied = state.appliedVoice && JSON.stringify(this.host.voiceConditionOf?.()) === JSON.stringify(state.appliedVoice)
+      if (stillApplied && mode !== 'none') {
+        const restore = mode === 'previous' ? state.savedVoice ?? { ...DEFAULT_VOICE_CONDITION } : { ...DEFAULT_VOICE_CONDITION }
+        this.host.applyVoice?.(restore, rule, why)
+        if (mode === 'previous' && restore.mode === 'bypass' && !restore.audibility) {
+          for (const slot of ['P1','P2'] as const) {
+            const oldPitch = state.savedLegacyPitch?.[slot] ?? 0
+            if (oldPitch !== 0) this.host.applyEffects(slot,
+              { ...this.host.effectsOf(slot), voiceSemitones:oldPitch },rule,why)
+          }
+        }
+      }
+    } else if (rule.action.kind === 'voice' && state.appliedEffects) {
+      // Preserve a later manual pitch/face edit by the researcher.
+      if (JSON.stringify(this.host.effectsOf(rule.action.slot)) === JSON.stringify(state.appliedEffects) && mode !== 'none') {
+        this.host.applyEffects(rule.action.slot, mode === 'previous' ? state.savedEffects ?? { ...NEUTRAL_EFFECTS }
+          : { ...state.appliedEffects, voiceSemitones: 0 }, rule, why)
+      }
+    } else if (mode === 'previous') {
       this.host.applyEffects(rule.action.slot, state.savedEffects ?? { ...NEUTRAL_EFFECTS }, rule, why)
     } else if (mode === 'neutral') {
       this.host.applyEffects(rule.action.slot, { ...NEUTRAL_EFFECTS }, rule, why)
@@ -205,6 +290,10 @@ export class RuleEngine {
     state.fired = false
     state.firedAt = null
     state.savedEffects = null
+    state.appliedEffects = null
+    state.savedVoice = null
+    state.appliedVoice = null
+    state.savedLegacyPitch = null
   }
 
   private emitActive() {
@@ -222,7 +311,7 @@ export class RuleEngine {
 }
 
 function freshRuntime(): RuleRuntime {
-  return { holdSince: null, fired: false, firedAt: null, savedEffects: null, done: false }
+  return { holdSince: null, fired: false, firedAt: null, savedEffects: null, appliedEffects: null, savedVoice: null, appliedVoice: null, savedLegacyPitch: null, done: false }
 }
 
 /** Human-readable one-liner for the event log. */
@@ -232,5 +321,5 @@ export function describeRule(rule: AutomationRule): string {
     t.kind === 'expression'
       ? `when ${t.slot} ${t.expression.replace('-', ' ')} ≥${t.holdSec}s`
       : `at ${Math.floor(t.atSec / 60)}:${String(Math.floor(t.atSec % 60)).padStart(2, '0')}`
-  return `${when} → ${rule.action.slot} ${rule.action.presetId}`
+  return `${when} → ${rule.action.slot} ${rule.action.kind === 'voice' ? `voice ${rule.action.mode}` : rule.action.presetId}`
 }

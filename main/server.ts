@@ -36,7 +36,7 @@ import {
   parseClientMessage,
 } from './protocol'
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
-import { RuleEngine, describeRule } from './rules'
+import { RuleEngine, describeRule, validRules } from './rules'
 import { VoiceSession } from './voiceSession'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
@@ -102,6 +102,14 @@ export class SessionServer {
       liveStartMs: () =>
         this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null,
       effectsOf: (slot: PSlot) => this.bySlot(slot)?.effects ?? { ...NEUTRAL_EFFECTS },
+      voiceConditionOf: () => this.voiceSession.condition,
+      canApplyVoice: (condition) => this.phase !== 'ended' && this.voiceSession.canApply(condition) === null,
+      applyVoice: (condition, rule, why) => {
+        this.applyVoiceCondition(condition)
+        this.log({event: RULE_EVENT_NAMES[why], actorRole:'server', actorSlot:'ADMIN',
+          target:rule.action.slot, param:'voice_rule', value:rule.id,
+          detail:{rule:describeRule(rule),condition}})
+      },
       applyEffects: (slot, effects, rule, why) => {
         if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && effects.voiceSemitones!==0) {
           this.log({event:'voice_rule_blocked',target:slot,detail:{rule:rule.id,reason:'Voice condition active'}})
@@ -280,6 +288,7 @@ export class SessionServer {
     this.clients.delete(ws)
     if (ctx.slot === 'P1' || ctx.slot === 'P2') {
       this.voiceSession.disconnect(ctx.slot)
+      this.ruleEngine.onExpression(ctx.slot,null)
       const other=this.bySlot(otherSlot(ctx.slot))
       if (other) this.send(other.ws,{type:'voice-partner-turn',turn:null})
     }
@@ -340,18 +349,8 @@ export class SessionServer {
         const condition=parseVoiceCondition(msg.condition)
         const reason=!condition?'Invalid voice condition':this.phase==='ended'&&condition.mode!=='bypass'?'Session has ended':this.voiceSession.canApply(condition)
         if (reason || !condition) {this.send(ctx.ws,{type:'voice-error',reason:reason!});return}
-        this.voiceSession.condition=condition
-        if (condition.mode!=='bypass'||condition.audibility) {
-          for (const participant of this.clients.values()) {
-            if (participant.role!=='participant') continue
-            participant.effects={...participant.effects,voiceSemitones:0}
-            this.send(participant.ws,{type:'effect-command',effects:participant.effects,cause:'voice_condition'})
-          }
-          this.broadcastRoster()
-        }
-        this.logger.voice.condition(condition)
+        this.applyVoiceCondition(condition)
         this.log({event:'voice_condition_changed',actorRole:'admin',actorName:ctx.identity.name,target:condition.targetSlot??'both',detail:condition})
-        this.broadcast({type:'voice-condition',condition})
         this.send(ctx.ws,{type:'voice-state',state:this.voiceSession.snapshot()})
         return
       }
@@ -663,6 +662,10 @@ export class SessionServer {
       }
       case 'set-rules': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (!validRules(msg.rules)) {
+          this.send(ctx.ws,{type:'voice-error',reason:'Invalid automation rule'})
+          return
+        }
         this.ruleEngine.setRules(msg.rules)
         this.log({
           event: 'rules_changed',
@@ -689,6 +692,22 @@ export class SessionServer {
         return
       }
     }
+  }
+
+  private applyVoiceCondition(condition: typeof DEFAULT_VOICE_CONDITION) {
+    this.voiceSession.condition={...condition}
+    if (condition.mode!=='bypass'||condition.audibility) {
+      for (const participant of this.clients.values()) {
+        if (participant.role!=='participant') continue
+        participant.effects={...participant.effects,voiceSemitones:0}
+        this.send(participant.ws,{type:'effect-command',effects:participant.effects,cause:'voice_condition'})
+      }
+      this.broadcastRoster()
+    }
+    this.logger.voice.condition(condition)
+    this.broadcast({type:'voice-condition',condition})
+    const admin=this.bySlot('ADMIN')
+    if (admin) this.send(admin.ws,{type:'voice-state',state:this.voiceSession.snapshot()})
   }
 
   private setPhase(phase: Phase, adminName: string) {

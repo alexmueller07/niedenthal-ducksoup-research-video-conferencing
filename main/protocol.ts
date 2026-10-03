@@ -7,7 +7,7 @@
 //
 // Deliberately DOM-type-free so the Electron main process can import it.
 
-import type { VoiceCondition, VoiceReport, VoicePairState, VoiceTurn } from './voiceProtocol'
+import type { VoiceCondition, VoiceMode, VoiceReport, VoicePairState, VoiceTurn } from './voiceProtocol'
 export const PROTOCOL_VERSION = 1
 export const DEFAULT_PORT = 8771
 export const APP_VERSION = '3.0.0'
@@ -262,7 +262,7 @@ export interface AutomationRule {
   id: string
   enabled: boolean
   trigger: RuleTrigger
-  action: { slot: PSlot; presetId: string }
+  action: { kind?: 'face'; slot: PSlot; presetId: string } | { kind: 'voice'; slot: PSlot; mode: VoiceMode | 'lower' | 'higher' }
   /** Expression rules: behaviour on release. Ignored for timer rules. */
   release: RuleRelease
   /** Timer rules: revert to the pre-rule state after N seconds (null = stay). */
