@@ -8,6 +8,7 @@
 // station (one, for whoever is at the keyboard), so both modes show the same
 // thing and a change here cannot land in only one of them.
 
+import { useEffect, useState } from 'react'
 import { CALIBRATION_PROMPTS, QUALITY_FLAG_LABELS } from '../lib/calibration'
 import { CALIBRATION_PHASES } from '../lib/protocol'
 import type {
@@ -47,10 +48,13 @@ export function CalibrationPanel({
   onRun,
   onRedo,
   onAccept,
+  showFigures = true,
 }: {
   state: CalibrationUiState
   runtime?: CalibrationRuntimeState
   enabled: boolean
+  /** The measured and live numbers under the thumbnails. */
+  showFigures?: boolean
   disabledReason?: string
   onRun: () => void
   onRedo: (phase: CalibrationPhase) => void
@@ -98,7 +102,7 @@ export function CalibrationPanel({
         </div>
       )}
 
-      {state.profile && (
+      {showFigures && state.profile && (
         <div className="mt-2 grid grid-cols-3 gap-2 text-[10.5px]">
           <Figure
             label="Smile reach"
@@ -118,7 +122,7 @@ export function CalibrationPanel({
         </div>
       )}
 
-      {runtime?.calibrated && (
+      {showFigures && runtime?.calibrated && (
         <div className="mt-2 grid grid-cols-3 gap-2 text-[10.5px]">
           <Figure
             label="Their face now"
@@ -189,6 +193,13 @@ function PhaseThumb({
   onRedo: () => void
 }) {
   const label = CALIBRATION_PROMPTS[phase].shortLabel
+  const [enlarged, setEnlarged] = useState(false)
+  useEffect(() => {
+    if (!enlarged) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setEnlarged(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [enlarged])
   const scoreKey = phase === 'frown' ? 'frown' : 'smile'
   // The peak is what matters for an expression phase; neutral has only a mean.
   const peakValue = summary?.peak?.scores[scoreKey].mean ?? summary?.scores[scoreKey].mean
@@ -209,14 +220,38 @@ function PhaseThumb({
     >
       <div className="relative aspect-[4/3] bg-gray-950">
         {screenshot ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={screenshot} alt={label} className="h-full w-full object-cover" />
+          <button
+            type="button"
+            onClick={() => setEnlarged(true)}
+            aria-label={`Enlarge ${label}`}
+            className="group block h-full w-full"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={screenshot} alt={label} className="h-full w-full object-cover" />
+            <span className="absolute right-1 top-1 rounded bg-black/60 p-0.5 text-gray-300 opacity-70 transition group-hover:opacity-100">
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </span>
+          </button>
         ) : (
           <div className="flex h-full items-center justify-center text-[10px] text-gray-600">
             no frame
           </div>
         )}
       </div>
+      {enlarged && screenshot && (
+        <div
+          role="dialog"
+          aria-label={label}
+          onClick={() => setEnlarged(false)}
+          className="fixed inset-0 z-50 flex cursor-zoom-out flex-col items-center justify-center gap-3 bg-black/85 p-6 backdrop-blur-sm"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={screenshot} alt={label} className="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl" />
+          <p className="text-sm text-gray-300">{label} · click anywhere to close</p>
+        </div>
+      )}
       <div className="px-2 py-1.5 text-[10px] leading-tight">
         <p className="truncate font-medium text-gray-300">{label}</p>
         <p className="font-mono text-gray-500">
