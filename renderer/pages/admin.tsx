@@ -47,7 +47,7 @@ import type {
   Telemetry,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
-import { AudioSetupCheck, VoiceControls } from '../components/VoiceControls'
+import { VoicePanel } from '../components/VoiceControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
@@ -95,6 +95,7 @@ export default function AdminDashboard() {
   const [serverError, setServerError] = useState('')
   const [voiceState,setVoiceState]=useState<VoicePairState|null>(null)
   const [voiceError,setVoiceError]=useState('')
+  const [voiceErrorSlot,setVoiceErrorSlot]=useState<PSlot>('P1')
   const [signalStatus, setSignalStatus] = useState<SignalStatus>('connecting')
   const [roster, setRoster] = useState<RosterState | null>(null)
   const [telemetry, setTelemetry] = useState<Partial<Record<PSlot, Telemetry>>>({})
@@ -738,6 +739,8 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          <RecordingBadge recState={recState} />
+
           <div className="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
             {server && (
               <div className="hidden items-center gap-2 rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800 md:flex">
@@ -838,8 +841,8 @@ export default function AdminDashboard() {
               expression={expressions[slot]}
               streams={streams[slot]}
               effects={effectsUi[slot]}
-              onEffect={(param, value, force) => sendEffect(slot, param, value, force)}
-              onPreset={(id) => applyPreset(slot, id)}
+              onEffect={(param, value, force) => { setVoiceErrorSlot(slot); sendEffect(slot, param, value, force) }}
+              onPreset={(id) => { setVoiceErrorSlot(slot); applyPreset(slot, id) }}
               onIdentity={(identity) => setIdentity(slot, identity)}
               phase={phase}
               calibrationState={calibration[slot]}
@@ -847,13 +850,13 @@ export default function AdminDashboard() {
               onRunCalibration={() => requestCalibration(slot, CALIBRATION_PHASES)}
               onRetakeCalibration={(phase) => requestCalibration(slot, [phase])}
               onAcceptCalibration={() => acceptCalibration(slot)}
-              audioSetup={<AudioSetupCheck slot={slot} state={voiceState} connected={signalStatus==='connected'}
+              voicePanel={<VoicePanel slot={slot} state={voiceState} connected={signalStatus==='connected'}
                 participantConnected={!!roster?.slots[slot]} phase={phase}
-                onReset={()=>{setVoiceError('');clientRef.current?.send({type:'voice-reset',slot})}}/>}
+                error={voiceErrorSlot===slot?voiceError:''}
+                onApply={condition=>{setVoiceError('');setVoiceErrorSlot(slot);clientRef.current?.send({type:'voice-condition',condition})}}
+                onReset={()=>{setVoiceError('');setVoiceErrorSlot(slot);clientRef.current?.send({type:'voice-reset',slot})}}/>}
             />
           ))}
-          <VoiceControls state={voiceState} error={voiceError} phase={phase} connected={signalStatus==='connected'}
-            onApply={condition=>{setVoiceError('');clientRef.current?.send({type:'voice-condition',condition})}}/>
         </div>
 
         {/* --- Right rail --- */}
@@ -926,7 +929,7 @@ export default function AdminDashboard() {
                 placeholder="e.g. Five minutes remaining"
                 className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm outline-none focus:border-sky-500"
               />
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="group relative flex shrink-0 items-center gap-1.5">
                 <input
                   type="number"
                   min={1}
@@ -934,9 +937,14 @@ export default function AdminDashboard() {
                   value={bannerDuration}
                   onChange={(e) => setBannerDuration(Number(e.target.value) || 8)}
                   className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-center text-sm outline-none [appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  title="Seconds shown"
                 />
-                <span className="text-xs text-gray-500">seconds</span>
+                <span className="text-xs text-gray-500">sec shown</span>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-[10.5px] text-gray-200 opacity-0 shadow-lg ring-1 ring-gray-700 transition-opacity duration-75 group-hover:opacity-100"
+                >
+                  How long the message stays on their screens
+                </span>
               </div>
               <button
                 type="button"
@@ -986,28 +994,6 @@ export default function AdminDashboard() {
             }}
             onChange={updateRules}
           />
-
-          {/* Recordings */}
-          <Card
-            title="Recordings"
-            subtitle={hasIpc() ? undefined : 'Recording requires the desktop app'}
-          >
-            {Object.keys(recState).length === 0 ? null : (
-              <ul className="space-y-1.5">
-                {Object.entries(recState).map(([key, r]) => (
-                  <li key={key} className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-2 font-mono text-gray-300">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${r.active ? 'animate-pulse bg-red-500' : 'bg-gray-600'}`}
-                      />
-                      {r.label}
-                    </span>
-                    <span className="tabular-nums text-gray-500">{fmtBytes(r.bytes)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
 
           {/* Event log */}
           <Card
@@ -1111,7 +1097,7 @@ export default function AdminDashboard() {
 // ===== Participant panel =====
 
 interface PanelProps {
-  audioSetup: React.ReactNode
+  voicePanel: React.ReactNode
   slot: PSlot
   info: RosterState['slots'][PSlot] | null
   telemetry: Telemetry | undefined
@@ -1130,7 +1116,7 @@ interface PanelProps {
 }
 
 function ParticipantPanel({
-  audioSetup,
+  voicePanel,
   slot,
   info,
   telemetry,
@@ -1299,8 +1285,9 @@ function ParticipantPanel({
         </div>
       </div>
 
-      {/* Effect controls */}
-      <div className="space-y-3 p-4">
+      {/* Face */}
+      <div className="border-b border-gray-800 p-4">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Face</p>
         <EffectSlider
           label="Smile"
           hint={effects.alpha > 0.02 ? 'lifted' : effects.alpha < -0.02 ? 'dampened' : 'neutral'}
@@ -1316,6 +1303,33 @@ function ParticipantPanel({
           onChange={(v) => onEffect('alpha', v)}
           onCommit={(v) => onEffect('alpha', v, true)}
         />
+        <PresetRows
+          rows={[['neutral'], ['smile-subtle', 'smile-strong'], ['frown-subtle', 'frown-strong']]}
+          effects={effects}
+          onPreset={onPreset}
+        />
+
+        {/* Calibration, directly under this participant's video */}
+        {phase !== 'waiting' && (
+          <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            Calibration is available only in the waiting room.
+          </p>
+        )}
+        <CalibrationPanel
+          state={calibrationState}
+          runtime={calibrationRuntime}
+          enabled={phase === 'waiting' && !!info}
+          disabledReason={info ? 'live' : 'offline'}
+          onRun={onRunCalibration}
+          onRedo={onRetakeCalibration}
+          onAccept={onAcceptCalibration}
+          showFigures={false}
+        />
+      </div>
+
+      {/* Voice */}
+      <div className="p-4">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Voice</p>
         <EffectSlider
           label="Voice pitch"
           hint={
@@ -1334,53 +1348,8 @@ function ParticipantPanel({
           onChange={(v) => onEffect('voiceSemitones', v)}
           onCommit={(v) => onEffect('voiceSemitones', v, true)}
         />
-        <div className="space-y-1.5 pt-1">
-          {[['neutral'], ['smile-subtle', 'smile-strong'], ['frown-subtle', 'frown-strong'], ['warm-voice', 'bright-voice']].map(
-            (ids, i) => (
-              <div key={i} className="flex flex-wrap gap-1.5">
-                {ids.map((id) => {
-                  const p = getPreset(id)
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      title={p.description}
-                      onClick={() => onPreset(p.id)}
-                      className={
-                        'rounded-full px-2.5 py-1 text-[11px] transition ' +
-                        (Math.abs(effects.alpha - p.alpha) < 0.011 &&
-                        effects.voiceSemitones === p.voiceSemitones
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
-                      }
-                    >
-                      {p.label}
-                    </button>
-                  )
-                })}
-              </div>
-            ),
-          )}
-        </div>
-
-        {/* Calibration, directly under this participant's video */}
-        <div className="border-t border-gray-800 pt-3">
-          {phase !== 'waiting' && (
-            <p className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-              Calibration is available only in the waiting room.
-            </p>
-          )}
-          <CalibrationPanel
-            state={calibrationState}
-            runtime={calibrationRuntime}
-            enabled={phase === 'waiting' && !!info}
-            disabledReason={info ? 'live' : 'offline'}
-            onRun={onRunCalibration}
-            onRedo={onRetakeCalibration}
-            onAccept={onAcceptCalibration}
-          />
-        </div>
-        {audioSetup}
+        <PresetRows rows={[['warm-voice', 'bright-voice']]} effects={effects} onPreset={onPreset} />
+        {voicePanel}
       </div>
     </section>
   )
@@ -1797,6 +1766,45 @@ function ExpressionChip({ expression }: { expression: ExpressionState }) {
 
 // ===== Small bits =====
 
+function PresetRows({
+  rows,
+  effects,
+  onPreset,
+}: {
+  rows: string[][]
+  effects: EffectState
+  onPreset: (id: string) => void
+}) {
+  return (
+    <div className="mt-3 space-y-1.5">
+      {rows.map((ids, i) => (
+        <div key={i} className="flex flex-wrap gap-1.5">
+          {ids.map((id) => {
+            const p = getPreset(id)
+            return (
+              <button
+                key={p.id}
+                type="button"
+                title={p.description}
+                onClick={() => onPreset(p.id)}
+                className={
+                  'rounded-full px-2.5 py-1 text-[11px] transition ' +
+                  (Math.abs(effects.alpha - p.alpha) < 0.011 &&
+                  effects.voiceSemitones === p.voiceSemitones
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
+                }
+              >
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EffectSlider({
   label,
   hint,
@@ -1911,6 +1919,29 @@ function fmtClock(totalSec: number): string {
   const m = Math.floor(totalSec / 60)
   const s = totalSec % 60
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function RecordingBadge({ recState }: { recState: Record<string, RecState> }) {
+  const files = Object.values(recState)
+  const recording = files.some((r) => r.active)
+  const title = !hasIpc()
+    ? 'Recording requires the desktop app'
+    : files.length === 0
+      ? 'Recording starts when the conversation starts'
+      : files.map((r) => `${r.label}  ${fmtBytes(r.bytes)}${r.active ? '' : ' (stopped)'}`).join('\n')
+  return (
+    <span
+      title={title}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
+        recording
+          ? 'bg-red-600/20 text-red-300 ring-red-500/40'
+          : 'bg-gray-900 text-gray-500 ring-gray-800'
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${recording ? 'animate-pulse bg-red-500' : 'bg-gray-600'}`} />
+      {recording ? 'Recording' : 'Not recording'}
+    </span>
+  )
 }
 
 function fmtBytes(n: number): string {
