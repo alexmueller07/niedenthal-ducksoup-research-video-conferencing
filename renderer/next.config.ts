@@ -12,6 +12,8 @@ const config: NextConfig = {
   output: 'export',
   distDir: process.env.NODE_ENV === 'production' ? '../app' : '.next',
   trailingSlash: true,
+  // Hide the floating "N" dev badge; it covers the dashboard in dev mode.
+  devIndicators: false,
   images: {
     unoptimized: true,
   },
