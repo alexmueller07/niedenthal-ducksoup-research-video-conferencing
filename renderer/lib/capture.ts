@@ -123,10 +123,6 @@ export class CaptureStation {
     const p = getPreset(config.presetId)
     this.setAlpha(p.alpha)
   }
-  /** Scale how much the cheeks and brows move with the mouth. 1 = as measured. */
-  setFaceCoupling(scale: number) {
-    this.face.setFaceCoupling(scale)
-  }
 
   setAlpha(alpha: number) {
     this.alpha = alpha
@@ -323,7 +319,10 @@ export class CaptureStation {
       const monotonic = ts <= lastTs ? lastTs + 1 : ts
       lastTs = monotonic
       this.face.setMicLevel(this.readMicLevel())
-      const found = this.face.render(this.hiddenVideo, this.alteredCtx, w, h, monotonic)
+      this.face.render(this.hiddenVideo, this.alteredCtx, w, h, monotonic)
+      // render() reports whether it morphed, which is false at neutral alpha
+      // even with a face in view; tracking is what the status should show.
+      const found = this.face.faceFound
       if (this.overlay) this.drawOverlay(w, h, found)
       this.cb.onFaceState?.(found)
       const expression = this.face.expression

@@ -90,7 +90,7 @@ It copies what each person actually does rather than assuming. If someone raises
 
 The eyes themselves are left alone on purpose. Eyelids and eyelashes look obviously wrong if a change there is even slightly off, which is far more noticeable than a slightly stiff cheek.
 
-**If a participant wears glasses**, have a quick look at their altered view before you start. The movement is deliberately kept away from where frames sit, but unusual frames — very large lenses, or ones sitting low on the cheek — could still catch. The 1-person test tool has a "Cheek & brow follow" slider you can turn down if so.
+**If a participant wears glasses**, have a quick look at their altered view before you start. The movement is deliberately kept away from where frames sit, but unusual frames — very large lenses, or ones sitting low on the cheek — could still catch.
 
 ### Talking
 

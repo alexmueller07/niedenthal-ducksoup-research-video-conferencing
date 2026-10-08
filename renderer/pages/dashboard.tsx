@@ -8,10 +8,14 @@ import {
   emptyCalibrationUiState,
   type CalibrationUiState,
 } from '../components/CalibrationPanel'
+import { VoicePanel } from '../components/VoiceControls'
 import { NORMALIZED_CLASSIFIER_VERSION } from '../lib/faceMorph'
+import { VoiceFilePlayer } from '../lib/voiceFile'
 import { CALIBRATION_PHASES } from '../lib/protocol'
 import type { CalibrationPhase, ExpressionState } from '../lib/protocol'
 import { PRESETS, getPreset, DEFAULT_PRESET_ID } from '../lib/presets'
+import { DEFAULT_VOICE_CONDITION } from '../../main/voiceProtocol'
+import type { VoiceCondition, VoicePairState } from '../../main/voiceProtocol'
 import type {
   ConnectionStatus,
   RecordingStatus,
@@ -19,10 +23,10 @@ import type {
   SessionManifest,
 } from '../lib/types'
 
-// This page is video-only, so presets whose only effect is a voice-pitch
-// change (e.g. "Lower voice" / "Higher voice") would silently do nothing here
-// while keeping a misleading label — leave them out of the picker.
+// Face presets go in the face section; the voice-only ones ("Lower voice" /
+// "Higher voice") drive the uploaded recording in the voice section.
 const VIDEO_PRESETS = PRESETS.filter((p) => p.voiceSemitones === 0)
+const VOICE_PRESETS = PRESETS.filter((p) => p.voiceSemitones !== 0)
 
 function ipc() {
   return typeof window !== 'undefined'
@@ -44,9 +48,6 @@ export default function DashboardPage() {
   })
   const preset = getPreset(config.presetId)
   const [alpha, setAlpha] = useState(preset.alpha)
-  // How much the cheeks and brows follow the mouth. 1 = exactly what
-  // calibration measured; here to tune against a real face.
-  const [faceCoupling, setFaceCoupling] = useState(1)
 
   const [connection, setConnection] = useState<ConnectionStatus>('disconnected')
   const [recording, setRecording] = useState<RecordingStatus>('idle')
@@ -60,6 +61,80 @@ export default function DashboardPage() {
   // HTML (window.ipc only exists in Electron). Avoids a hydration mismatch.
   const [inElectron, setInElectron] = useState(false)
   useEffect(() => setInElectron(!!ipc()), [])
+
+  // ---- Voice: an uploaded recording run through the call's voice processor ----
+  const playerRef = useRef<VoiceFilePlayer | null>(null)
+  const [voiceFile, setVoiceFile] = useState<string | null>(null)
+  const [voicePlaying, setVoicePlaying] = useState(false)
+  const [listenTo, setListenTo] = useState<'original' | 'changed'>('changed')
+  const [pitch, setPitch] = useState(0)
+  const [voiceCondition, setVoiceCondition] = useState<VoiceCondition>({ ...DEFAULT_VOICE_CONDITION })
+  const [voiceState, setVoiceState] = useState<VoicePairState | null>(null)
+  const [voiceError, setVoiceError] = useState('')
+
+  useEffect(() => {
+    const player = new VoiceFilePlayer()
+    player.processor.setSlot('P1')
+    playerRef.current = player
+    // The voice box reads the same report shape the session server builds.
+    const t = setInterval(() => {
+      if (!player.processor.isStarted()) return
+      const report = player.processor.report()
+      if (!report) return
+      setVoiceState({
+        condition: report.condition,
+        reports: { P1: report },
+        available: { P1: true, P2: false },
+        pitchSynchrony: null,
+        intensitySynchrony: null,
+        turnCoordination: null,
+        convergence: null,
+        exploratoryIndex: null,
+        pairedTurns: 0,
+        reason: null,
+      })
+    }, 250)
+    return () => {
+      clearInterval(t)
+      player.close()
+    }
+  }, [])
+
+  const loadVoiceFile = async (file: File | undefined) => {
+    if (!file || !playerRef.current) return
+    setVoiceError('')
+    try {
+      await playerRef.current.load(file)
+      setVoiceFile(file.name)
+      setVoicePlaying(false)
+    } catch {
+      setVoiceError('Could not read that file. Try an .mp3, .wav or .m4a recording.')
+    }
+  }
+  const toggleVoice = async () => {
+    const player = playerRef.current
+    if (!player) return
+    if (voicePlaying) {
+      player.stop()
+      setVoicePlaying(false)
+      return
+    }
+    player.listenTo(listenTo)
+    await player.play()
+    setVoicePlaying(true)
+  }
+  const applyVoice = (condition: VoiceCondition) => {
+    setVoiceCondition(condition)
+    playerRef.current?.processor.setCondition(condition)
+    // A voice change and the manual pitch control can't run together.
+    if (condition.mode !== 'bypass' || condition.audibility) setPitch(0)
+  }
+  useEffect(() => {
+    playerRef.current?.processor.setSemitones(pitch)
+  }, [pitch])
+  useEffect(() => {
+    playerRef.current?.listenTo(listenTo)
+  }, [listenTo])
 
   // Build the capture station once the DOM nodes exist.
   useEffect(() => {
@@ -111,10 +186,6 @@ export default function DashboardPage() {
   useEffect(() => {
     stationRef.current?.setAlpha(alpha)
   }, [alpha])
-
-  useEffect(() => {
-    stationRef.current?.setFaceCoupling(faceCoupling)
-  }, [faceCoupling])
 
   const applyPreset = (id: string) => {
     const p = getPreset(id)
@@ -203,105 +274,145 @@ export default function DashboardPage() {
       ? expression.smileTypeConfidence
       : expression?.labelConfidence
 
+  const statusText =
+    connection === 'connecting'
+      ? 'Starting…'
+      : recording === 'recording'
+        ? 'Recording'
+        : connection === 'connected'
+          ? 'Live'
+          : connection === 'error'
+            ? 'Error'
+            : 'Idle'
+  const voiceChangeOn = voiceCondition.mode !== 'bypass' || voiceCondition.audibility
+
   return (
     <>
       <Head>
         <title>1-Person Test Station</title>
       </Head>
 
-      <div className="app">
-        <header className="topbar">
-          <div className="topbar-left">
+      <div className="min-h-screen bg-gray-950 text-white">
+        {/* ===== Header ===== */}
+        <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-950/95 backdrop-blur">
+          <div className="flex flex-wrap items-center gap-4 px-5 py-3">
             <button
-              className="back"
               type="button"
               onClick={() => void backHome()}
               disabled={recording === 'saving'}
               aria-label="Back to main screen"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:opacity-50"
             >
               <span aria-hidden="true">‹</span>
               {recording === 'saving' ? 'Saving…' : 'Back'}
             </button>
-            <div className="title">
-              1-Person Test Station
+            <h1 className="text-sm font-semibold">1-Person Test Station</h1>
+            <span
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${
+                recording === 'recording'
+                  ? 'bg-red-600/20 text-red-300 ring-red-500/40'
+                  : connection === 'connected'
+                    ? 'bg-emerald-600/20 text-emerald-300 ring-emerald-500/40'
+                    : connection === 'error'
+                      ? 'bg-red-600/20 text-red-300 ring-red-500/40'
+                      : 'bg-gray-900 text-gray-400 ring-gray-800'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  recording === 'recording' ? 'animate-pulse bg-red-500' : connection === 'connected' ? 'bg-emerald-400' : 'bg-gray-600'
+                }`}
+              />
+              {statusText}
+            </span>
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {inElectron ? (
+                <button
+                  type="button"
+                  onClick={selectFolder}
+                  title="Where recordings are saved"
+                  className="max-w-[18rem] truncate rounded-lg bg-gray-900 px-3 py-2 text-[11px] text-gray-400 ring-1 ring-gray-800 transition hover:text-gray-200"
+                >
+                  {config.saveRoot ? `Saving to ${config.saveRoot}` : 'Choose output folder…'}
+                </button>
+              ) : (
+                <span className="text-[11px] text-gray-500">Browser mode: recordings go to Downloads</span>
+              )}
+              {recording !== 'recording' ? (
+                <button
+                  type="button"
+                  disabled={!formValid || busy}
+                  onClick={start}
+                  title={formValid ? undefined : 'Choose an output folder first'}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold transition enabled:hover:bg-emerald-500 disabled:opacity-40"
+                >
+                  {startLabel}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void stop()}
+                  className="flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm font-semibold text-red-200 ring-1 ring-red-500/40 transition hover:bg-gray-700"
+                >
+                  <span className="h-2 w-2 rounded-full bg-red-500" /> Stop · {fmt(recTime)}
+                </button>
+              )}
             </div>
-          </div>
-          <div className="status">
-            <span className={`dot ${connection}`} />
-            {connection === 'connecting' ? 'Starting…' : recording === 'recording' ? 'Recording' : connection === 'connected' ? 'Live' : connection === 'error' ? 'Error' : 'Idle'}
-            {connection === 'connected' && (
-              <span className={`face ${faceFound ? 'ok' : 'no'}`}>
-                {faceFound ? 'face tracked' : 'no face'}
-              </span>
-            )}
           </div>
         </header>
 
-        <div className="body">
-          {/* Left controls */}
-          <aside className="panel">
-            <section>
-              <h2>Output</h2>
-              {inElectron ? (
-                <label className="folder">Output folder
-                  <button className="ghost" onClick={selectFolder}>{config.saveRoot ? config.saveRoot : 'Select folder…'}</button>
-                </label>
-              ) : (
-                <p className="note">Browser mode. Recordings download to your Downloads folder. Use the desktop app to save them into folders instead.</p>
-              )}
-            </section>
-
-            <section>
-              <h2>Modification condition</h2>
-              <div className="presets">
-                {VIDEO_PRESETS.map((p) => (
-                  <button key={p.id} className={`preset ${config.presetId === p.id ? 'active' : ''}`} onClick={() => applyPreset(p.id)}>
-                    {p.label}
-                  </button>
-                ))}
+        <main className="mx-auto max-w-5xl space-y-4 p-4">
+          <section className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
+            {/* Video */}
+            <div className="grid grid-cols-1 gap-px bg-gray-800 md:grid-cols-2">
+              <div className="relative aspect-video bg-black">
+                <video ref={cleanRef} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" />
+                <span className="absolute left-2 top-2 rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide">
+                  Clean
+                </span>
               </div>
-              <p className="desc">{preset.description}</p>
-
-              <div className="slider">
-                <div className="slider-head"><span>Smile (face)</span><span className="val">{alpha.toFixed(2)}</span></div>
-                <input type="range" min={-1} max={1} step={0.05} value={alpha} onChange={(e) => setAlpha(parseFloat(e.target.value))} />
-                <div className="ticks"><span>Frown</span><span>Neutral</span><span>Smile</span></div>
-              </div>
-
-              <div className="slider">
-                <div className="slider-head"><span>Cheek &amp; brow follow</span><span className="val">{faceCoupling.toFixed(2)}</span></div>
-                <input type="range" min={0} max={1.5} step={0.05} value={faceCoupling} onChange={(e) => setFaceCoupling(parseFloat(e.target.value))} />
-                <div className="ticks"><span>Mouth only</span><span>As measured</span><span>More</span></div>
-              </div>
-            </section>
-          </aside>
-
-          {/* Center: video + operation */}
-          <main className="main">
-            <div className="videos">
-              <div className="vid">
-                <div className="vid-label">Clean (unaltered)</div>
-                <video ref={cleanRef} autoPlay playsInline muted />
-              </div>
-              <div className="vid" ref={alteredWrapRef}>
-                <div className="vid-label">Altered (participant sees this)</div>
-                <canvas ref={alteredRef} />
-                <button className="fs" onClick={goFullscreen} title="Participant fullscreen">Fullscreen</button>
+              <div ref={alteredWrapRef} className="relative aspect-video bg-black">
+                <canvas ref={alteredRef} className="h-full w-full -scale-x-100 object-cover" />
+                <span className="absolute left-2 top-2 rounded-lg bg-violet-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide">
+                  Altered (partner sees)
+                </span>
+                <button
+                  type="button"
+                  onClick={goFullscreen}
+                  className="absolute bottom-2 right-2 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] font-semibold text-gray-300 backdrop-blur transition hover:text-white"
+                >
+                  Fullscreen
+                </button>
+                {connection === 'connected' && (
+                  <span
+                    className={`absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur ${
+                      faceFound ? 'bg-emerald-600/30 text-emerald-300' : 'bg-amber-600/30 text-amber-300'
+                    }`}
+                  >
+                    {faceFound ? 'face tracked' : 'no face'}
+                  </span>
+                )}
+                {connection !== 'connected' && !calibrationProgress && (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-600">
+                    Press Start to turn on the camera
+                  </div>
+                )}
                 {calibrationProgress && (
-                  <div className="cal-overlay">
-                    <p className="cal-stage">
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-gray-950/80 p-4 text-center backdrop-blur-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">
                       {calibrationProgress.stage === 'recording'
                         ? 'Hold it'
                         : calibrationProgress.stage === 'settling'
                           ? 'Recorded'
                           : 'Get ready'}
                     </p>
-                    <p className="cal-title">{calibrationProgress.title}</p>
-                    <p className="cal-instruction">{calibrationProgress.instruction}</p>
+                    <p className="text-base font-semibold">{calibrationProgress.title}</p>
+                    <p className="max-w-[34ch] text-sm text-gray-300">{calibrationProgress.instruction}</p>
                     {calibrationProgress.stage !== 'settling' && (
-                      <p className="cal-count">{calibrationProgress.secondsLeft}</p>
+                      <p className="text-4xl font-bold tabular-nums">{calibrationProgress.secondsLeft}</p>
                     )}
-                    <p className="cal-step">
+                    <p className="text-[11px] text-gray-500">
                       Step {calibrationProgress.index} of {calibrationProgress.total}
                     </p>
                   </div>
@@ -309,148 +420,268 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Calibration, directly under the video — same panel the
-                researcher dashboard shows under each participant. */}
-            <CalibrationPanel
-              state={calibration}
-              runtime={undefined}
-              enabled={connection === 'connected'}
-              disabledReason="start first"
-              onRun={() => runCalibration()}
-              onRedo={(phase) => runCalibration([phase])}
-              onAccept={acceptCalibration}
-            />
+            {/* Face */}
+            <div className="border-b border-gray-800 p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Face</p>
+              <Slider
+                label="Smile"
+                hint={alpha > 0.02 ? 'lifted' : alpha < -0.02 ? 'dampened' : 'neutral'}
+                min={-1}
+                max={1}
+                step={0.05}
+                value={alpha}
+                neutral={0}
+                format={(v) => `α ${v.toFixed(2)}`}
+                onChange={setAlpha}
+              />
+              <Pills
+                items={VIDEO_PRESETS.map((p) => ({ id: p.id, label: p.label, title: p.description }))}
+                active={config.presetId}
+                onPick={applyPreset}
+              />
 
-            <div className="ops">
               <div
-                className={`detect ${expression?.label === 'smiling' && expression.smileTypeTrusted === false ? 'uncertain' : ''}`}
+                className={`mt-3 flex items-center justify-between gap-3 rounded-xl border p-3 ${
+                  expression?.label === 'smiling' && expression.smileTypeTrusted === false
+                    ? 'border-amber-500/30 bg-amber-500/5'
+                    : 'border-gray-800 bg-gray-950/45'
+                }`}
               >
                 <div>
-                  <span className="detect-label">Detected expression</span>
-                  <span className="detect-value">{expressionText}</span>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Detected expression</p>
+                  <p className="mt-0.5 text-sm font-semibold">{expressionText}</p>
                 </div>
-                <div className="detect-meta">
-                  <span>{typeof expressionConfidence === 'number' ? `${Math.round(expressionConfidence * 100)}% confidence` : 'no reading yet'}</span>
-                  <span>{expression?.classifierVersion === NORMALIZED_CLASSIFIER_VERSION ? 'Calibrated' : 'Calibration not done'}</span>
+                <div className="flex flex-wrap justify-end gap-1.5 text-[10px] text-gray-400">
+                  <span className="rounded-full bg-gray-800 px-2 py-0.5">
+                    {typeof expressionConfidence === 'number' ? `${Math.round(expressionConfidence * 100)}% confidence` : 'no reading yet'}
+                  </span>
+                  <span className="rounded-full bg-gray-800 px-2 py-0.5">
+                    {expression?.classifierVersion === NORMALIZED_CLASSIFIER_VERSION ? 'Calibrated' : 'Calibration not done'}
+                  </span>
                 </div>
               </div>
 
-              {recording !== 'recording' ? (
-                <button className="primary" disabled={!formValid || busy} onClick={start}>
-                  {startLabel}
-                </button>
-              ) : (
-                <button className="recording" onClick={() => void stop()}>
-                  <span className="recdot" /> Stop · {fmt(recTime)}
-                </button>
-              )}
+              <CalibrationPanel
+                state={calibration}
+                runtime={undefined}
+                enabled={connection === 'connected'}
+                disabledReason="start first"
+                onRun={() => runCalibration()}
+                onRedo={(phase) => runCalibration([phase])}
+                onAccept={acceptCalibration}
+                showFigures={false}
+              />
+
             </div>
 
-            {!formValid && (
-              <p className="warn">Select an output folder to start.</p>
-            )}
-
-            <section className="output">
-              <h2>Output</h2>
-              {lastSaved ? (
-                <div className="saved">
-                  <div className="saved-head">{lastSaved.sessionLabel} · {lastSaved.preset.label} · {lastSaved.durationSec}s</div>
-                  {lastSaved.files.map((f) => (
-                    <div key={f.kind} className="file">{f.kind}: {f.filename} ({(f.bytes / 1048576).toFixed(1)} MB)</div>
-                  ))}
-                  {inElectron && (
-                    <button className="ghost small" onClick={() => ipc()?.invoke('shell:open-path', lastSaved.files[0]?.path.replace(/[/\\][^/\\]+$/, ''))}>
-                      Open session folder
-                    </button>
-                  )}
+            {/* Voice */}
+            <div className="p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Voice</p>
+              <div className="rounded-xl border border-gray-800 bg-gray-950/45 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="cursor-pointer rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold transition hover:bg-sky-500">
+                    {voiceFile ? 'Change recording' : 'Upload a recording'}
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e) => void loadVoiceFile(e.target.files?.[0])}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!voiceFile}
+                    onClick={() => void toggleVoice()}
+                    className="rounded-lg bg-gray-800 px-3 py-1.5 text-[11px] font-semibold text-gray-200 transition enabled:hover:bg-gray-700 disabled:opacity-40"
+                  >
+                    {voicePlaying ? 'Stop' : 'Play'}
+                  </button>
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-gray-500">
+                    {voiceFile ?? 'About a minute of natural talking with pauses works best. It loops.'}
+                  </span>
+                  <div className="flex overflow-hidden rounded-lg bg-gray-800 text-[10px] font-semibold" role="group" aria-label="Listen to">
+                    {(['original', 'changed'] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setListenTo(k)}
+                        className={`px-2.5 py-1 uppercase tracking-wide transition ${
+                          listenTo === k
+                            ? k === 'changed'
+                              ? 'bg-violet-600 text-white'
+                              : 'bg-emerald-600 text-white'
+                            : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <p className="note">Each session saves a clean video, an altered video, and a session.json file.</p>
-              )}
-            </section>
-          </main>
-        </div>
+                {voiceError && <p className="mt-2 text-[10.5px] text-red-300">{voiceError}</p>}
+              </div>
+
+              <div className="mt-3">
+                <Slider
+                  label="Voice pitch"
+                  hint={pitch > 0.5 ? 'higher' : pitch < -0.5 ? 'lower' : 'neutral'}
+                  min={-12}
+                  max={12}
+                  step={1}
+                  value={pitch}
+                  neutral={0}
+                  disabled={voiceChangeOn}
+                  format={(v) => `${v > 0 ? '+' : ''}${v} st`}
+                  onChange={setPitch}
+                />
+              </div>
+              <Pills
+                items={VOICE_PRESETS.map((p) => ({ id: p.id, label: p.label, title: p.description }))}
+                active={VOICE_PRESETS.find((p) => p.voiceSemitones === pitch)?.id ?? null}
+                disabled={voiceChangeOn}
+                onPick={(id) => setPitch(getPreset(id).voiceSemitones)}
+              />
+
+              <VoicePanel
+                solo
+                slot="P1"
+                state={voiceState}
+                connected
+                participantConnected={!!voiceFile}
+                phase="waiting"
+                error=""
+                onApply={applyVoice}
+                onReset={() => {
+                  playerRef.current?.processor.resetCalibration()
+                  applyVoice({ ...DEFAULT_VOICE_CONDITION })
+                }}
+              />
+            </div>
+          </section>
+
+          {/* Output */}
+          <section className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Output</p>
+            {lastSaved ? (
+              <div className="mt-2 text-xs">
+                <p className="text-gray-200">
+                  {lastSaved.sessionLabel} · {lastSaved.preset.label} · {lastSaved.durationSec}s
+                </p>
+                {lastSaved.files.map((f) => (
+                  <p key={f.kind} className="font-mono text-[11px] text-gray-500">
+                    {f.kind}: {f.filename} ({(f.bytes / 1048576).toFixed(1)} MB)
+                  </p>
+                ))}
+                {inElectron && (
+                  <button
+                    type="button"
+                    onClick={() => ipc()?.invoke('shell:open-path', lastSaved.files[0]?.path.replace(/[/\\][^/\\]+$/, ''))}
+                    className="mt-2 rounded-lg bg-gray-800 px-3 py-1.5 text-[11px] text-gray-300 transition hover:bg-gray-700"
+                  >
+                    Open session folder
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-gray-500">
+                Each session saves a clean video, an altered video, and a session.json file.
+              </p>
+            )}
+          </section>
+        </main>
 
         <video ref={hiddenRef} autoPlay playsInline muted style={{ position: 'absolute', width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />
       </div>
-
-      <style jsx>{`
-        .app { display: flex; flex-direction: column; height: 100vh; background: #0e1116; color: #d7dbe0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-        .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #161a21; border-bottom: 1px solid #232831; }
-        .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
-        .back { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 9px; background: #1d232c; border: 1px solid #2e3642; border-radius: 7px; color: #c7ccd3; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
-        .back span { font-size: 20px; line-height: 1; margin-top: -1px; }
-        .back:hover { background: #242b36; border-color: #3b6fb0; color: #f1f5f9; }
-        .back:focus-visible { outline: 2px solid #3b6fb0; outline-offset: 2px; }
-        .title { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
-        .version { margin-left: 12px; font-size: 12px; font-weight: 400; color: #7d8794; }
-        .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aab2bd; }
-        .dot { width: 9px; height: 9px; border-radius: 50%; background: #6b7280; }
-        .dot.connected { background: #3fa66a; }
-        .dot.connecting { background: #d4a13a; }
-        .dot.error { background: #c2554f; }
-        .face { font-size: 11px; padding: 2px 7px; border-radius: 4px; }
-        .face.ok { background: #1d3b2a; color: #6fce9a; }
-        .face.no { background: #3b2424; color: #d99; }
-
-        .body { display: flex; flex: 1; overflow: hidden; }
-        .panel { width: 340px; padding: 16px; overflow-y: auto; border-right: 1px solid #232831; }
-        .panel section { margin-bottom: 24px; }
-        h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #8b94a1; margin: 0 0 12px; font-weight: 600; }
-
-        label { display: block; font-size: 12px; color: #9aa3af; }
-        .folder { margin-top: 0; }
-        .ghost { width: 100%; margin-top: 4px; text-align: left; padding: 7px 9px; background: #1a1f27; border: 1px solid #2a313b; border-radius: 6px; color: #c7ccd3; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .ghost:hover { border-color: #3b6fb0; }
-        .ghost.small { width: auto; margin-top: 10px; }
-        .note { font-size: 12px; color: #79828f; line-height: 1.5; margin: 8px 0 0; }
-
-        .presets { display: flex; flex-direction: column; gap: 6px; }
-        .preset { text-align: left; padding: 8px 11px; background: #1a1f27; border: 1px solid #2a313b; border-radius: 6px; color: #c7ccd3; font-size: 13px; cursor: pointer; }
-        .preset:hover { border-color: #394454; }
-        .preset.active { background: #1b2c44; border-color: #3b6fb0; color: #cfe0f5; }
-        .desc { font-size: 12px; color: #79828f; margin: 10px 0 16px; line-height: 1.5; }
-
-        .slider { margin-bottom: 18px; }
-        .slider-head { display: flex; justify-content: space-between; font-size: 12px; color: #9aa3af; margin-bottom: 6px; }
-        .slider-head .val { font-variant-numeric: tabular-nums; color: #cfe0f5; }
-        .slider input[type='range'] { width: 100%; accent-color: #3b6fb0; }
-        .ticks { display: flex; justify-content: space-between; font-size: 10px; color: #5f6873; margin-top: 3px; }
-
-        .main { flex: 1; padding: 16px 20px; overflow-y: auto; }
-        .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .vid { position: relative; background: #000; border: 1px solid #232831; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
-        .vid video, .vid canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
-        .vid-label { position: absolute; top: 8px; left: 8px; z-index: 2; font-size: 11px; padding: 3px 8px; background: rgba(0,0,0,0.55); border-radius: 4px; color: #cdd3da; }
-        .cal-overlay { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; background: rgba(9,12,17,0.82); backdrop-filter: blur(3px); }
-        .cal-stage { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #7dd3fc; }
-        .cal-title { font-size: 16px; font-weight: 600; color: #f3f6fa; }
-        .cal-instruction { max-width: 34ch; font-size: 13px; line-height: 1.45; color: #cdd3da; }
-        .cal-count { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
-        .cal-step { font-size: 11px; color: #7b8593; }
-        .fs { position: absolute; bottom: 8px; right: 8px; z-index: 2; font-size: 11px; padding: 4px 9px; background: rgba(0,0,0,0.55); border: 1px solid #3a4250; border-radius: 5px; color: #cdd3da; cursor: pointer; }
-        .fs:hover { background: rgba(0,0,0,0.8); }
-
-        .ops { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0 6px; }
-        .detect { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 42px; flex: 1 1 420px; padding: 9px 12px; background: #121923; border: 1px solid #263343; border-radius: 8px; color: #cfe0f5; }
-        .detect.uncertain { background: #20190d; border-color: #5d4520; color: #f1d49b; }
-        .detect-label { display: block; margin-bottom: 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #778392; }
-        .detect-value { font-size: 14px; font-weight: 650; }
-        .detect-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; font-size: 11px; color: #8f9aaa; }
-        .detect-meta span { padding: 2px 7px; border-radius: 999px; background: #1b222c; white-space: nowrap; }
-        .detect.uncertain .detect-meta span { background: #2b2113; color: #d7b979; }
-        .ops button { padding: 10px 18px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
-        .primary { background: #2f6fc0; color: #fff; }
-        .primary:hover { background: #3a7cd0; }
-        .primary:disabled { background: #2a323d; color: #6b7480; cursor: not-allowed; }
-        .recording { background: #2a313b; color: #f0d2d0; border-color: #5a3a38; display: flex; align-items: center; gap: 8px; }
-        .recdot { width: 9px; height: 9px; border-radius: 50%; background: #e0524b; }
-        .warn { font-size: 12px; color: #d2a24a; margin: 4px 0; }
-
-        .output { margin-top: 22px; border-top: 1px solid #232831; padding-top: 16px; }
-        .saved-head { font-size: 13px; color: #cfe0f5; margin-bottom: 6px; }
-        .file { font-size: 12px; color: #8b94a1; font-variant-numeric: tabular-nums; }
-      `}</style>
     </>
+  )
+}
+
+function Slider({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  neutral,
+  disabled = false,
+  format,
+  onChange,
+}: {
+  label: string
+  hint: string
+  min: number
+  max: number
+  step: number
+  value: number
+  neutral: number
+  disabled?: boolean
+  format: (v: number) => string
+  onChange: (v: number) => void
+}) {
+  const isNeutral = Math.abs(value - neutral) < step / 2
+  return (
+    <div className={disabled ? 'opacity-40' : undefined}>
+      <div className="mb-1 flex items-baseline justify-between text-xs">
+        <span className="font-medium text-gray-300">
+          {label} <span className="text-gray-600">· {hint}</span>
+        </span>
+        <span className="flex items-center gap-2 font-mono tabular-nums text-gray-400">
+          {format(value)}
+          {!isNeutral && !disabled && (
+            <button
+              type="button"
+              onClick={() => onChange(neutral)}
+              className="rounded bg-gray-800 px-1.5 text-[10px] text-gray-400 transition hover:text-white"
+            >
+              reset
+            </button>
+          )}
+        </span>
+      </div>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={`w-full ${isNeutral ? 'accent-gray-500' : 'accent-violet-500'}`}
+      />
+    </div>
+  )
+}
+
+function Pills({
+  items,
+  active,
+  disabled = false,
+  onPick,
+}: {
+  items: Array<{ id: string; label: string; title: string }>
+  active: string | null
+  disabled?: boolean
+  onPick: (id: string) => void
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {items.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          title={p.title}
+          disabled={disabled}
+          onClick={() => onPick(p.id)}
+          className={
+            'rounded-full px-2.5 py-1 text-[11px] transition disabled:opacity-40 ' +
+            (active === p.id ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-300 enabled:hover:bg-gray-700')
+          }
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
   )
 }
