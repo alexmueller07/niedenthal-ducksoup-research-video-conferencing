@@ -17,10 +17,8 @@ export default function SignInPage() {
   const [name, setName] = useState('')
   const [participantId, setParticipantId] = useState('')
   const [dyadId, setDyadId] = useState('')
-  const [studyId, setStudyId] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [serverAddr, setServerAddr] = useState('')
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [joinShake, setJoinShake] = useState(0)
   const [joining, setJoining] = useState(false)
@@ -34,8 +32,6 @@ export default function SignInPage() {
       if (!hasIpc()) return
       const saved = await ipcInvoke<string | null>('prefs:get', 'serverAddr')
       if (saved) setServerAddr(saved)
-      const savedStudy = await ipcInvoke<string | null>('prefs:get', 'studyId')
-      if (savedStudy) setStudyId(savedStudy)
       const platform = await ipcInvoke<string | null>('app:platform')
       setIsMac(platform === 'darwin')
     })()
@@ -78,7 +74,6 @@ export default function SignInPage() {
     const addr = role === 'admin' ? 'localhost' : serverAddr.trim() || 'localhost'
     if (hasIpc()) {
       await ipcInvoke('prefs:set', 'serverAddr', serverAddr.trim())
-      await ipcInvoke('prefs:set', 'studyId', studyId.trim())
     }
     sessionStorage.setItem(
       'labcall',
@@ -88,9 +83,9 @@ export default function SignInPage() {
         serverAddr: addr,
         identity: {
           name: name.trim(),
-          participantId: participantId.trim(),
-          dyadId: dyadId.trim(),
-          studyId: studyId.trim(),
+          participantId: isAdmin ? '' : participantId.trim(),
+          dyadId: isAdmin ? '' : dyadId.trim(),
+          studyId: '',
         },
       }),
     )
@@ -206,34 +201,36 @@ export default function SignInPage() {
                 aria-invalid={missingName}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={label}>Participant ID</label>
-                <input
-                  className={inputClass(missingParticipantId)}
-                  value={participantId}
-                  onChange={(e) => {
-                    setParticipantId(e.target.value)
-                    setJoinError('')
-                  }}
-                  placeholder="e.g. 1043"
-                  aria-invalid={missingParticipantId}
-                />
+            {!isAdmin && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={label}>Participant ID</label>
+                  <input
+                    className={inputClass(missingParticipantId)}
+                    value={participantId}
+                    onChange={(e) => {
+                      setParticipantId(e.target.value)
+                      setJoinError('')
+                    }}
+                    placeholder="e.g. 1043"
+                    aria-invalid={missingParticipantId}
+                  />
+                </div>
+                <div>
+                  <label className={label}>Dyad ID</label>
+                  <input
+                    className={inputClass(missingDyadId)}
+                    value={dyadId}
+                    onChange={(e) => {
+                      setDyadId(e.target.value)
+                      setJoinError('')
+                    }}
+                    placeholder="e.g. D22"
+                    aria-invalid={missingDyadId}
+                  />
+                </div>
               </div>
-              <div>
-                <label className={label}>Dyad ID</label>
-                <input
-                  className={inputClass(missingDyadId)}
-                  value={dyadId}
-                  onChange={(e) => {
-                    setDyadId(e.target.value)
-                    setJoinError('')
-                  }}
-                  placeholder="e.g. D22"
-                  aria-invalid={missingDyadId}
-                />
-              </div>
-            </div>
+            )}
             <div>
               <label className={label}>
                 Access code <span className="normal-case text-gray-600">(optional)</span>
@@ -249,46 +246,24 @@ export default function SignInPage() {
                 placeholder="Leave blank to join as participant"
               />
             </div>
+            {!isAdmin && (
+              <div>
+                <label className={label}>Session address</label>
+                <input
+                  className={input}
+                  value={serverAddr}
+                  onChange={(e) => setServerAddr(e.target.value)}
+                  placeholder={`researcher machine, e.g. 10.140.2.15:${DEFAULT_PORT}`}
+                />
+                <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
+                  Shown on the researcher dashboard. Remembered on this machine after the first session.
+                </p>
+              </div>
+            )}
             {joinError && (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200">
                 {joinError}
               </p>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((s) => !s)}
-              className="text-xs text-gray-500 transition hover:text-gray-300"
-            >
-              {showAdvanced ? '▾' : '▸'} Setup options
-            </button>
-            {showAdvanced && (
-              <div className="space-y-4 rounded-xl border border-gray-800 bg-gray-950/50 p-4">
-                <div>
-                  <label className={label}>Study ID</label>
-                  <input
-                    className={input}
-                    value={studyId}
-                    onChange={(e) => setStudyId(e.target.value)}
-                    placeholder="e.g. PPS-2"
-                  />
-                </div>
-                <div>
-                  <label className={label}>Session address</label>
-                  <input
-                    className={input}
-                    value={serverAddr}
-                    onChange={(e) => setServerAddr(e.target.value)}
-                    placeholder={`researcher machine, e.g. 10.140.2.15:${DEFAULT_PORT}`}
-                    disabled={isAdmin}
-                  />
-                  <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
-                    {isAdmin
-                      ? 'The researcher machine hosts the session itself — no address needed.'
-                      : 'Shown on the researcher dashboard. Remembered on this machine after the first session.'}
-                  </p>
-                </div>
-              </div>
             )}
 
             <button
@@ -316,7 +291,7 @@ export default function SignInPage() {
 
         <p className="mt-6 text-center text-[11px] text-gray-600">
           IRB 2020-1657 · For lab use only ·{' '}
-          <a href="/dashboard" className="underline-offset-2 hover:text-gray-400 hover:underline">
+          <a href="/dashboard" className="underline underline-offset-2 hover:text-gray-300">
             1-person test station
           </a>
           {isMac && (
@@ -326,7 +301,7 @@ export default function SignInPage() {
                 type="button"
                 onClick={() => void openAnotherInstance()}
                 disabled={launchingInstance}
-                className="underline-offset-2 hover:text-gray-400 hover:underline disabled:opacity-60"
+                className="underline underline-offset-2 hover:text-gray-300 disabled:opacity-60"
               >
                 {launchingInstance ? 'opening…' : 'open another window'}
               </button>

@@ -35,7 +35,7 @@ Everyone uses the same sign-in screen. What you type in **Access code** decides 
 | `test` | Test participant (uses a still example face instead of a camera — for practice only) |
 | (leave blank) | Participant |
 
-Fill in name, participant ID, and dyad ID as usual. Under "Setup options" you can set the study ID and, for participants, the researcher machine's address (so they connect to the right session).
+Participants fill in name, participant ID, dyad ID, and the session address (the researcher machine's address, shown on the dashboard, so they connect to the right session). The researcher only needs a name: typing `admin` hides the other boxes.
 
 ## Running a session
 
