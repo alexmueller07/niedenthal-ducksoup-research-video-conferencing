@@ -19,6 +19,21 @@
 
 ## Update History
 
+* **Date:** 08-10-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Cleaner researcher screens, simpler sign-in, and a voice upload in the test station
+
+* **Previous behavior:**
+The researcher had to fill in participant and dyad IDs, and sign-in showed extra Study ID and setup options. Voice controls sat in their own section at the bottom of the researcher screen, full of detailed numbers. A Recordings card took up space on the right. Calibration photos had rows of numbers under them and could not be enlarged. The 1-person test station needed someone talking live to try voice changes, had a cheek & brow slider, and sometimes said "no face" while a face was being tracked.
+
+* **New behavior:**
+The researcher only types a name and the access code. Each participant's panel now has three parts: video, face, and voice, with the voice part laid out like the face part and showing only what matters (speech heard, turns, microphone). A small recording tag sits at the top instead of the Recordings card. Calibration photos are shown without the numbers and can be clicked to enlarge. Voice buttons, the strength picker and the banner seconds have short hover notes. The 1-person test station follows the same video, face, voice layout, lets you upload a voice recording to hear voice changes on it, and shows the detected expression above the photos. The floating "N" badge in dev mode is gone.
+
+* **Why this matters:**
+Fewer boxes and numbers make sessions easier to run without mistakes, and the voice upload means voice changes can be tested without anyone having to keep talking.
+
+---
+
 * **Date:** 03-10-2026
 * **Author:** Ismam Ferdous
 * **Changes Made:** Added calibrated voice controls, audio setup checks, and voice automation
