@@ -10,7 +10,7 @@
 import type { VoiceCondition, VoiceMode, VoiceReport, VoicePairState, VoiceTurn } from './voiceProtocol'
 export const PROTOCOL_VERSION = 1
 export const DEFAULT_PORT = 8771
-export const APP_VERSION = '3.0.8'
+export const APP_VERSION = '3.0.9'
 
 export type Role = 'participant' | 'admin'
 
