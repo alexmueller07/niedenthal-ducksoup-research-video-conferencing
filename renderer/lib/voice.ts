@@ -1,19 +1,22 @@
-import type { FormantCorrectionNode } from '@soundtouchjs/formant-correction-worklet'
+import type SignalsmithStretchFactory from 'signalsmith-stretch'
+import type { SignalsmithStretchNode } from 'signalsmith-stretch'
 import { DEFAULT_VOICE_CONDITION, VOICE_VERSION, clamp } from '../../main/voiceProtocol'
 import type { VoiceApplied, VoiceCondition, VoiceFeatures, VoiceHealth, VoiceReport, VoiceSeat, VoiceTurn } from '../../main/voiceProtocol'
 import { VoiceAnalysis, IDENTITY_VOICE, voiceAdjustment } from './voiceAnalysis'
 import type { AcousticFrame } from './voiceAnalysis'
-import { VOICE_STRETCH } from './voiceDspConfig'
+import { VOICE_STRETCH, VOICE_SMILE_SEMITONES } from './voiceDspConfig'
 
 export class VoiceProcessor {
   readonly context: AudioContext
   readonly outputStream: MediaStream
   private source: MediaStreamAudioSourceNode
   private destination: MediaStreamAudioDestinationNode
+  private dryDelay: DelayNode
   private dry: GainNode
   private wet: GainNode
   private gain: GainNode
-  private shifter: FormantCorrectionNode | null = null
+  private shifter: SignalsmithStretchNode | null = null
+  private shift = { semitones: 0, formantSemitones: 0 }
   private limiter: AudioWorkletNode | null = null
   private tap: AudioWorkletNode | null = null
   private worker: Worker | null = null
@@ -29,6 +32,7 @@ export class VoiceProcessor {
   private slot: VoiceSeat | null = null
   private sequence = 0
   private legacySemitones = 0
+  private smile = 0
   private lastFrame = 0
   private started = false
   private closed = false
@@ -37,11 +41,10 @@ export class VoiceProcessor {
   private epochOffset = 0
   private clockUncertainty: number | null = null
   private phase: 'waiting' | 'live' | 'ended' = 'waiting'
-  private underrunBaseline = 0
   private startedAt = 0
   private rampTargets = new WeakMap<AudioParam, number>()
   private limiterReductionDb = 0
-  private health: VoiceHealth = { state: 'loading', reason: null, engineVersion: 'soundtouch-formant-2.1.1',
+  private health: VoiceHealth = { state: 'loading', reason: null, engineVersion: 'signalsmith-stretch-1.3.2',
     analysisDroppedFrames: 0, underruns: 0, bufferedMs: null, measuredLatencyMs: null, sampleRate: 0 }
 
   constructor(private micStream: MediaStream) {
@@ -53,9 +56,12 @@ export class VoiceProcessor {
     this.levelBuffer = new Float32Array(new ArrayBuffer(this.levelAnalyser.fftSize * 4))
     this.source.connect(this.levelAnalyser)
     this.destination = ctx.createMediaStreamDestination()
+    // The dry path is delayed to match the shifter, so switching between them
+    // never overlaps two offset copies, and Neutral has the same delay as a change.
+    this.dryDelay = ctx.createDelay(1)
     this.dry = ctx.createGain(); this.wet = ctx.createGain(); this.gain = ctx.createGain()
     this.wet.gain.value = 0
-    this.source.connect(this.dry).connect(this.gain).connect(this.destination)
+    this.source.connect(this.dryDelay).connect(this.dry).connect(this.gain).connect(this.destination)
     this.outputStream = this.destination.stream
     this.health.sampleRate = ctx.sampleRate
   }
@@ -65,14 +71,28 @@ export class VoiceProcessor {
     this.started = true
     this.startedAt = this.context.currentTime
     const assets = new URL('/voice/', window.location.href).href
+    // Started before setup so a load that never finishes still times out.
+    this.watchdog = setInterval(() => {
+      if (this.health.state === 'ready' && performance.now() - this.lastFrame > 1000) this.fail('Voice analysis stalled')
+      if (this.health.state === 'loading' && this.context.currentTime - this.startedAt > 30) this.fail('Voice initialization timed out')
+      if (this.context.state !== 'running') this.fail('Audio context suspended')
+    }, 250)
     try {
-      const { FormantCorrectionNode: Shifter } = await import('@soundtouchjs/formant-correction-worklet')
-      await Shifter.register(this.context, `${assets}formant-processor.js`)
+      // Loaded from /voice/ unbundled: the library copies its own source into the
+      // audio worklet, and bundler-inserted helpers don't exist there.
+      const { default: SignalsmithStretch }: { default: typeof SignalsmithStretchFactory } =
+        await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ `${assets}signalsmith-stretch.mjs`)
+      const shifter = await SignalsmithStretch(this.context, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
       await this.context.audioWorklet.addModule(`${assets}voice.worklet.js`)
       if (this.closed) return
-      this.shifter = new Shifter({ context: this.context, outputChannelCount: 1 })
-      this.shifter.setStretchParameters(VOICE_STRETCH)
-      this.shifter.formantStrength.value = 1
+      await shifter.configure(VOICE_STRETCH)
+      // Formant compensation keeps the speaker's own vocal resonances when pitch moves.
+      await shifter.schedule({ active: true, semitones: 0, formantSemitones: 0, formantCompensation: true, formantBaseHz: 0 })
+      const latency = await shifter.latency()
+      if (this.closed) return
+      this.shifter = shifter
+      this.dryDelay.delayTime.value = latency
+      this.health.bufferedMs = latency * 1000
       this.source.connect(this.shifter).connect(this.wet).connect(this.gain)
       this.limiter = new AudioWorkletNode(this.context, 'voice-limiter', { outputChannelCount: [1] })
       this.limiter.port.onmessage = ({ data }) => {
@@ -103,11 +123,6 @@ export class VoiceProcessor {
         this.fail('Output limiter stopped')
         this.gain.disconnect(); this.gain.connect(this.destination)
       }
-      this.watchdog = setInterval(() => {
-        if (this.health.state === 'ready' && performance.now() - this.lastFrame > 1000) this.fail('Voice analysis stalled')
-        if (this.health.state === 'loading' && this.context.currentTime - this.startedAt > 30) this.fail('Voice initialization timed out')
-        if (this.context.state !== 'running') this.fail('Audio context suspended')
-      }, 250)
     } catch (error) { this.fail(`Voice processor unavailable: ${String(error)}`) }
   }
 
@@ -119,23 +134,19 @@ export class VoiceProcessor {
     this.clean = this.analysis.ingest({ ...data.clean, at: data.at, durationMs: data.durationMs, speechProbability: data.speechProbability })
     this.altered = this.alteredAnalysis.ingest({ ...data.altered, at: data.at, durationMs: data.durationMs, speechProbability: data.speechProbability })
     if (!wasSpeaking && this.clean.speechActive) this.partner = this.pendingPartner
-    const metrics = this.shifter?.metrics
-    if (metrics) {
-      if (this.context.currentTime - this.startedAt < 2) this.underrunBaseline = metrics.underrunCount
-      this.health.underruns = Math.max(0, metrics.underrunCount - this.underrunBaseline)
-      this.health.bufferedMs = metrics.framesBuffered / this.context.sampleRate * 1000
-    }
     const target = this.slot !== null && this.condition.targetSlot === this.slot
     this.applied = voiceAdjustment(this.condition, target, this.clean, this.analysis.calibration, this.partner,
       data.at, this.health.state === 'ready')
     if (this.phase === 'ended') this.applied = { ...IDENTITY_VOICE }
-    const legacy = this.condition.mode === 'bypass' && this.health.state === 'ready' && this.phase !== 'ended' ? this.legacySemitones : 0
+    const manual = this.condition.mode === 'bypass' && this.health.state === 'ready' && this.phase !== 'ended'
+    const legacy = manual ? this.legacySemitones : 0
+    const smile = manual ? this.smile : 0
     // Keep one path across phonemes. Switching dry/wet for every unvoiced
     // consonant would splice together signals with different processing delays.
     const expressiveRoute = target && ['match','detone'].includes(this.condition.mode) &&
       this.analysis.calibration.frozen && this.health.state==='ready' && this.phase!=='ended'
-    this.applyAudio(this.applied.pitchSemitones + legacy, this.applied.gainDb,
-      expressiveRoute || Math.abs(legacy) > .001)
+    this.applyAudio(this.applied.pitchSemitones + legacy, smile * VOICE_SMILE_SEMITONES, this.applied.gainDb,
+      expressiveRoute || Math.abs(legacy) > .001 || Math.abs(smile) > .001)
   }
 
   private ramp(param: AudioParam, target: number, seconds: number, lo = -Infinity, hi = Infinity) {
@@ -150,14 +161,21 @@ export class VoiceProcessor {
     param.setValueAtTime(current, now)
     param.linearRampToValueAtTime(clamp(target, lo, hi), now + seconds)
   }
-  private applyAudio(pitch: number, gainDb: number, wet: boolean) {
+  // Small moves are skipped so Match/Detone don't re-target the shifter on every frame.
+  private setShift(semitones: number, formantSemitones: number) {
+    const moved = (a: number, b: number) => a === 0 ? b !== 0 : Math.abs(a - b) >= .05
+    if (!this.shifter || !moved(semitones, this.shift.semitones) && !moved(formantSemitones, this.shift.formantSemitones)) return
+    this.shift = { semitones, formantSemitones }
+    void this.shifter.schedule({ ...this.shift, formantCompensation: true })
+  }
+  private applyAudio(pitch: number, formant: number, gainDb: number, wet: boolean) {
     const expressive = this.condition.mode === 'match' || this.condition.mode === 'detone'
     const audibility = this.condition.audibility || this.condition.mode === 'audibility'
     // The manual pitch control and audibility correction have their own limits.
     // Expressive adjustments remain bounded before adding the fixed level correction.
-    const pitchLimit = this.condition.mode === 'bypass' && !audibility ? 12 : .75
+    const pitchLimit = this.condition.mode === 'bypass' && !audibility ? 1 : .75
     const gainLimit = (audibility ? 6 : 0) + (expressive ? 2 : 0)
-    if (this.shifter) this.ramp(this.shifter.pitchSemitones, pitch, .35, -pitchLimit, pitchLimit)
+    this.setShift(clamp(pitch, -pitchLimit, pitchLimit), clamp(formant, -VOICE_SMILE_SEMITONES, VOICE_SMILE_SEMITONES))
     this.ramp(this.gain.gain, 10 ** (clamp(gainDb,-gainLimit,gainLimit) / 20), .35,
       10 ** (-gainLimit/20), 10 ** (gainLimit/20))
     this.ramp(this.wet.gain, wet ? 1 : 0, .03, 0, 1)
@@ -166,24 +184,25 @@ export class VoiceProcessor {
   private fail(reason: string) {
     this.health.state = 'failed'; this.health.reason = reason
     this.applied = { ...IDENTITY_VOICE, fallbackReason: reason }
-    this.applyAudio(0, 0, false)
+    this.applyAudio(0, 0, 0, false)
   }
 
-  setSemitones(v: number) { this.legacySemitones = Number.isFinite(v) ? clamp(v, -12, 12) : 0 }
+  setSemitones(v: number) { this.legacySemitones = Number.isFinite(v) ? clamp(v, -1, 1) : 0 }
+  setSmile(v: number) { this.smile = Number.isFinite(v) ? clamp(v, -1, 1) : 0 }
   setSlot(slot: VoiceSeat) { this.slot = slot }
   setClock(offset: number, uncertaintyMs: number) { this.epochOffset = offset; this.clockUncertainty = uncertaintyMs }
   setPhase(phase: 'waiting' | 'live' | 'ended') {
     this.phase = phase
     if (phase === 'live') this.analysis.setLive(Date.now() + this.epochOffset)
-    if (phase === 'ended') { this.analysis.flush(); this.applyAudio(0, 0, false) }
+    if (phase === 'ended') { this.analysis.flush(); this.applyAudio(0, 0, 0, false) }
   }
   setCondition(condition: VoiceCondition) {
     this.condition = { ...condition }
-    if (condition.mode !== 'bypass' || condition.audibility) { this.analysis.freeze(); this.legacySemitones = 0 }
+    if (condition.mode !== 'bypass' || condition.audibility) { this.analysis.freeze(); this.legacySemitones = 0; this.smile = 0 }
     if (condition.mode === 'bypass' && !condition.audibility) {
-      this.legacySemitones = 0
+      this.legacySemitones = 0; this.smile = 0
       this.applied = { ...IDENTITY_VOICE }
-      this.applyAudio(0, 0, false)
+      this.applyAudio(0, 0, 0, false)
     }
   }
   setPartnerTurn(turn: VoiceTurn | null) { this.pendingPartner = turn; if (!this.clean?.speechActive) this.partner = turn }
@@ -203,7 +222,7 @@ export class VoiceProcessor {
     const settings = this.micStream.getAudioTracks()[0]?.getSettings() ?? {}
     const actual: VoiceApplied = { ...this.applied,
       limiterReductionDb: this.limiterReductionDb,
-      pitchSemitones: this.shifter?.pitchSemitones.value ?? 0,
+      pitchSemitones: this.shift.semitones,
       gainDb: 20 * Math.log10(Math.max(1e-8, this.gain.gain.value)),
       active: (this.wet.gain.value > .99 || Math.abs(this.gain.gain.value-1)>.001) && this.health.state === 'ready',
     }
@@ -218,7 +237,7 @@ export class VoiceProcessor {
     this.closed = true
     if (this.watchdog) clearInterval(this.watchdog)
     this.worker?.terminate()
-    this.source.disconnect(); this.levelAnalyser.disconnect(); this.tap?.disconnect(); this.shifter?.disconnect()
+    this.source.disconnect(); this.levelAnalyser.disconnect(); this.tap?.disconnect(); this.shifter?.disconnect(); this.dryDelay.disconnect()
     this.limiter?.disconnect(); this.dry.disconnect(); this.wet.disconnect(); this.gain.disconnect()
     void this.context.close()
   }

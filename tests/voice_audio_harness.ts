@@ -1,4 +1,4 @@
-import { FormantCorrectionNode } from '@soundtouchjs/formant-correction-worklet'
+import SignalsmithStretch from 'signalsmith-stretch'
 import { PitchDetector } from 'pitchy'
 import { VoiceProcessor } from '../renderer/lib/voice'
 import { DEFAULT_VOICE_CONDITION } from '../main/voiceProtocol'
@@ -15,17 +15,21 @@ const pitch=(a:Float32Array,rate:number)=>{
   values.sort((a,b)=>a-b)
   return values[Math.floor(values.length/2)]??null
 }
-async function render(rate:number,hz:number,shift:number,amplitude=.1,stretch=VOICE_STRETCH) {
+const shifterFor=async(ctx:BaseAudioContext,stretch=VOICE_STRETCH,semitones=0,formantSemitones=0)=>{
+  const node=await SignalsmithStretch(ctx,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]})
+  await node.configure(stretch)
+  await node.schedule({active:true,semitones,formantSemitones,formantCompensation:true,formantBaseHz:0})
+  return node
+}
+async function render(rate:number,hz:number,shift:number,amplitude=.1,stretch=VOICE_STRETCH,formant=0) {
   const ctx=new OfflineAudioContext(1,rate*3,rate)
-  await FormantCorrectionNode.register(ctx,'/voice/formant-processor.js')
   await ctx.audioWorklet.addModule('/voice/voice.worklet.js')
   const source=ctx.createBufferSource(),buf=ctx.createBuffer(1,rate*3,rate)
   const input=buf.getChannelData(0)
-  for(let i=0;i<input.length;i++)input[i]=amplitude*Math.sin(2*Math.PI*hz*i/rate)
+  // Voice-like harmonic tone; a lone sine has no vocal shape for the formant stage to keep.
+  for(let i=0;i<input.length;i++)for(let h=1;h<=20;h++)input[i]+=amplitude/2*Math.sin(2*Math.PI*hz*h*i/rate)/h
   source.buffer=buf
-  const node=new FormantCorrectionNode({context:ctx,outputChannelCount:1})
-  node.setStretchParameters(stretch)
-  node.pitchSemitones.value=shift
+  const node=await shifterFor(ctx,stretch,shift,formant)
   const limiter=new AudioWorkletNode(ctx,'voice-limiter',{outputChannelCount:[1]})
   source.connect(node).connect(limiter).connect(ctx.destination)
   source.start(.25)
@@ -38,8 +42,22 @@ async function render(rate:number,hz:number,shift:number,amplitude=.1,stretch=VO
   const f=pitch(output,rate)
   let peak=0,first=-1,nonfinite=0
   output.forEach((x,i)=>{if(!Number.isFinite(x))nonfinite++;peak=Math.max(peak,Math.abs(x));if(first<0&&Math.abs(x)>.001)first=i})
-  return {rate,hz,shift,measuredHz:f,errorCents:f?1200*Math.log2(f/(hz*2**(shift/12))):null,
+  return {rate,hz,shift,formant,measuredHz:f,errorCents:f?1200*Math.log2(f/(hz*2**(shift/12))):null,
     rms:rms(output.slice(rate)),peak,firstSignalMs:first/rate*1000-250,nonfinite}
+}
+// The dry path is delayed by the shifter's reported latency; both must start together.
+async function alignment(rate:number) {
+  const ctx=new OfflineAudioContext(2,rate,rate)
+  const shifter=await shifterFor(ctx),latency=await shifter.latency()
+  const delay=ctx.createDelay(1);delay.delayTime.value=latency
+  const merge=ctx.createChannelMerger(2),source=ctx.createBufferSource(),buf=ctx.createBuffer(1,rate,rate)
+  const x=buf.getChannelData(0)
+  for(let i=rate*.25;i<rate*.5;i++)x[i]=.2*Math.sin(2*Math.PI*150*i/rate)
+  source.buffer=buf;source.connect(shifter).connect(merge,0,0);source.connect(delay).connect(merge,0,1)
+  merge.connect(ctx.destination);source.start()
+  const out=await ctx.startRendering()
+  const onset=(a:Float32Array)=>a.findIndex(v=>Math.abs(v)>.05)/rate*1000-250
+  return {rate,latencyMs:latency*1000,wetOnsetMs:onset(out.getChannelData(0)),dryOnsetMs:onset(out.getChannelData(1))}
 }
 async function limiterIdentity(rate:number) {
   const ctx=new OfflineAudioContext(1,rate,rate)
@@ -97,7 +115,7 @@ async function manualPitch() {
     const start=performance.now()
     while(processor.report()?.health.state==='loading'&&performance.now()-start<30000)await wait(100)
     const micLevel=processor.micLevel()
-    for(const requested of [-4,0,4]) {
+    for(const requested of [-1,0,1]) {
       processor.setSemitones(requested);await wait(1600)
       const data=new Float32Array(8192);analyser.getFloatTimeDomainData(data)
       const [hz,clarity]=detector.findPitch(data,input.sampleRate)
@@ -108,4 +126,4 @@ async function manualPitch() {
     return {samples,bypass:processor.report()?.applied.pitchSemitones,micLevel}
   } finally {monitor.disconnect();processor.close();oscillator.stop();await input.close()}
 }
-Object.assign(window,{voiceQA:{render,limiterIdentity,realtime,manualPitch}})
+Object.assign(window,{voiceQA:{render,alignment,limiterIdentity,realtime,manualPitch}})

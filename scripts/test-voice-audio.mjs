@@ -19,7 +19,7 @@ const server=createServer(async(req,res)=>{
 })
 await new Promise(r=>server.listen(0,'127.0.0.1',r))
 const browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']})
-const results={tones:[],identity:[],runtime:null,manual:null,errors:[]}
+const results={tones:[],identity:[],alignment:[],runtime:null,manual:null,errors:[]}
 let failed
 try {
   const page=await browser.newPage()
@@ -28,9 +28,9 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`)
   await page.waitForFunction(()=>!!window.voiceQA)
   if(process.env.VOICE_QA_SWEEP==='1') {
-    for(const p of [[20,6,4],[24,8,4],[24,12,6],[32,12,6],[40,15,8],[48,20,8]]) {
+    for(const p of [[30,8],[40,10],[50,12],[60,15]]) {
       for(const hz of [90,200,300])for(const shift of [-.75,.75]) {
-        const stretch={sequenceMs:p[0],seekWindowMs:p[1],overlapMs:p[2],quickSeek:false}
+        const stretch={blockMs:p[0],intervalMs:p[1]}
         const result=await page.evaluate(({hz,shift,stretch})=>window.voiceQA.render(48000,hz,shift,.1,stretch),{hz,shift,stretch})
         console.log(JSON.stringify({...result,stretch}))
       }
@@ -38,10 +38,13 @@ try {
   }
   for(const rate of [44100,48000]) {
     results.identity.push(await page.evaluate(rate=>window.voiceQA.limiterIdentity(rate),rate))
+    results.alignment.push(await page.evaluate(rate=>window.voiceQA.alignment(rate),rate))
     for(const hz of [90,200,300])for(const shift of [-.75,0,.75]) {
       const result=await page.evaluate(({rate,hz,shift})=>window.voiceQA.render(rate,hz,shift),{rate,hz,shift})
       results.tones.push(result);console.log(JSON.stringify(result))
     }
+    // Smiling voice moves the vocal resonances, never the pitch.
+    for(const hz of [90,200])results.tones.push(await page.evaluate(({rate,hz})=>window.voiceQA.render(rate,hz,0,.1,undefined,1.5),{rate,hz}))
   }
   const seconds=Number(process.env.VOICE_QA_SECONDS??150)
   results.manual=await page.evaluate(()=>window.voiceQA.manualPitch())
@@ -58,6 +61,10 @@ try {
     console.log(JSON.stringify({conditionApplied:results.runtime.conditionApplied,last:results.runtime.samples.at(-1)}))
   }
   for(const r of results.identity)assert.ok(r.error<1e-6,'Neutral limiter must be identity apart from known delay')
+  for(const r of results.alignment) {
+    assert.ok(r.latencyMs<=60.5,`Shifter delay over the 60 ms budget: ${JSON.stringify(r)}`)
+    assert.ok(Math.abs(r.wetOnsetMs-r.dryOnsetMs)<5,`Dry and shifted paths must line up: ${JSON.stringify(r)}`)
+  }
   for(const r of results.tones) {
     assert.equal(r.nonfinite,0);assert.ok(r.peak<=10**(-3/20)+1e-6)
     assert.ok(r.errorCents!==null&&Math.abs(r.errorCents)<20,`Pitch accuracy failed: ${JSON.stringify(r)}`)
