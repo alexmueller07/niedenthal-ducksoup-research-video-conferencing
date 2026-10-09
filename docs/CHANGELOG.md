@@ -21,6 +21,21 @@
 
 * **Date:** 08-10-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** More natural voice changes and a new smiling voice
+
+* **Previous behavior:**
+Changed voices (Lower voice, Higher voice, Match, Detone) sounded robotic and metallic. Switching a voice change on or off could briefly sound echoey.
+
+* **New behavior:**
+Voice changes use a new, higher-quality engine that keeps each person's own vocal character, so a changed voice still sounds like a real person. Switching on or off no longer echoes. The voice pitch slider now runs from −1 to +1 in fine steps instead of −12 to +12, and Lower/Higher voice (and the matching automation rules) use −1/+1 instead of −2/+2, since bigger shifts sounded fake. A new "Smiling voice" slider and preset make a voice sound like it's smiling without changing its pitch, on the researcher screen and in the 1-Person Test Station. Session files record how much smiling voice was applied. All voice audio, including Neutral, now has the same small delay (60 ms).
+
+* **Why this matters:**
+Participants should not be able to tell their partner's voice is being changed. The smiling voice gives a voice match for the face smile, and the equal delay keeps Neutral a fair control.
+
+---
+
+* **Date:** 08-10-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Cleaner researcher screens, simpler sign-in, and a voice upload in the test station
 
 * **Previous behavior:**

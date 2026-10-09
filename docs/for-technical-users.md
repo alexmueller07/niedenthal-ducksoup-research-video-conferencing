@@ -35,7 +35,7 @@ Architecture and implementation details for the Lab Video Call app. For a plain-
 | Styling | Tailwind CSS `^4.2.2` | `renderer/styles/globals.css` |
 | Face detection | MediaPipe Tasks-Vision `^0.10.18` (FaceLandmarker, WASM/GPU) | `renderer/lib/faceMorph.ts` |
 | Video morph | Canvas 2D triangular mesh warp, no external CV library | `renderer/lib/faceMorph.ts` |
-| Voice shift | Web Audio API delay-line pitch shifter | `renderer/lib/voice.ts` |
+| Voice shift | Signalsmith Stretch `1.3.2` (WASM AudioWorklet), pitch + formant control | `renderer/lib/voice.ts` |
 | Realtime media | WebRTC, peer-to-peer | `renderer/lib/rtc.ts` |
 | Signaling | `ws` `^8.18.0` WebSocket server | `main/server.ts` |
 | Persistence | `electron-store` (preferences), Node `fs` write-streams (logs/recordings) | `main/main.ts`, `main/logger.ts` |
@@ -310,26 +310,33 @@ openScale = 1 − 0.6 · clamp01((openRatio − neutralOpen) / (openSmileOpen �
 → a 40% floor at a wide-open mouth. That is exactly where a planar corner-pull warp looks worst and
 where the effect is least noticeable anyway. Continuous, so it never pulses during speech.
 
-### 3.7 Voice pitch shift
+### 3.7 Voice pitch shift and smiling voice
 
-`renderer/lib/voice.ts`. Real-time pitch/formant shift on the live mic via the delay-line modulation
-("Jungle") technique: two cross-faded delay lines with linearly swept delay times. Genuine, audible,
-and recorded into the altered audio track.
+`renderer/lib/voice.ts`. Real-time voice changes on the live mic using Signalsmith Stretch
+(`signalsmith-stretch`, MIT), a frequency-domain shifter running as a WASM AudioWorklet. Pitch and
+vocal resonances (formants) are controlled separately:
 
-Constants: `DELAY_TIME = 0.1 s`, `FADE_TIME = 0.05 s`, `BUFFER_TIME = 0.1 s`.
+- **Pitch** (`setSemitones(n)`): moves the voice up or down with formant compensation on, so the
+  speaker keeps their own vocal character (no chipmunk/giant effect).
+- **Smiling voice** (`setSmile(v)`, −1…1): raises the formants by `v × 1.5` semitones with pitch
+  unchanged. A smile shortens the vocal tract, which raises the resonances; negative values darken.
 
-`setSemitones(n)`:
-```
-mult = clamp(n / 12, −1, 1)     # ±12 semitones = ±1 octave = full range
-route "shift up" buffers if mult > 0, else "shift down" buffers
-setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.01 s
-```
+Settings (`renderer/lib/voiceDspConfig.ts`): `blockMs = 60`, `intervalMs = 15`. The shifter's delay
+equals `blockMs`. Shorter blocks failed pitch accuracy on low (~90 Hz) voices. The unprocessed path
+goes through a `DelayNode` set to the same delay, so switching between processed and unprocessed
+audio never overlaps two offset copies, and Neutral/Sham has exactly the same 60 ms delay as a
+real condition. Changes smaller than 0.05 st are skipped so Match/Detone don't re-target the
+shifter on every analysis frame.
 
-- `n = 0` → bypass.
-- Dashboard slider: −12…+12 st (step 1). The 1-Person Test Station has no voice control — it's
-  video-only. Values beyond ±12 have no additional effect (clamped internally).
-- Presets: "Lower voice" = −2 st, "Higher voice" = +2 st. All other presets = 0 st.
-- Reference: pitch ratio ≈ `2^(n/12)`; +2 st ≈ 1.122×, −2 st ≈ 0.891×, ±12 st = 2×/0.5×.
+- `n = 0` and `v = 0` → unprocessed (delay-matched) path.
+- Dashboard sliders: Voice pitch −1…+1 st (step 0.05), Smiling voice −1…1 (step 0.05). Both are also
+  in the 1-Person Test Station for uploaded recordings.
+- Presets: "Lower voice" = −1 st, "Higher voice" = +1 st, "Smiling voice" = smile 1. All other
+  presets = 0.
+- Both manual controls are blocked while a Match/Detone/Audibility condition is on, and reset when
+  one starts. `effect_state_<seat>.csv` records `self_voice_smile` / `partner_voice_smile` as its
+  last two columns.
+- Reference: pitch ratio ≈ `2^(n/12)`; +1 st ≈ 1.059×, −1 st ≈ 0.944×. Larger shifts sounded unnatural, so ±1 st is the cap.
 - `micLevel()` exposes a short-window RMS of the raw mic for the talking detector (§3.6). Read-only;
   the pitch shifter's own signal path is untouched.
 
@@ -345,8 +352,9 @@ setDelay(DELAY_TIME · |mult|)   # modulation depth, via setTargetAtTime τ = 0.
 | `smile-strong` | Smile (strong) | 0.50 | 0 | no | Half of their own maximum smile. |
 | `frown-subtle` | Frown (subtle) | −0.25 | 0 | no | A quarter of their own maximum frown. |
 | `frown-strong` | Frown (strong) | −0.55 | 0 | no | Just over half of their own maximum frown. |
-| `warm-voice` | Lower voice | 0.15 | −2 | no | Slight smile lift + slightly lower voice. |
-| `bright-voice` | Higher voice | 0.15 | +2 | no | Slight smile lift + slightly higher voice. |
+| `warm-voice` | Lower voice | 0.15 | −1 | no | Slight smile lift + slightly lower voice. |
+| `bright-voice` | Higher voice | 0.15 | +1 | no | Slight smile lift + slightly higher voice. |
+| `smile-voice` | Smiling voice | 0 | 0 (smile 1) | no | Raised vocal resonances, pitch and face unchanged. |
 
 **These values were rescaled when calibration landed.** α now means "fraction of this person's own
 maximum", so the old numbers (0.35 / 0.9 / −0.4 / −0.9) would have meant something far stronger. The
@@ -842,7 +850,7 @@ fallbacks, which reproduce the pre-calibration geometry exactly.
 | `BUFFER_TIME` | 0.1 s |
 | Octave clamp | `n/12 ∈ [−1, 1]` |
 | Delay smoothing τ | 0.01 s |
-| Admin slider range/step | −12…+12 st / 1 |
+| Admin slider range/step | −1…+1 st / 0.05 |
 | Legacy slider range/step | −8…+8 st / 1 |
 
 ### Detection
@@ -908,7 +916,8 @@ uncalibrated fallbacks.
 | Control | Range | Step | Neutral |
 |---|---|---|---|
 | Smile α (dashboard) | −1…1 | 0.05 | 0 |
-| Voice pitch (dashboard) | −12…+12 st | 1 | 0 |
+| Voice pitch (dashboard, 1-Person Test Station) | −1…+1 st | 0.05 | 0 |
+| Smiling voice (dashboard, 1-Person Test Station) | −1…1 | 0.05 | 0 |
 | Smile α (1-Person Test Station) | −1…1 | 0.05 | 0 |
 | Rule hold time | 0…30 s | 0.5 | — |
 | Timer minute/second | 0–180 / 0–59 | 1 | — |
@@ -964,7 +973,7 @@ Things to know before citing or relying on this software in a study.
 | `faceMorph.ts` | `FaceMorphProcessor`: MediaPipe detection, landmark geometry, calibrated mesh warp + total cap, expression classifier, calibration frame sampling and screenshots. |
 | `calibration.ts` | Pure calibration maths: phase summaries, peak selection, validation, profile building/reloading, per-person levels, the morph cap, `TalkingDetector`. |
 | `calibrationRunner.ts` | The guided four-phase sequence (prompts, countdown, recording, peak screenshot), shared by both modes. |
-| `voice.ts` | `VoiceProcessor`: Web Audio delay-line pitch shifter, plus `micLevel()` for the talking detector. |
+| `voice.ts` | `VoiceProcessor`: Signalsmith pitch/formant shifter with a delay-matched dry path, plus `micLevel()` for the talking detector. |
 | `effects.ts` | `LiveEffects`: participant outgoing pipeline (clean + altered streams); test-face stream. |
 | `capture.ts` | `CaptureStation`: single-machine, single-person capture+record engine; runs the shared calibration sequence on request (1-Person Test Station). |
 | `rtc.ts` | `PeerLink`: one WebRTC connection, perfect negotiation. |

@@ -133,6 +133,7 @@ Rather than picking raw numbers, you can apply a named condition with one click:
 | Frown (strong) | Clearly shifts toward a frown |
 | Lower voice | Slight smile lift + slightly lower voice |
 | Higher voice | Slight smile lift + slightly higher voice |
+| Smiling voice | Voice sounds like it's smiling; pitch and face unchanged |
 
 ## Test mode
 
