@@ -66,10 +66,14 @@ export interface EffectStateInput {
   selfAlpha: number
   /** How much this participant's own voice pitch was changed. */
   selfVoiceSemitones: number
+  /** How much this participant's own voice was made to sound smiling. */
+  selfVoiceSmile: number
   /** How much the partner's face was changed, at this same moment. Blank if the partner isn't connected yet. */
   partnerAlpha?: number | null
   /** How much the partner's voice pitch was changed, at this same moment. */
   partnerVoiceSemitones?: number | null
+  /** How much the partner's voice was made to sound smiling, at this same moment. */
+  partnerVoiceSmile?: number | null
   faceFound: boolean
   fps: number
   cameraOn: boolean
@@ -197,6 +201,8 @@ self_face_change / partner_face_change: 0 = normal (no change). Higher than
 0 = more smiling. Lower than 0 = more frowning.
 self_voice_change / partner_voice_change: 0 = normal (no change). Positive
 = pitched up. Negative = pitched down.
+self_voice_smile / partner_voice_smile: 0 = normal (no change). 1 = full
+smiling voice (vocal resonances raised, pitch unchanged). Negative = darker.
 "self" is this file's own participant; "partner" is what was being done to
 the other participant, at that same moment.
 
@@ -468,7 +474,7 @@ export class SessionLogger {
     let s = this.stateStreams.get(key)
     if (!s) {
       s = fs.createWriteStream(path.join(this.dir, `effect_state_${key}.csv`), { flags: 'a' })
-      s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason\n')
+      s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason,self_voice_smile,partner_voice_smile\n')
       this.stateStreams.set(key, s)
     }
     return s
@@ -551,6 +557,8 @@ export class SessionLogger {
         csvField(input.voice?.applied.gainDb ?? ''),
         csvField(input.voice?.applied.active ?? ''),
         csvField(input.voice?.applied.fallbackReason ?? ''),
+        input.selfVoiceSmile,
+        input.partnerVoiceSmile ?? '',
       ].join(',') + '\n',
     )
   }

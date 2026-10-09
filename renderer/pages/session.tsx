@@ -316,6 +316,7 @@ export default function ParticipantSession() {
           if (fx) {
             fx.setAlpha(msg.effects.alpha)
             fx.setSemitones(msg.effects.voiceSemitones)
+            fx.setVoiceSmile(msg.effects.voiceSmile)
             sendEvent('change_shown', { detail: msg.effects })
           }
           return

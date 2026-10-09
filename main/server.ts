@@ -121,7 +121,7 @@ export class SessionServer {
           detail:{rule:describeRule(rule),condition}})
       },
       applyEffects: (slot, effects, rule, why) => {
-        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && effects.voiceSemitones!==0) {
+        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && (effects.voiceSemitones!==0||effects.voiceSmile!==0)) {
           this.log({event:'voice_rule_blocked',target:slot,detail:{rule:rule.id,reason:'Voice condition active'}})
           return
         }
@@ -443,8 +443,10 @@ export class SessionServer {
           liveStartedAtMs: this.sessionStartedAt ? Date.parse(this.sessionStartedAt) : null,
           selfAlpha: telemetry.alpha,
           selfVoiceSemitones: telemetry.voiceSemitones,
+          selfVoiceSmile: telemetry.voiceSmile,
           partnerAlpha: partner?.telemetry?.alpha,
           partnerVoiceSemitones: partner?.telemetry?.voiceSemitones,
+          partnerVoiceSmile: partner?.telemetry?.voiceSmile,
           faceFound: telemetry.faceFound,
           fps: telemetry.fps,
           cameraOn: telemetry.cameraOn,
@@ -581,7 +583,7 @@ export class SessionServer {
       }
       case 'set-effect': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (msg.param==='voiceSemitones' && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
+        if ((msg.param==='voiceSemitones'||msg.param==='voiceSmile') && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using legacy pitch controls'})
           return
         }
@@ -609,7 +611,7 @@ export class SessionServer {
       }
       case 'apply-preset': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && msg.effects.voiceSemitones!==0) {
+        if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && (msg.effects.voiceSemitones!==0||msg.effects.voiceSmile!==0)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using a legacy voice preset'})
           return
         }
@@ -768,7 +770,7 @@ export class SessionServer {
     if (condition.mode!=='bypass'||condition.audibility) {
       for (const participant of this.clients.values()) {
         if (participant.role!=='participant') continue
-        participant.effects={...participant.effects,voiceSemitones:0}
+        participant.effects={...participant.effects,voiceSemitones:0,voiceSmile:0}
         this.send(participant.ws,{type:'effect-command',effects:participant.effects,cause:'voice_condition'})
       }
       this.broadcastRoster()

@@ -45,6 +45,7 @@ export class LiveEffects {
 
   private alpha = 0
   private semitones = 0
+  private smile = 0
   private frameTimes: number[] = []
   private loopStartedAtMs: number | null = null
   private testFaceTimer: ReturnType<typeof setInterval> | null = null
@@ -107,6 +108,7 @@ export class LiveEffects {
       this.voice = new VoiceProcessor(new MediaStream(this.camera.getAudioTracks()))
       await this.voice.resume()
       this.voice.setSemitones(this.semitones)
+      this.voice.setSmile(this.smile)
       this.status.voice = true
       onLog('Voice processor ready')
     } catch (err) {
@@ -208,6 +210,11 @@ export class LiveEffects {
     this.voice?.setSemitones(semitones)
   }
 
+  setVoiceSmile(smile: number) {
+    this.smile = smile
+    this.voice?.setSmile(smile)
+  }
+
   voiceReport() { return this.voice?.report() ?? null }
   setVoiceCondition(condition: VoiceCondition) { this.voice?.setCondition(condition) }
   setVoiceSlot(slot: VoiceSeat) { this.voice?.setSlot(slot) }
@@ -244,6 +251,7 @@ export class LiveEffects {
     return {
       alpha: this.alpha,
       voiceSemitones: this.semitones,
+      voiceSmile: this.smile,
       faceFound: this.face.faceFound,
       fps: this.currentFps(),
       cameraOn: !!this.camera && this.camera.getVideoTracks().some((t) => t.readyState === 'live'),

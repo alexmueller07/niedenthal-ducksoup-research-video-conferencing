@@ -86,7 +86,7 @@ interface RuleRuntime {
   appliedEffects: EffectState | null
   savedVoice: VoiceCondition | null
   appliedVoice: VoiceCondition | null
-  savedLegacyPitch: Partial<Record<PSlot, number>> | null
+  savedLegacyPitch: Partial<Record<PSlot, Pick<EffectState, 'voiceSemitones' | 'voiceSmile'>>> | null
   /** Timer rules: fully done for this live phase (fired and, if set, reverted). */
   done: boolean
 }
@@ -226,7 +226,7 @@ export class RuleEngine {
         if (!currentVoice || currentVoice.mode !== 'bypass' || currentVoice.audibility) return false
         const target = this.host.effectsOf(rule.action.slot)
         state.savedEffects = { ...target }
-        state.appliedEffects = { ...target, voiceSemitones: rule.action.mode === 'lower' ? -2 : 2 }
+        state.appliedEffects = { ...target, voiceSemitones: rule.action.mode === 'lower' ? -1 : 1 }
         state.fired = true
         state.firedAt = nowMs
         this.host.applyEffects(rule.action.slot, state.appliedEffects, rule, 'fired')
@@ -238,8 +238,11 @@ export class RuleEngine {
         intensityRangeScale: rule.action.mode === 'detone' ? .8 : 1 }
       if (!this.host.voiceConditionOf || !this.host.applyVoice || !this.host.canApplyVoice?.(condition)) return false
       state.savedVoice = { ...this.host.voiceConditionOf() }
-      state.savedLegacyPitch = { P1:this.host.effectsOf('P1').voiceSemitones,
-        P2:this.host.effectsOf('P2').voiceSemitones }
+      const manualVoice = (slot: PSlot) => {
+        const { voiceSemitones, voiceSmile } = this.host.effectsOf(slot)
+        return { voiceSemitones, voiceSmile }
+      }
+      state.savedLegacyPitch = { P1:manualVoice('P1'), P2:manualVoice('P2') }
       state.appliedVoice = condition
       state.fired = true
       state.firedAt = nowMs
@@ -252,7 +255,7 @@ export class RuleEngine {
     state.firedAt = nowMs
     this.host.applyEffects(
       rule.action.slot,
-      { alpha: preset.alpha, voiceSemitones: preset.voiceSemitones },
+      { alpha: preset.alpha, voiceSemitones: preset.voiceSemitones, voiceSmile: preset.voiceSmile },
       rule,
       'fired',
     )
@@ -269,9 +272,9 @@ export class RuleEngine {
         this.host.applyVoice?.(restore, rule, why)
         if (mode === 'previous' && restore.mode === 'bypass' && !restore.audibility) {
           for (const slot of ['P1','P2'] as const) {
-            const oldPitch = state.savedLegacyPitch?.[slot] ?? 0
-            if (oldPitch !== 0) this.host.applyEffects(slot,
-              { ...this.host.effectsOf(slot), voiceSemitones:oldPitch },rule,why)
+            const old = state.savedLegacyPitch?.[slot]
+            if (old && (old.voiceSemitones !== 0 || old.voiceSmile !== 0)) this.host.applyEffects(slot,
+              { ...this.host.effectsOf(slot), ...old },rule,why)
           }
         }
       }
@@ -279,7 +282,7 @@ export class RuleEngine {
       // Preserve a later manual pitch/face edit by the researcher.
       if (JSON.stringify(this.host.effectsOf(rule.action.slot)) === JSON.stringify(state.appliedEffects) && mode !== 'none') {
         this.host.applyEffects(rule.action.slot, mode === 'previous' ? state.savedEffects ?? { ...NEUTRAL_EFFECTS }
-          : { ...state.appliedEffects, voiceSemitones: 0 }, rule, why)
+          : { ...state.appliedEffects, voiceSemitones: 0, voiceSmile: 0 }, rule, why)
       }
     } else if (mode === 'previous') {
       this.host.applyEffects(rule.action.slot, state.savedEffects ?? { ...NEUTRAL_EFFECTS }, rule, why)

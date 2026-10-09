@@ -241,7 +241,8 @@ export default function AdminDashboard() {
                 if (info && performance.now() - touched > 1500) {
                   setEffectsUi((prev) =>
                     prev[slot].alpha === info.effects.alpha &&
-                    prev[slot].voiceSemitones === info.effects.voiceSemitones
+                    prev[slot].voiceSemitones === info.effects.voiceSemitones &&
+                    prev[slot].voiceSmile === info.effects.voiceSmile
                       ? prev
                       : { ...prev, [slot]: info.effects },
                   )
@@ -533,7 +534,7 @@ export default function AdminDashboard() {
   function applyPreset(slot: PSlot, presetId: string) {
     const p = PRESETS.find((x) => x.id === presetId)
     if (!p) return
-    const effects: EffectState = { alpha: p.alpha, voiceSemitones: p.voiceSemitones }
+    const effects: EffectState = { alpha: p.alpha, voiceSemitones: p.voiceSemitones, voiceSmile: p.voiceSmile }
     setEffectsUi((prev) => ({ ...prev, [slot]: effects }))
     clientRef.current?.send({ type: 'apply-preset', slot, presetId, effects })
   }
@@ -1160,10 +1161,11 @@ function ParticipantPanel({
   const applied =
     telemetry &&
     Math.abs(telemetry.alpha - effects.alpha) < 0.011 &&
-    Math.abs(telemetry.voiceSemitones - effects.voiceSemitones) < 0.51
+    Math.abs(telemetry.voiceSemitones - effects.voiceSemitones) < 0.011 &&
+    Math.abs(telemetry.voiceSmile - effects.voiceSmile) < 0.011
 
   const modified =
-    Math.abs(effects.alpha) >= 0.02 || Math.abs(effects.voiceSemitones) >= 0.5
+    Math.abs(effects.alpha) >= 0.02 || Math.abs(effects.voiceSemitones) >= 0.02 || Math.abs(effects.voiceSmile) >= 0.02
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/60">
@@ -1333,22 +1335,34 @@ function ParticipantPanel({
         <EffectSlider
           label="Voice pitch"
           hint={
-            effects.voiceSemitones > 0.5
+            effects.voiceSemitones > 0.02
               ? 'higher'
-              : effects.voiceSemitones < -0.5
+              : effects.voiceSemitones < -0.02
                 ? 'lower'
                 : 'neutral'
           }
-          min={-12}
-          max={12}
-          step={1}
+          min={-1}
+          max={1}
+          step={0.05}
           value={effects.voiceSemitones}
           neutral={0}
-          format={(v) => `${v > 0 ? '+' : ''}${v} st`}
+          format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} st`}
           onChange={(v) => onEffect('voiceSemitones', v)}
           onCommit={(v) => onEffect('voiceSemitones', v, true)}
         />
-        <PresetRows rows={[['warm-voice', 'bright-voice']]} effects={effects} onPreset={onPreset} />
+        <EffectSlider
+          label="Smiling voice"
+          hint={effects.voiceSmile > 0.02 ? 'smiling' : effects.voiceSmile < -0.02 ? 'darker' : 'neutral'}
+          min={-1}
+          max={1}
+          step={0.05}
+          value={effects.voiceSmile}
+          neutral={0}
+          format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`}
+          onChange={(v) => onEffect('voiceSmile', v)}
+          onCommit={(v) => onEffect('voiceSmile', v, true)}
+        />
+        <PresetRows rows={[['warm-voice', 'bright-voice', 'smile-voice']]} effects={effects} onPreset={onPreset} />
         {voicePanel}
       </div>
     </section>
@@ -1382,8 +1396,8 @@ const VOICE_RULE_OPTIONS = [
   { value: 'audibility', label: 'Audibility' },
   { value: 'match', label: 'Match partner' },
   { value: 'detone', label: 'Detone' },
-  { value: 'lower', label: 'Lower voice (-2 st)' },
-  { value: 'higher', label: 'Higher voice (+2 st)' },
+  { value: 'lower', label: 'Lower voice (-1 st)' },
+  { value: 'higher', label: 'Higher voice (+1 st)' },
 ] as const
 
 function ruleId(): string {
@@ -1790,7 +1804,8 @@ function PresetRows({
                 className={
                   'rounded-full px-2.5 py-1 text-[11px] transition ' +
                   (Math.abs(effects.alpha - p.alpha) < 0.011 &&
-                  effects.voiceSemitones === p.voiceSemitones
+                  Math.abs(effects.voiceSemitones - p.voiceSemitones) < 0.011 &&
+                  Math.abs(effects.voiceSmile - p.voiceSmile) < 0.011
                     ? 'bg-violet-600 text-white'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
                 }

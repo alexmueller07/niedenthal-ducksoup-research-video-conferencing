@@ -3,8 +3,8 @@
 // These are the experiment's manipulation conditions. Keeping them as named,
 // documented presets — rather than asking the RA to dial in raw numbers — makes
 // the manipulation reproducible across sessions and removes a class of operator
-// error. Each condition bundles a facial smile setting (alpha) and a voice pitch
-// setting (semitones).
+// error. Each condition bundles a facial smile setting (alpha), a voice pitch
+// setting (semitones) and a smiling-voice setting.
 //
 // Lives in main/ so the session server's rule engine can resolve a presetId to
 // its effect values; the renderer re-exports from renderer/lib/presets.ts.
@@ -35,6 +35,8 @@ export interface ModificationPreset {
   alpha: number
   /** Voice pitch shift in semitones. 0 = neutral. */
   voiceSemitones: number
+  /** Smiling voice (formant raise). 0 = neutral, 1 = full. */
+  voiceSmile: number
   /** Whether this is the sham/control condition (no visible change). */
   isControl?: boolean
 }
@@ -46,6 +48,7 @@ export const PRESETS: ModificationPreset[] = [
     description: 'Control condition. Pipeline runs identically but face and voice are unchanged.',
     alpha: 0,
     voiceSemitones: 0,
+    voiceSmile: 0,
     isControl: true,
   },
   {
@@ -54,6 +57,7 @@ export const PRESETS: ModificationPreset[] = [
     description: 'Adds a fifth of their own maximum smile. Often below conscious detection.',
     alpha: 0.2,
     voiceSemitones: 0,
+    voiceSmile: 0,
   },
   {
     id: 'smile-strong',
@@ -61,6 +65,7 @@ export const PRESETS: ModificationPreset[] = [
     description: 'Adds half of their own maximum smile. Clearly visible.',
     alpha: 0.5,
     voiceSemitones: 0,
+    voiceSmile: 0,
   },
   {
     id: 'frown-subtle',
@@ -68,6 +73,7 @@ export const PRESETS: ModificationPreset[] = [
     description: 'Adds a quarter of their own maximum frown.',
     alpha: -0.25,
     voiceSemitones: 0,
+    voiceSmile: 0,
   },
   {
     id: 'frown-strong',
@@ -75,20 +81,31 @@ export const PRESETS: ModificationPreset[] = [
     description: 'Adds just over half of their own maximum frown.',
     alpha: -0.55,
     voiceSemitones: 0,
+    voiceSmile: 0,
   },
   {
     id: 'warm-voice',
     label: 'Lower voice',
     description: 'Subtle smile lift paired with a slightly lower voice.',
     alpha: 0.15,
-    voiceSemitones: -2,
+    voiceSemitones: -1,
+    voiceSmile: 0,
   },
   {
     id: 'bright-voice',
     label: 'Higher voice',
     description: 'Subtle smile lift paired with a slightly higher voice.',
     alpha: 0.15,
-    voiceSemitones: 2,
+    voiceSemitones: 1,
+    voiceSmile: 0,
+  },
+  {
+    id: 'smile-voice',
+    label: 'Smiling voice',
+    description: 'Voice sounds like it is smiling: same pitch, raised vocal resonances. Face unchanged.',
+    alpha: 0,
+    voiceSemitones: 0,
+    voiceSmile: 1,
   },
 ]
 

@@ -40,9 +40,11 @@ export interface EffectState {
   alpha: number
   /** Voice pitch shift in semitones. 0 = neutral. */
   voiceSemitones: number
+  /** Smiling voice: raises (or with <0 lowers) vocal resonances. 0 = neutral, ±1 = full. */
+  voiceSmile: number
 }
 
-export const NEUTRAL_EFFECTS: EffectState = { alpha: 0, voiceSemitones: 0 }
+export const NEUTRAL_EFFECTS: EffectState = { alpha: 0, voiceSemitones: 0, voiceSmile: 0 }
 
 // ---- Expression detection ----
 //

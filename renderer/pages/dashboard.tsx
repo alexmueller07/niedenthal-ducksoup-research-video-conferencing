@@ -25,8 +25,8 @@ import type {
 
 // Face presets go in the face section; the voice-only ones ("Lower voice" /
 // "Higher voice") drive the uploaded recording in the voice section.
-const VIDEO_PRESETS = PRESETS.filter((p) => p.voiceSemitones === 0)
-const VOICE_PRESETS = PRESETS.filter((p) => p.voiceSemitones !== 0)
+const VIDEO_PRESETS = PRESETS.filter((p) => p.voiceSemitones === 0 && p.voiceSmile === 0)
+const VOICE_PRESETS = PRESETS.filter((p) => p.voiceSemitones !== 0 || p.voiceSmile !== 0)
 
 function ipc() {
   return typeof window !== 'undefined'
@@ -68,6 +68,7 @@ export default function DashboardPage() {
   const [voicePlaying, setVoicePlaying] = useState(false)
   const [listenTo, setListenTo] = useState<'original' | 'changed'>('changed')
   const [pitch, setPitch] = useState(0)
+  const [smile, setSmile] = useState(0)
   const [voiceCondition, setVoiceCondition] = useState<VoiceCondition>({ ...DEFAULT_VOICE_CONDITION })
   const [voiceState, setVoiceState] = useState<VoicePairState | null>(null)
   const [voiceError, setVoiceError] = useState('')
@@ -127,11 +128,14 @@ export default function DashboardPage() {
     setVoiceCondition(condition)
     playerRef.current?.processor.setCondition(condition)
     // A voice change and the manual pitch control can't run together.
-    if (condition.mode !== 'bypass' || condition.audibility) setPitch(0)
+    if (condition.mode !== 'bypass' || condition.audibility) { setPitch(0); setSmile(0) }
   }
   useEffect(() => {
     playerRef.current?.processor.setSemitones(pitch)
   }, [pitch])
+  useEffect(() => {
+    playerRef.current?.processor.setSmile(smile)
+  }, [smile])
   useEffect(() => {
     playerRef.current?.listenTo(listenTo)
   }, [listenTo])
@@ -524,22 +528,37 @@ export default function DashboardPage() {
               <div className="mt-3">
                 <Slider
                   label="Voice pitch"
-                  hint={pitch > 0.5 ? 'higher' : pitch < -0.5 ? 'lower' : 'neutral'}
-                  min={-12}
-                  max={12}
-                  step={1}
+                  hint={pitch > 0.02 ? 'higher' : pitch < -0.02 ? 'lower' : 'neutral'}
+                  min={-1}
+                  max={1}
+                  step={0.05}
                   value={pitch}
                   neutral={0}
                   disabled={voiceChangeOn}
-                  format={(v) => `${v > 0 ? '+' : ''}${v} st`}
+                  format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} st`}
                   onChange={setPitch}
+                />
+                <Slider
+                  label="Smiling voice"
+                  hint={smile > 0.02 ? 'smiling' : smile < -0.02 ? 'darker' : 'neutral'}
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={smile}
+                  neutral={0}
+                  disabled={voiceChangeOn}
+                  format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`}
+                  onChange={setSmile}
                 />
               </div>
               <Pills
                 items={VOICE_PRESETS.map((p) => ({ id: p.id, label: p.label, title: p.description }))}
-                active={VOICE_PRESETS.find((p) => p.voiceSemitones === pitch)?.id ?? null}
+                active={VOICE_PRESETS.find((p) => Math.abs(p.voiceSemitones - pitch) < 0.011 && Math.abs(p.voiceSmile - smile) < 0.011)?.id ?? null}
                 disabled={voiceChangeOn}
-                onPick={(id) => setPitch(getPreset(id).voiceSemitones)}
+                onPick={(id) => {
+                  setPitch(getPreset(id).voiceSemitones)
+                  setSmile(getPreset(id).voiceSmile)
+                }}
               />
 
               <VoicePanel
