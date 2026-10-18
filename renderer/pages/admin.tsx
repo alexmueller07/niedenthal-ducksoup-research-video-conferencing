@@ -22,7 +22,7 @@ import {
   emptyCalibrationUiState,
   type CalibrationUiState,
 } from '../components/CalibrationPanel'
-import { pickRecorderFormat } from '../lib/recording'
+import { fixedSizeStream, pickRecorderFormat } from '../lib/recording'
 import {
   APP_VERSION,
   CALIBRATION_PHASES,
@@ -477,7 +477,8 @@ export default function AdminDashboard() {
       recPartsRef.current.set(key, part)
       const fullLabel = part > 1 ? `${label}_part${part}` : label
       // MP4 preferred (RA request); falls back to WebM if this Chromium can't mux it.
-      const format = pickRecorderFormat(stream.getVideoTracks().length > 0)
+      const hasVideo = stream.getVideoTracks().length > 0
+      const format = pickRecorderFormat(hasVideo)
       const opened = await ipcInvoke<{ id: string; path: string }>(
         'rec:open',
         fullLabel,
@@ -485,8 +486,10 @@ export default function AdminDashboard() {
         meta,
       )
       if (!opened) return
+      // A fixed frame size, or the MP4 stops playing at the first resolution change.
+      const fixed = hasVideo ? fixedSizeStream(stream) : null
       const rec = new MediaRecorder(
-        stream,
+        fixed?.stream ?? stream,
         format.mimeType ? { mimeType: format.mimeType } : undefined,
       )
       const startedPerf = performance.now()
@@ -497,6 +500,7 @@ export default function AdminDashboard() {
         if (e.data.size > 0) void appendChunk(key, opened.id, e.data)
       }
       rec.onstop = () => {
+        fixed?.stop()
         const durationSec = (performance.now() - startedPerf) / 1000
         const pending = writeQueueRef.current.get(key) ?? Promise.resolve()
         void pending.then(() => ipcInvoke('rec:close', opened.id, durationSec, startedAtEpochMs)).finally(() => {
