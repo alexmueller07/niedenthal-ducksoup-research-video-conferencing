@@ -1055,7 +1055,7 @@ After the conversation ends, both participants rewatch it together in turns. Eac
 |---|---|---|
 | `viewMode` | `active` | `gallery` (all videos), `single` (the viewer's partner), `active` (the person whose turn it is) |
 | `segmentSec` | 150 | Turn length, 10–1800 s |
-| `minTailSec` | 30 | Shorter last window joins the one before |
+| `minTailSec` | 30 | Shorter last window joins the one before. Not shown on the panel; always the default. |
 | `firstSeat` | `P1` | Whose video comes first in each window |
 | `allowPause` | false | Participants may pause/resume (always for both) |
 | `advance` | `both-done` | Or `auto`: next turn 10 s after the clip ends |

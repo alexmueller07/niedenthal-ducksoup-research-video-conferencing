@@ -74,7 +74,7 @@ Both screens always show the same moment. Neither participant can see what the o
      - **Active speaker**: only the person whose turn it is.
      - **Single**: each person sees their partner's video.
      - **Gallery**: everything at once.
-   - **Turn length**: 150 seconds (2.5 minutes) by default. **Min. last**: a last part shorter than this (30 seconds by default) is added to the turn before it rather than becoming a tiny turn of its own.
+   - **Turn length**: 150 seconds (2.5 minutes) by default. If the call doesn't divide evenly, a last part shorter than 30 seconds is added to the turn before it rather than becoming a tiny turn of its own.
    - **Goes first**: Participant 1 or 2.
    - **Next turn starts**: when both people press Done (default), or automatically 10 seconds after the clip ends.
    - **Show original video too**: off by default. When on, participants can switch between the changed video and the original. *This lets them see the face/voice changes, so check your study protocol before turning it on.*

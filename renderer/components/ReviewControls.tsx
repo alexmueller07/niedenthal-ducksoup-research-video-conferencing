@@ -55,7 +55,8 @@ export function ReviewControls(props: ReviewControlsProps) {
   useEffect(() => {
     if (!hasIpc()) return
     void ipcInvoke<Partial<ReviewConfig> | null>('prefs:get', PREF_KEY).then((saved) => {
-      if (saved) setConfig((c) => ({ ...c, ...saved }))
+      // minTailSec is no longer a setting on screen; always use the default.
+      if (saved) setConfig((c) => ({ ...c, ...saved, minTailSec: DEFAULT_REVIEW_CONFIG.minTailSec }))
     })
   }, [])
 
@@ -112,15 +113,7 @@ function ReviewSetup({
         <Field label="Turn length">
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <NumberInput value={config.segmentSec} min={10} max={1800} onChange={(v) => update({ segmentSec: v })} />
-            s
-            <span
-              className="ml-2 flex items-center gap-2 text-gray-500"
-              title="A last part shorter than this is added to the turn before it"
-            >
-              min. last
-              <NumberInput value={config.minTailSec} min={0} max={600} onChange={(v) => update({ minTailSec: v })} />
-              s
-            </span>
+            seconds
           </div>
         </Field>
         <Field label="Goes first">

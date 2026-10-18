@@ -840,9 +840,6 @@ export default function AdminDashboard() {
             )}
             {phase === 'ended' && (
               <>
-                <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-[11px] text-gray-400 ring-1 ring-gray-800">
-                  Session complete. Data saved.
-                </span>
                 <button
                   type="button"
                   onClick={() => restartSession('live')}
