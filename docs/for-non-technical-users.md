@@ -74,19 +74,19 @@ Both screens always show the same moment. Neither participant can see what the o
      - **Active speaker**: only the person whose turn it is.
      - **Single**: each person sees their partner's video.
      - **Gallery**: everything at once.
-   - **Turn length**: 150 seconds (2.5 minutes) by default. A last part shorter than 30 seconds is added to the turn before it rather than becoming a tiny turn of its own.
+   - **Turn length**: 150 seconds (2.5 minutes) by default. **Min. last**: a last part shorter than this (30 seconds by default) is added to the turn before it rather than becoming a tiny turn of its own.
    - **Goes first**: Participant 1 or 2.
-   - **Next turn starts**: when both people press Done (default), or by itself 10 seconds after the clip ends.
-   - **Show participants the original video too**: off by default. When on, participants can switch between the changed video and the original. *This lets them see the face/voice changes, so check your study protocol before turning it on.*
+   - **Next turn starts**: when both people press Done (default), or automatically 10 seconds after the clip ends.
+   - **Show original video too**: off by default. When on, participants can switch between the changed video and the original. *This lets them see the face/voice changes, so check your study protocol before turning it on.*
    - **Participants can pause**: off by default. A pause always stops the video for both of them.
 4. Press **Start review**.
 
 During each turn, participants can start writing while the clip plays. **Done** unlocks once the clip ends. Your dashboard shows what each person is doing (watching, still writing, done, or disconnected), with a small muted preview. You can:
 
 - **Pause / Resume** the video for both participants
-- **Replay this clip** from the start of the turn
-- **Next turn now**: saves whatever each person has written so far and moves on (useful if someone is stuck)
-- **Start without waiting**: if one participant's screen is slow to load, or they have dropped out
+- **Replay** the turn from its start
+- **Next turn**: saves whatever each person has written so far and moves on (useful if someone is stuck)
+- **Start now**: if one participant's screen is slow to load, or they have dropped out
 - **End review** when it's over (or to stop early)
 
 If a participant's connection drops, both videos pause until they are back, and whatever they had typed is still there.

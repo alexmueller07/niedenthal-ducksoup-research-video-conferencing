@@ -1069,10 +1069,10 @@ The server owns one clock, `ReviewState.anchorServerMs` / `anchorPosMs`. While p
 
 | Status | Meaning | Leaves when |
 |---|---|---|
-| `loading` | Both machines seek to `anchorPosMs` and report `review-ready {loadSeq}` | Both are ready and connected; play starts 600 ms later so both press play together. The researcher can **Start without waiting**. |
+| `loading` | Both machines seek to `anchorPosMs` and report `review-ready {loadSeq}` | Both are ready and connected; play starts 600 ms later so both press play together. The researcher can press **Start now**. |
 | `playing` | The clip runs; both can type | The position reaches the turn's end → `writing`; a stall or disconnect → back to `loading` at the current position |
 | `paused` | Researcher (or, if allowed, participant) pause | Resume → `loading` at the same position |
-| `writing` | Clip over; Done is enabled | Both submit (`both_done`), the researcher presses **Next turn now** (`researcher`), or `auto` advance (`auto`). Unsubmitted drafts are saved in the last two cases. |
+| `writing` | Clip over; Done is enabled | Both submit (`both_done`), the researcher presses **Next turn** (`researcher`), or `auto` advance (`auto`). Unsubmitted drafts are saved in the last two cases. |
 | `done` | All turns finished | The researcher ends the review |
 
 `loadSeq` increases on every `loading`, so a late `review-ready` or `review-buffering` from an earlier round is ignored.

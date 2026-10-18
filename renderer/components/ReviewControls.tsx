@@ -62,12 +62,7 @@ export function ReviewControls(props: ReviewControlsProps) {
   return (
     <section className="rounded-2xl border border-sky-900/60 bg-sky-950/20 p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Post-call review</h2>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            Both participants rewatch the call together in alternating turns and write about each one.
-          </p>
-        </div>
+        <h2 className="text-sm font-semibold">Post-call review</h2>
         {props.error && <p className="text-xs font-medium text-red-300">{props.error}</p>}
       </div>
       {running && props.media ? (
@@ -115,16 +110,17 @@ function ReviewSetup({
           </div>
         </Field>
         <Field label="Turn length">
-          <div className="space-y-1.5 text-xs text-gray-400">
-            <div className="flex items-center gap-2">
-              <NumberInput value={config.segmentSec} min={10} max={1800} onChange={(v) => update({ segmentSec: v })} />
-              seconds
-            </div>
-            <div className="flex items-center gap-2 text-[11px] text-gray-500">
-              A last part shorter than
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <NumberInput value={config.segmentSec} min={10} max={1800} onChange={(v) => update({ segmentSec: v })} />
+            s
+            <span
+              className="ml-2 flex items-center gap-2 text-gray-500"
+              title="A last part shorter than this is added to the turn before it"
+            >
+              min. last
               <NumberInput value={config.minTailSec} min={0} max={600} onChange={(v) => update({ minTailSec: v })} />
-              s is added to the turn before it
-            </div>
+              s
+            </span>
           </div>
         </Field>
         <Field label="Goes first">
@@ -150,20 +146,20 @@ function ReviewSetup({
             className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs outline-none focus:border-sky-500"
           >
             <option value="both-done">When both press Done</option>
-            <option value="auto">By itself, 10 s after the clip ends</option>
+            <option value="auto">Automatically</option>
           </select>
         </Field>
         <Check
           checked={config.showOriginal}
           onChange={(v) => update({ showOriginal: v })}
-          label="Show participants the original video too"
-          hint="This lets them see the face/voice changes. Check your study protocol first."
+          label="Show original video too"
+          hint="Lets participants see the face/voice changes. Check your study protocol first."
         />
         <Check
           checked={config.allowPause}
           onChange={(v) => update({ allowPause: v })}
           label="Participants can pause"
-          hint="A pause always stops the video for both of them."
+          hint="A pause stops the video for both of them."
         />
       </div>
       <div className="flex flex-col items-start justify-end gap-1.5 lg:items-end">
@@ -177,11 +173,11 @@ function ReviewSetup({
         </button>
         <p className="text-[11px] text-gray-500">
           {phase !== 'ended'
-            ? 'Available once the conversation has ended.'
+            ? 'After the call ends'
             : !availability
-              ? 'Checking the recordings…'
+              ? 'Checking recordings…'
               : availability.canStart
-                ? `${fmtTimeline(availability.conversationMs)} recorded · ${turns} turns`
+                ? `${turns} turns · ${fmtTimeline(availability.conversationMs)}`
                 : availability.reason}
         </p>
         {availability?.canStart && availability.warning && (
@@ -217,13 +213,13 @@ function ReviewProgress({
     idle: '',
     loading:
       state.holdReason === 'disconnect'
-        ? 'Waiting for a participant to reconnect'
+        ? 'Waiting for reconnect'
         : state.holdReason === 'buffering'
-          ? 'A video is catching up'
-          : 'Loading the video on both screens',
+          ? 'Catching up'
+          : 'Loading',
     playing: 'Playing',
-    paused: state.holdReason === 'participant' ? 'Paused by a participant' : 'Paused',
-    writing: 'Clip finished, participants writing',
+    paused: 'Paused',
+    writing: 'Writing',
     done: 'All turns finished',
   }
 
@@ -233,10 +229,7 @@ function ReviewProgress({
         <div className="flex flex-wrap items-center gap-3">
           {seg && !done && (
             <span className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-semibold ring-1 ring-gray-800">
-              Turn {seg.index} of {state.segments.length} · {names[seg.targetSeat]}&apos;s video ·{' '}
-              <span className="font-mono text-gray-400">
-                {fmtTimeline(seg.startMs)}–{fmtTimeline(seg.endMs)}
-              </span>
+              Turn {seg.index}/{state.segments.length} · {names[seg.targetSeat]}
             </span>
           )}
           <span className="text-xs text-gray-400">{statusText[state.status]}</span>
@@ -262,10 +255,7 @@ function ReviewProgress({
                     : { text: 'Watching', cls: 'text-gray-300' }
             return (
               <div key={slot} className="rounded-lg bg-gray-900/70 px-3 py-2 ring-1 ring-gray-800">
-                <p className="text-[11px] text-gray-500">
-                  {names[slot]}
-                  {seg && !done && (seg.targetSeat === slot ? ' · writing about themselves' : ' · writing about their partner')}
-                </p>
+                <p className="text-[11px] text-gray-500">{names[slot]}</p>
                 <p className={`text-sm font-medium ${done ? 'text-gray-300' : label.cls}`}>{done ? 'Finished' : label.text}</p>
               </div>
             )
@@ -275,23 +265,23 @@ function ReviewProgress({
         <div className="flex flex-wrap gap-2">
           {state.status === 'loading' && (
             <Action onClick={() => onControl('play-now')} title="Start the clip without waiting for both screens">
-              ▶ Start without waiting
+              ▶ Start now
             </Action>
           )}
           {state.status === 'playing' && <Action onClick={() => onControl('pause')}>❚❚ Pause</Action>}
           {state.status === 'paused' && <Action onClick={() => onControl('resume')}>▶ Resume</Action>}
-          {!done && <Action onClick={() => onControl('restart-turn')}>↺ Replay this clip</Action>}
+          {!done && <Action onClick={() => onControl('restart-turn')}>↺ Replay</Action>}
           {!done && (
             <Action
               onClick={() => onControl('force-next')}
               title="Save whatever each person has written so far and move to the next turn"
             >
-              ⏭ Next turn now
+              ⏭ Next turn
             </Action>
           )}
           {confirmEnd ? (
             <span className="flex items-center gap-2 text-xs text-gray-300">
-              {done ? 'End the review?' : 'End the review early? Unsaved answers for this turn are lost.'}
+              {done ? 'End the review?' : 'End early?'}
               <button
                 type="button"
                 onClick={onEnd}
@@ -315,17 +305,12 @@ function ReviewProgress({
             </button>
           )}
         </div>
-        <p className="text-[11px] text-gray-500">
-          View mode: {MODES.find((m) => m.id === state.config.viewMode)?.label} ·{' '}
-          {state.config.showOriginal ? 'original video shown' : 'altered video only'} ·{' '}
-          {state.config.advance === 'auto' ? 'turns move on by themselves' : 'turns wait for both to press Done'}
-        </p>
       </div>
 
       {!done && (
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Preview (muted)</span>
+            <span className="text-[11px] text-gray-500">Preview</span>
             <div className="flex rounded-md bg-gray-900 p-0.5 ring-1 ring-gray-800">
               {(['altered', 'clean'] as VideoVersion[]).map((v) => (
                 <button
@@ -382,17 +367,14 @@ function Check({
   hint: string
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-2 text-xs text-gray-300">
+    <label title={hint} className="flex cursor-pointer items-center gap-2 text-xs text-gray-300">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 accent-sky-500"
+        className="accent-sky-500"
       />
-      <span>
-        {label}
-        <span className="block text-[11px] text-gray-500">{hint}</span>
-      </span>
+      {label}
     </label>
   )
 }
@@ -408,17 +390,25 @@ function NumberInput({
   max: number
   onChange: (v: number) => void
 }) {
+  // Free typing; the number is checked against min/max only when leaving the
+  // box, so typing "150" does not get stuck at the minimum on the "1".
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    const n = Number(draft)
+    if (draft !== null && draft.trim() !== '' && Number.isFinite(n)) {
+      onChange(Math.min(max, Math.max(min, Math.round(n))))
+    }
+    setDraft(null)
+  }
   return (
     <input
-      type="number"
-      min={min}
-      max={max}
-      value={value}
-      onChange={(e) => {
-        const n = Number(e.target.value)
-        if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))))
-      }}
-      className="w-16 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-center text-xs text-white outline-none focus:border-sky-500"
+      type="text"
+      inputMode="numeric"
+      value={draft ?? String(value)}
+      onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      className="w-14 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-center text-xs text-white outline-none focus:border-sky-500"
     />
   )
 }
