@@ -13,6 +13,7 @@
 // LAN. Only control + signaling + telemetry pass through here.
 
 import { WebSocketServer, WebSocket } from 'ws'
+import http from 'http'
 import os from 'os'
 import type {
   CalibrationPhase,
@@ -40,6 +41,7 @@ import {
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule, validRules } from './rules'
 import { VoiceSession } from './voiceSession'
+import { ReviewMediaRoute } from './mediaRoute'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -98,6 +100,9 @@ const RULE_EVENT_NAMES: Record<'fired' | 'released' | 'reverted', string> = {
 export class SessionServer {
   private voiceSession = new VoiceSession()
   private wss: WebSocketServer | null = null
+  /** Plain HTTP on the same port: the WebSocket upgrades from it, and the review streams recordings from it. */
+  private http: http.Server | null = null
+  private readonly media = new ReviewMediaRoute()
   private clients = new Map<WebSocket, ClientCtx>()
   /** Identities remembered per slot so a reconnecting participant keeps their seat. */
   private slotIdentities = new Map<SlotId, Identity>()
@@ -167,10 +172,14 @@ export class SessionServer {
 
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wss = new WebSocketServer({ host: '0.0.0.0', port: this.port })
+      const httpServer = http.createServer((req, res) => {
+        if (!this.media.handle(req, res)) res.writeHead(404).end()
+      })
+      const wss = new WebSocketServer({ server: httpServer })
+      this.http = httpServer
       this.wss = wss
-      wss.on('error', (err) => reject(err))
-      wss.on('listening', () => {
+      httpServer.on('error', (err) => reject(err))
+      httpServer.listen(this.port, '0.0.0.0', () => {
         this.log({ event: 'app_started', detail: { port: this.port, lanIps: lanIps() } })
         resolve()
       })
@@ -259,6 +268,13 @@ export class SessionServer {
     this.clients.clear()
     await new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()))
     this.wss = null
+    this.media.close()
+    const httpServer = this.http
+    this.http = null
+    if (httpServer) {
+      httpServer.closeAllConnections()
+      await new Promise<void>((r) => httpServer.close(() => r()))
+    }
     await this.logger.close()
   }
 
