@@ -103,8 +103,10 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turn])
 
+  // After a reload the box is empty and the server's copy is all there is.
+  // After a brief drop the page kept what was typed, which may be newer.
   useEffect(() => {
-    if (!restored || restored.turn !== turn) return
+    if (!restored || restored.turn !== turn || textRef.current) return
     setText(restored.text)
   }, [restored, turn])
 

@@ -85,6 +85,9 @@ export class ReviewTrack {
     this.clearStall()
     const hit = resolveMediaAt(this.opts.parts, timelineMs)
     if (!hit) {
+      // This is now the newest prepare, so any older one still loading will
+      // not hand control back: do it here.
+      this.busy = false
       this.video.pause()
       this.setGap(true)
       return
