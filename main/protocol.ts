@@ -17,7 +17,7 @@ export type Role = 'participant' | 'admin'
 /** Seats in the call. Exactly two participants and one (invisible) researcher. */
 export type SlotId = 'P1' | 'P2' | 'ADMIN'
 
-export type Phase = 'waiting' | 'live' | 'ended'
+export type Phase = 'waiting' | 'live' | 'ended' | 'review'
 
 export interface Identity {
   /** Display name (participant first name, or RA name for the admin). */
@@ -388,6 +388,116 @@ export interface AutomationRule {
   revertAfterSec: number | null
 }
 
+// ---- Post-call review ----
+//
+// After the conversation ends, both participants rewatch the recording
+// together in turns that alternate between them: P1's video 0:00–2:30, then
+// P2's video 0:00–2:30, then P1's 2:30–5:00, and so on. During each turn the
+// person on screen writes what they felt (self-report) and the other person
+// writes what they think that person felt (perceived). The server owns the
+// playback clock so both machines show the same moment.
+
+export type ReviewViewMode = 'gallery' | 'single' | 'active'
+/** 'clean' is the original, unaltered camera — same naming as the recordings. */
+export type VideoVersion = 'altered' | 'clean'
+
+export interface ReviewConfig {
+  viewMode: ReviewViewMode
+  /** Length of each turn, in seconds. */
+  segmentSec: number
+  /** A last stretch shorter than this is added to the turn before it. */
+  minTailSec: number
+  /** Whose video comes first in every time window. */
+  firstSeat: PSlot
+  /** Participants may pause and resume (always for both of them). */
+  allowPause: boolean
+  /** 'both-done': wait for both to press Done. 'auto': move on 10 s after the clip ends. */
+  advance: 'both-done' | 'auto'
+  /** Show participants the original (unaltered) video as well as the altered one. */
+  showOriginal: boolean
+}
+
+export const DEFAULT_REVIEW_CONFIG: ReviewConfig = {
+  viewMode: 'active',
+  segmentSec: 150,
+  minTailSec: 30,
+  firstSeat: 'P1',
+  allowPause: false,
+  advance: 'both-done',
+  showOriginal: false,
+}
+
+/** Seconds the next turn waits after a clip ends in 'auto' advance mode. */
+export const REVIEW_AUTO_ADVANCE_SEC = 10
+
+/** One recorded file, placed on the conversation timeline. */
+export interface ReviewMediaPart {
+  /** Path on the session server, e.g. /review/<token>/P1_x_altered.mp4 */
+  url: string
+  /** Where this file starts on the conversation timeline (0 = conversation start). */
+  offsetMs: number
+  durationMs: number
+}
+
+export type ReviewMedia = Record<PSlot, Record<VideoVersion, ReviewMediaPart[]>>
+
+export interface ReviewSegment {
+  /** 1-based turn number. */
+  index: number
+  /** 1-based time window (window 1 = 0:00–2:30 with the default length). */
+  window: number
+  /** Whose video this turn is about. */
+  targetSeat: PSlot
+  startMs: number
+  endMs: number
+}
+
+export type ReviewStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'writing' | 'done'
+
+export interface ReviewState {
+  status: ReviewStatus
+  config: ReviewConfig
+  segments: ReviewSegment[]
+  /** 0-based position in `segments`. */
+  current: number
+  /** Bumped every time both players are asked to get ready; `review-ready` echoes it. */
+  loadSeq: number
+  /**
+   * Shared playback clock. While playing, the timeline position is
+   * anchorPosMs + (serverNow − anchorServerMs), capped at the turn's end.
+   */
+  anchorServerMs: number
+  anchorPosMs: number
+  /** Why playback is held (status 'loading' or 'paused'). */
+  holdReason: 'researcher' | 'participant' | 'buffering' | 'disconnect' | null
+  connected: Record<PSlot, boolean>
+  ready: Record<PSlot, boolean>
+  done: Record<PSlot, boolean>
+  /** Server time the next turn starts by itself ('auto' advance only). */
+  autoAdvanceAtMs: number | null
+}
+
+/** What a participant looked at while writing one response. */
+export interface ReviewViewingStats {
+  msAltered: number
+  msClean: number
+  toggles: number
+  edits: number
+  versionNow: VideoVersion
+  /** Server-clock time of the first keystroke, or null. */
+  firstTypedAtMs: number | null
+}
+
+export type ReviewControlAction = 'pause' | 'resume' | 'play-now' | 'restart-turn' | 'force-next'
+
+/** Researcher-facing: can a review start right now? */
+export interface ReviewAvailability {
+  canStart: boolean
+  reason: string
+  conversationMs: number
+  recordingsOpen: number
+}
+
 export interface SlotInfo {
   slot: SlotId
   clientId: string
@@ -464,6 +574,22 @@ export type ClientMessage =
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
   | { type: 'set-rules'; rules: AutomationRule[] }
+  | { type: 'review-start'; config: ReviewConfig }
+  /** Researcher; participants only for pause/resume when the config allows it. */
+  | { type: 'review-control'; action: ReviewControlAction }
+  // Review, participant → server (`turn` is the 1-based segment index):
+  | { type: 'review-ready'; loadSeq: number }
+  | { type: 'review-buffering'; loadSeq: number }
+  | { type: 'review-draft'; turn: number; text: string; stats: ReviewViewingStats }
+  | { type: 'review-submit'; turn: number; text: string; stats: ReviewViewingStats }
+  | {
+      type: 'review-view'
+      turn: number
+      mode: ReviewViewMode
+      person: PSlot | 'both'
+      version: VideoVersion | 'both'
+      positionMs: number
+    }
 
 // ---- Server → Client ----
 
@@ -516,6 +642,12 @@ export type ServerMessage =
   /** Which rules are currently holding/fired, for the dashboard indicator. */
   | { type: 'rule-status'; active: Record<string, boolean> }
   | { type: 'rejected'; reason: string }
+  | { type: 'review-state'; state: ReviewState }
+  | { type: 'review-media'; media: ReviewMedia | null }
+  /** A reconnecting participant gets their unsent answer for the current turn back. */
+  | { type: 'review-draft'; turn: number; text: string; submitted: boolean }
+  | { type: 'review-availability'; availability: ReviewAvailability }
+  | { type: 'review-error'; reason: string }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   try {

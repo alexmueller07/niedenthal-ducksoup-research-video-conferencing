@@ -277,7 +277,7 @@ export default function ParticipantSession() {
           mySlotRef.current = msg.slot
           voicePhase=msg.phase
           if (msg.slot==='P1'||msg.slot==='P2') effectsRef.current?.setVoiceSlot(msg.slot)
-          effectsRef.current?.setVoicePhase(msg.phase)
+          effectsRef.current?.setVoicePhase(voicePhaseOf(msg.phase))
           client.send({type:'voice-clock',sentAt:Date.now()})
           setPhase(msg.phase)
           handleRoster(msg.roster)
@@ -348,7 +348,7 @@ export default function ParticipantSession() {
         case 'phase':
           setPhase(msg.phase)
           voicePhase=msg.phase
-          effectsRef.current?.setVoicePhase(msg.phase)
+          effectsRef.current?.setVoicePhase(voicePhaseOf(msg.phase))
           return
         case 'peer-left':
           dropLink(msg.slot)
@@ -434,7 +434,7 @@ export default function ParticipantSession() {
         effectsReadyRef.current = true
         const slot=mySlotRef.current
         if (slot==='P1'||slot==='P2') effects.setVoiceSlot(slot)
-        effects.setVoicePhase(voicePhase)
+        effects.setVoicePhase(voicePhaseOf(voicePhase))
         effects.setVoiceCondition(voiceCondition)
         bestClockRtt=Infinity
         client.send({type:'voice-clock',sentAt:Date.now()})
@@ -824,6 +824,11 @@ export default function ParticipantSession() {
       `}</style>
     </div>
   )
+}
+
+/** The voice pipeline treats the review like the end of the call: natural audio, no analysis. */
+function voicePhaseOf(phase: Phase): 'waiting' | 'live' | 'ended' {
+  return phase === 'review' ? 'ended' : phase
 }
 
 function Spinner() {

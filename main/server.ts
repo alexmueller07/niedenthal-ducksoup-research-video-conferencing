@@ -74,6 +74,7 @@ const SESSION_PHASE_EVENT_NAMES: Record<Phase, string> = {
   waiting: 'moved_to_waiting_room',
   live: 'conversation_started',
   ended: 'conversation_ended',
+  review: 'moved_to_review',
 }
 const RULE_EVENT_NAMES: Record<'fired' | 'released' | 'reverted', string> = {
   fired: 'rule_turned_on',

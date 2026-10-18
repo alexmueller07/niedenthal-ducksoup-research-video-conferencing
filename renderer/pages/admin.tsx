@@ -1917,11 +1917,13 @@ function PhaseBadge({ phase }: { phase: Phase }) {
     waiting: 'bg-amber-600/20 text-amber-300 ring-amber-500/40',
     live: 'bg-emerald-600/20 text-emerald-300 ring-emerald-500/40',
     ended: 'bg-gray-700/40 text-gray-300 ring-gray-600/50',
+    review: 'bg-sky-600/20 text-sky-300 ring-sky-500/40',
   }
   const labels: Record<Phase, string> = {
     waiting: '● Waiting room',
     live: '● LIVE',
     ended: '● Ended',
+    review: '● Review',
   }
   return (
     <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${styles[phase]}`}>
