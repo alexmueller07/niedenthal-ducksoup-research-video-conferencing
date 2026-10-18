@@ -9,6 +9,9 @@
 // A participant's recording can have gaps (a reconnect restarts it as a
 // _part2 file); during a gap the element pauses and reports `gap` so the tile
 // can say so, while the clock — and the partner's screen — carries on.
+// A file that fails to decode (recordings made before the fixed-size
+// recording fix break at the first resolution change) is reported the same
+// way and never holds up the other machine.
 
 import { resolveMediaAt } from '../../main/review'
 import type { ReviewMediaPart } from './protocol'
@@ -26,6 +29,8 @@ export interface ReviewTrackOptions {
   onGap?: (gap: boolean) => void
   /** Fired once the element has been stuck buffering for over a second while it should be playing. */
   onStall?: () => void
+  /** The current file cannot be decoded from here on. */
+  onBroken?: (broken: boolean) => void
 }
 
 export class ReviewTrack {
@@ -33,15 +38,20 @@ export class ReviewTrack {
   private busy = false
   private wantPlaying = false
   private gap: boolean | null = null
+  private broken = false
   private stallTimer: ReturnType<typeof setTimeout> | null = null
   private readonly onWaiting = () => {
     if (!this.wantPlaying || this.stallTimer) return
     this.stallTimer = setTimeout(() => {
       this.stallTimer = null
-      if (this.wantPlaying && this.video.readyState < 3) this.opts.onStall?.()
+      if (this.wantPlaying && !this.broken && this.video.readyState < 3) this.opts.onStall?.()
     }, STALL_REPORT_MS)
   }
   private readonly onPlaying = () => this.clearStall()
+  private readonly onError = () => {
+    this.clearStall()
+    this.setBroken(true)
+  }
 
   constructor(
     readonly video: HTMLVideoElement,
@@ -52,6 +62,7 @@ export class ReviewTrack {
     video.addEventListener('waiting', this.onWaiting)
     video.addEventListener('playing', this.onPlaying)
     video.addEventListener('canplay', this.onPlaying)
+    video.addEventListener('error', this.onError)
   }
 
   destroy() {
@@ -59,6 +70,7 @@ export class ReviewTrack {
     this.video.removeEventListener('waiting', this.onWaiting)
     this.video.removeEventListener('playing', this.onPlaying)
     this.video.removeEventListener('canplay', this.onPlaying)
+    this.video.removeEventListener('error', this.onError)
     this.video.pause()
     this.video.removeAttribute('src')
     this.video.load()
@@ -75,6 +87,8 @@ export class ReviewTrack {
       return
     }
     this.setGap(false)
+    // A damaged file may still play before the point where it broke: reload and try.
+    if (this.broken) this.url = ''
     this.busy = true
     try {
       await this.load(hit.part)
@@ -100,6 +114,7 @@ export class ReviewTrack {
     }
     this.setGap(false)
     const local = hit.localMs / 1000
+    if (this.broken && hit.part.url === this.url) return
     if (hit.part.url !== this.url) {
       // Crossed into the next file (after a reconnect gap).
       this.busy = true
@@ -138,6 +153,12 @@ export class ReviewTrack {
     this.opts.onGap?.(gap)
   }
 
+  private setBroken(broken: boolean) {
+    if (this.broken === broken) return
+    this.broken = broken
+    this.opts.onBroken?.(broken)
+  }
+
   private clearStall() {
     if (this.stallTimer) clearTimeout(this.stallTimer)
     this.stallTimer = null
@@ -146,6 +167,7 @@ export class ReviewTrack {
   private load(part: ReviewMediaPart): Promise<void> {
     if (part.url === this.url && this.video.readyState >= 1) return Promise.resolve()
     this.url = part.url
+    this.setBroken(false)
     this.video.src = this.opts.baseUrl + part.url
     return waitFor(this.video, 'loadedmetadata', () => this.video.readyState >= 1)
   }

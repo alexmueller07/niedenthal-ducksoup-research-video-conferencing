@@ -84,6 +84,7 @@ export function ReviewStage({
   const callbacksRef = useRef({ onReady, onBuffering, serverNow })
   callbacksRef.current = { onReady, onBuffering, serverNow }
   const [gaps, setGaps] = useState<Record<string, boolean>>({})
+  const [broken, setBroken] = useState<Record<string, boolean>>({})
 
   const isVisible = (t: Tile) =>
     mode === 'gallery' || (t.person === shownPerson && t.version === version)
@@ -103,6 +104,7 @@ export function ReviewStage({
           parts: media[tile.person][tile.version],
           baseUrl,
           onGap: (gap) => setGaps((prev) => (prev[tile.key] === gap ? prev : { ...prev, [tile.key]: gap })),
+          onBroken: (b) => setBroken((prev) => (prev[tile.key] === b ? prev : { ...prev, [tile.key]: b })),
           onStall: () => {
             // A hidden, silent element falling behind is no reason to stop everyone.
             if (!watchedRef.current(tile)) return
@@ -184,6 +186,11 @@ export function ReviewStage({
               playsInline
               className="h-full w-full object-contain"
             />
+            {visible && !gaps[tile.key] && broken[tile.key] && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-950/85 px-6 text-center text-sm text-gray-400">
+                This part of the recording cannot be played
+              </div>
+            )}
             {visible && gaps[tile.key] && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-950/85 px-6 text-center text-sm text-gray-400">
                 No video for this moment (the connection dropped during the call)
