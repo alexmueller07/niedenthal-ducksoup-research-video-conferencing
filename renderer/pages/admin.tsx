@@ -469,13 +469,16 @@ export default function AdminDashboard() {
         format.mimeType ? { mimeType: format.mimeType } : undefined,
       )
       const startedPerf = performance.now()
+      // Wall-clock moment recording actually began (not when the file was
+      // opened), so the review can line the four recordings up with each other.
+      let startedAtEpochMs = Date.now()
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) void appendChunk(key, opened.id, e.data)
       }
       rec.onstop = () => {
         const durationSec = (performance.now() - startedPerf) / 1000
         const pending = writeQueueRef.current.get(key) ?? Promise.resolve()
-        void pending.then(() => ipcInvoke('rec:close', opened.id, durationSec)).finally(() => {
+        void pending.then(() => ipcInvoke('rec:close', opened.id, durationSec, startedAtEpochMs)).finally(() => {
           writeQueueRef.current.delete(key)
           recordersRef.current.delete(key)
           setRecState((prev) => {
@@ -485,6 +488,7 @@ export default function AdminDashboard() {
         })
       }
       rec.start(1000)
+      startedAtEpochMs = Date.now()
       recordersRef.current.set(key, { rec, id: opened.id, part })
       setRecState((prev) => ({
         ...prev,

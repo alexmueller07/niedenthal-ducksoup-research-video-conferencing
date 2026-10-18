@@ -23,6 +23,7 @@ import type {
   Identity,
   Phase,
   PSlot,
+  ReviewAvailability,
   RosterState,
   ServerMessage,
   SlotId,
@@ -57,6 +58,18 @@ interface ClientCtx {
   alive: boolean
   voice?: VoiceReport
   voiceReceivedAt?: number
+}
+
+/** A finished recording file, as reported by the main process. */
+export interface RecordingInfo {
+  /** 'P1' | 'P2' (blank for the researcher mic) */
+  slot: string
+  /** 'altered' | 'clean' | 'mic' */
+  kind: string
+  path: string
+  /** Wall-clock time the recorder started. */
+  startedAtMs: number
+  durationMs: number
 }
 
 export interface ServerStatus {
@@ -99,6 +112,9 @@ export class SessionServer {
   private calibrationShots = new Map<PSlot, Record<string, string>>()
   private phase: Phase = 'waiting'
   private sessionStartedAt: string | null = null
+  /** Recorders still writing; a review cannot start until they have all closed. */
+  private openRecordings = new Set<string>()
+  private finishedRecordings: RecordingInfo[] = []
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private ruleTimer: ReturnType<typeof setInterval> | null = null
   private readonly ruleEngine: RuleEngine
@@ -176,6 +192,61 @@ export class SessionServer {
 
   get currentPhase(): Phase {
     return this.phase
+  }
+
+  // ---- Recordings (reported by the main process) ----
+
+  recordingOpened(id: string) {
+    this.openRecordings.add(id)
+    this.sendReviewAvailability()
+  }
+
+  recordingClosed(id: string, info: RecordingInfo) {
+    this.openRecordings.delete(id)
+    if (info.durationMs > 0) this.finishedRecordings.push(info)
+    this.sendReviewAvailability()
+  }
+
+  /**
+   * Participant recordings from the most recent live run. A restarted
+   * conversation gets a new clock, so files from an earlier run are left out.
+   */
+  private reviewRecordings(): RecordingInfo[] {
+    const liveStart = this.sessionStartedAt ? Date.parse(this.sessionStartedAt) : null
+    if (liveStart === null) return []
+    return this.finishedRecordings.filter(
+      (r) =>
+        (r.slot === 'P1' || r.slot === 'P2') &&
+        (r.kind === 'altered' || r.kind === 'clean') &&
+        r.startedAtMs >= liveStart - 5000,
+    )
+  }
+
+  /** Length of the recorded conversation: from its start to the end of the last file. */
+  private conversationMs(recs: RecordingInfo[]): number {
+    const liveStart = this.sessionStartedAt ? Date.parse(this.sessionStartedAt) : 0
+    let end = 0
+    for (const r of recs) end = Math.max(end, r.startedAtMs - liveStart + r.durationMs)
+    return end
+  }
+
+  reviewAvailability(): ReviewAvailability {
+    const recs = this.reviewRecordings()
+    const conversationMs = this.conversationMs(recs)
+    const base = { conversationMs, recordingsOpen: this.openRecordings.size }
+    if (this.phase === 'review') return { ...base, canStart: false, reason: 'The review is running.' }
+    if (this.phase !== 'ended') return { ...base, canStart: false, reason: 'End the conversation first.' }
+    if (this.openRecordings.size > 0) return { ...base, canStart: false, reason: 'Saving the recordings…' }
+    if (recs.length === 0) {
+      return { ...base, canStart: false, reason: 'No recordings were made of this conversation.' }
+    }
+    if (conversationMs < 1000) return { ...base, canStart: false, reason: 'The recording is too short to review.' }
+    return { ...base, canStart: true, reason: '' }
+  }
+
+  private sendReviewAvailability() {
+    const admin = this.bySlot('ADMIN')
+    if (admin) this.send(admin.ws, { type: 'review-availability', availability: this.reviewAvailability() })
   }
 
   async stop(): Promise<void> {
@@ -268,6 +339,7 @@ export class SessionServer {
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
       this.send(ws, { type: 'voice-state', state: this.voiceSession.snapshot() })
+      this.send(ws, { type: 'review-availability', availability: this.reviewAvailability() })
     }
     if (slot === 'P1' || slot === 'P2') this.restoreCalibration(slot, identity)
     this.broadcastRoster()
@@ -812,6 +884,7 @@ export class SessionServer {
     })
     this.broadcast({ type: 'phase', phase, sessionStartedAt: this.sessionStartedAt })
     this.broadcastRoster()
+    this.sendReviewAvailability()
   }
 
   private requireAdmin(ctx: ClientCtx, what: string): boolean {

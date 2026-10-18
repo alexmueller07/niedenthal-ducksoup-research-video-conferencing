@@ -370,6 +370,8 @@ interface RecSink {
   path: string
   label: string
   bytes: number
+  meta: RecMeta
+  openedAtMs: number
 }
 const recordings = new Map<string, RecSink>()
 let nextRecId = 1
@@ -378,7 +380,15 @@ ipcMain.handle('rec:open', (_e, label: string, ext?: string, meta?: RecMeta) => 
   if (!server) throw new Error('Session server is not running')
   const filePath = server.logger.recordingPath(label, ext ?? 'webm')
   const id = `rec${nextRecId++}`
-  recordings.set(id, { stream: fs.createWriteStream(filePath), path: filePath, label, bytes: 0 })
+  recordings.set(id, {
+    stream: fs.createWriteStream(filePath),
+    path: filePath,
+    label,
+    bytes: 0,
+    meta: meta ?? {},
+    openedAtMs: Date.now(),
+  })
+  server.recordingOpened(id)
   server.logger.event({ event: 'recording_started', target: label, detail: { path: filePath } })
   server.logger.recordingStarted({
     slot: meta?.slot ?? '',
@@ -399,7 +409,7 @@ ipcMain.handle('rec:append', (_e, id: string, chunk: ArrayBuffer) => {
   return sink.bytes
 })
 
-ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number) => {
+ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number, startedAtMs?: number) => {
   const sink = recordings.get(id)
   if (!sink) return null
   recordings.delete(id)
@@ -425,6 +435,14 @@ ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number) => {
     detail: { path: sink.path, bytes: sink.bytes, durationSec, durationPatched },
   })
   server?.logger.recordingStopped({ label: sink.label, durationSec, bytes: sink.bytes })
+  // The review plays these files back, lined up by when each one started.
+  server?.recordingClosed(id, {
+    slot: sink.meta.slot ?? '',
+    kind: sink.meta.kind ?? '',
+    path: sink.path,
+    startedAtMs: typeof startedAtMs === 'number' ? startedAtMs : sink.openedAtMs,
+    durationMs: typeof durationSec === 'number' ? Math.round(durationSec * 1000) : 0,
+  })
   return { path: sink.path, bytes: sink.bytes }
 })
 
