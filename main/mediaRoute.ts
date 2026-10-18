@@ -2,8 +2,10 @@
 // post-call review, over the same port as the session WebSocket.
 //
 // Only files registered for the running review are reachable, and only under
-// a random per-review token — the URL stops working the moment the review
-// ends. Range requests are supported because a <video> element seeks by
+// a random token — the URL stops working the moment the review ends. Each
+// audience gets its own token, so participants cannot reach a file (such as
+// the original video) that was only opened for the researcher. File names in
+// the URL are neutral numbers, so they say nothing about what a file is. Range requests are supported because a <video> element seeks by
 // asking for byte ranges; without them every seek would re-download the file.
 
 import fs from 'fs'
@@ -17,23 +19,24 @@ const CONTENT_TYPES: Record<string, string> = {
 }
 
 export class ReviewMediaRoute {
-  private token: string | null = null
-  private files = new Map<string, string>()
+  /** token → (served name → file on disk) */
+  private grants = new Map<string, Map<string, string>>()
 
-  /** Start serving these files. Returns the URL path for each, in order. */
+  /** Serve these files under a new token. Returns the URL path for each, in order. */
   open(filePaths: string[]): string[] {
-    this.token = crypto.randomBytes(16).toString('hex')
-    this.files.clear()
-    return filePaths.map((p) => {
-      const name = path.basename(p)
-      this.files.set(name, p)
-      return `/review/${this.token}/${encodeURIComponent(name)}`
+    const token = crypto.randomBytes(16).toString('hex')
+    const files = new Map<string, string>()
+    this.grants.set(token, files)
+    return filePaths.map((p, i) => {
+      const name = `${i + 1}${path.extname(p).toLowerCase()}`
+      files.set(name, p)
+      return `/review/${token}/${name}`
     })
   }
 
+  /** Stop serving everything. */
   close() {
-    this.token = null
-    this.files.clear()
+    this.grants.clear()
   }
 
   /** Handles /review/… requests; returns false for anything else. */
@@ -41,7 +44,8 @@ export class ReviewMediaRoute {
     const url = new URL(req.url ?? '/', 'http://x')
     if (!url.pathname.startsWith('/review/')) return false
     const match = /^\/review\/([0-9a-f]+)\/([^/]+)$/.exec(url.pathname)
-    if (!match || !this.token || match[1] !== this.token) {
+    const files = match ? this.grants.get(match[1]) : undefined
+    if (!match || !files) {
       res.writeHead(403).end()
       return true
     }
@@ -52,7 +56,7 @@ export class ReviewMediaRoute {
       res.writeHead(400).end()
       return true
     }
-    const filePath = this.files.get(name)
+    const filePath = files.get(name)
     if (!filePath) {
       res.writeHead(404).end()
       return true

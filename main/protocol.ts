@@ -496,6 +496,8 @@ export interface ReviewAvailability {
   reason: string
   conversationMs: number
   recordingsOpen: number
+  /** Recordings missing from this conversation (e.g. a seat's original video), or '' */
+  warning: string
 }
 
 export interface SlotInfo {

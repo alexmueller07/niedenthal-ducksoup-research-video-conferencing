@@ -251,6 +251,47 @@ const stats = (o: Partial<ReviewViewingStats> = {}): ReviewViewingStats => ({
   assert.equal(h.c.active, false)
 }
 
+// ---- Ending mid-turn keeps what was written ----
+{
+  const h = harness()
+  h.readyBoth()
+  h.advance(REVIEW_START_LEAD_MS + 150_000)
+  h.c.submit('P1', 1, 'saved already', stats())
+  h.c.draft('P2', 1, 'still typing', stats({ toggles: 3 }))
+  h.c.stop()
+  assert.equal(h.responses.length, 2)
+  assert.equal(h.responses[1].writerSlot, 'P2')
+  assert.equal(h.responses[1].text, 'still typing')
+  assert.equal(h.responses[1].submittedBy, 'review_ended')
+  assert.equal(h.responses[1].stats.toggles, 3)
+  assert.equal(h.segments.length, 1)
+  assert.equal(h.segments[0].advancedBy, 'review_ended')
+  // Ending after the last turn adds nothing.
+  const done = harness({}, 150_000)
+  for (let turn = 1; turn <= 2; turn++) {
+    done.readyBoth()
+    done.advance(REVIEW_START_LEAD_MS + 150_000)
+    for (const slot of ['P1', 'P2'] as PSlot[]) done.c.submit(slot, turn, 'x', stats())
+  }
+  done.c.stop()
+  assert.equal(done.responses.length, 4)
+  assert.equal(done.segments.length, 2)
+}
+
+// ---- A participant cannot resume the researcher's pause ----
+{
+  const h = harness({ allowPause: true })
+  h.readyBoth()
+  h.c.control('pause', 'researcher')
+  assert.equal(h.c.control('resume', 'P1'), 'Paused by the researcher.')
+  assert.equal(h.c.state.status, 'paused')
+  assert.equal(h.c.control('resume', 'researcher'), null)
+  // …but either participant can resume a participant's pause.
+  h.readyBoth()
+  h.c.control('pause', 'P1')
+  assert.equal(h.c.control('resume', 'P2'), null)
+}
+
 // ---- Too short to review ----
 {
   const h = harness({}, 200)

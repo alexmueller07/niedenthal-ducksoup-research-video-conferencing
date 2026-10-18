@@ -239,7 +239,13 @@ matching stretch of the recordings and of effect_state_P1/P2.csv.
 
 submitted_by: "participant" means they pressed Done. "researcher_forced"
 means the researcher moved on before they did, and "auto" means the turn
-moved on by itself; in both cases whatever they had typed so far is saved.
+moved on by itself, and "review_ended" means the review was ended (or the
+app closed) during that turn. In those cases whatever they had typed so far
+is saved, and review_segments.csv shows the same value in advanced_by.
+
+response_text is exactly what they typed, except that an answer starting
+with = + - or @ has an apostrophe (') added in front, so that spreadsheet
+programs show it as text instead of trying to run it as a formula.
 
 ms_watched_altered / ms_watched_clean: how long the changed and the
 original video were on their screen during that turn (in the gallery view
@@ -373,6 +379,15 @@ function formatLocalTimeOfDay(epochMs: number): string {
   const seconds = String(d.getSeconds()).padStart(2, '0')
   const millis = String(d.getMilliseconds()).padStart(3, '0')
   return `${hours}:${minutes}:${seconds}.${millis} ${ampm}`
+}
+
+/**
+ * Free text typed by participants: a leading = + - @ would make Excel or
+ * Sheets read the cell as a formula (even an answer like "- a bit tense"),
+ * so such text gets a leading apostrophe. Explained in README.txt.
+ */
+function spreadsheetSafe(text: string): string {
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
 }
 
 function csvField(v: unknown): string {
@@ -724,7 +739,7 @@ export class SessionLogger {
         csvField(r.submittedBy),
         r.stats.edits,
         countWords(r.text),
-        csvField(r.text),
+        csvField(spreadsheetSafe(r.text)),
       ].join(',') + '\n',
     )
   }

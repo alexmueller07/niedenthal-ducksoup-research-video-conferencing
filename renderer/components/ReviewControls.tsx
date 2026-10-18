@@ -184,6 +184,9 @@ function ReviewSetup({
                 ? `${fmtTimeline(availability.conversationMs)} recorded · ${turns} turns`
                 : availability.reason}
         </p>
+        {availability?.canStart && availability.warning && (
+          <p className="max-w-xs text-right text-[11px] text-amber-300">{availability.warning}</p>
+        )}
       </div>
     </div>
   )

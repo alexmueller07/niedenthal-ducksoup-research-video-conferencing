@@ -35,7 +35,7 @@ const base = `http://127.0.0.1:${port}`
 assert.equal((await fetch(`${base}/review/abc/P1_abc_altered.mp4`)).status, 403)
 
 const [url] = route.open([file])
-assert.match(url, /^\/review\/[0-9a-f]{32}\/P1_abc_altered\.mp4$/)
+assert.match(url, /^\/review\/[0-9a-f]{32}\/1\.mp4$/, 'served under a neutral name')
 
 const full = await fetch(base + url)
 assert.equal(full.status, 200)
@@ -58,16 +58,27 @@ assert.equal(head.headers.get('content-length'), '1000')
 
 // Wrong token, unregistered file, and path tricks are all refused.
 const token = url.split('/')[2]
-assert.equal((await fetch(`${base}/review/${'0'.repeat(32)}/P1_abc_altered.mp4`)).status, 403)
+assert.equal((await fetch(`${base}/review/${'0'.repeat(32)}/1.mp4`)).status, 403)
+assert.equal((await fetch(`${base}/review/${token}/P1_abc_altered.mp4`)).status, 404, 'real names are not served')
 assert.equal((await fetch(`${base}/review/${token}/secret.txt`)).status, 404)
 assert.equal((await fetch(`${base}/review/${token}/..%2Fsecret.txt`)).status, 404)
 assert.equal((await fetch(`${base}/review/${token}/%E0%A4%A`)).status, 400)
 assert.equal((await fetch(`${base}/other`)).status, 404)
 assert.equal((await fetch(base + url, { method: 'POST' })).status, 405)
 
-// Closing the review turns the link off.
+// A second audience gets its own token; neither reaches the other's files.
+const other = path.join(dir, 'P1_abc_clean.mp4')
+fs.writeFileSync(other, Buffer.from('original'))
+const [otherUrl] = route.open([other])
+assert.notEqual(otherUrl.split('/')[2], token)
+assert.equal(Buffer.from(await (await fetch(base + otherUrl)).arrayBuffer()).toString(), 'original')
+assert.deepEqual(Buffer.from(await (await fetch(base + url)).arrayBuffer()), body, 'first token still serves its own file')
+assert.equal((await fetch(`${base}/review/${token}/2.mp4`)).status, 404)
+
+// Closing the review turns every link off.
 route.close()
 assert.equal((await fetch(base + url)).status, 403)
+assert.equal((await fetch(base + otherUrl)).status, 403)
 
 await new Promise<void>((r) => server.close(() => r()))
 fs.rmSync(dir, { recursive: true, force: true })

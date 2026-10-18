@@ -118,7 +118,9 @@ export class SessionServer {
   private http: http.Server | null = null
   private readonly media = new ReviewMediaRoute()
   private readonly review: ReviewController
+  /** What participants may stream, and the researcher's full set (adds the originals). */
   private reviewMedia: ReviewMedia | null = null
+  private reviewMediaAdmin: ReviewMedia | null = null
   private reviewTimer: ReturnType<typeof setInterval> | null = null
   /** Dev only (npm run server:dev): review these files instead of real recordings. */
   private reviewFixture: ReviewFixtureFile[] | null = null
@@ -280,7 +282,16 @@ export class SessionServer {
   reviewAvailability(): ReviewAvailability {
     const recs = this.reviewRecordings()
     const conversationMs = this.conversationMs(recs)
-    const base = { conversationMs, recordingsOpen: this.openRecordings.size }
+    const missing: string[] = []
+    for (const slot of ['P1', 'P2'] as const) {
+      for (const kind of ['altered', 'clean'] as const) {
+        if (!recs.some((r) => r.slot === slot && r.kind === kind)) {
+          missing.push(`${this.identityOf(slot).name || slot}'s ${kind === 'altered' ? 'changed' : 'original'} video`)
+        }
+      }
+    }
+    const warning = recs.length > 0 && missing.length > 0 ? `Not recorded: ${missing.join(', ')}.` : ''
+    const base = { conversationMs, recordingsOpen: this.openRecordings.size, warning }
     if (this.phase === 'review') return { ...base, canStart: false, reason: 'The review is running.' }
     if (this.phase !== 'ended') return { ...base, canStart: false, reason: 'End the conversation first.' }
     if (this.openRecordings.size > 0) return { ...base, canStart: false, reason: 'Saving the recordings…' }
@@ -306,22 +317,14 @@ export class SessionServer {
     const config = parseReviewConfig(rawConfig)
     const recs = this.reviewRecordings().sort((a, b) => a.startedAtMs - b.startedAtMs)
     const liveStart = Date.parse(this.sessionStartedAt as string)
-    const urls = this.media.open(recs.map((r) => r.path))
-    const media: ReviewMedia = {
-      P1: { altered: [], clean: [] },
-      P2: { altered: [], clean: [] },
-    }
-    recs.forEach((r, i) => {
-      const part: ReviewMediaPart = {
-        url: urls[i],
-        offsetMs: r.startedAtMs - liveStart,
-        durationMs: r.durationMs,
-      }
-      media[r.slot as PSlot][r.kind as VideoVersion].push(part)
-    })
+    // The researcher's preview gets everything. Participants get the original
+    // recordings only when the settings allow it: the files are not even
+    // reachable for them otherwise, not merely hidden on screen.
+    const forParticipants = config.showOriginal ? recs : recs.filter((r) => r.kind === 'altered')
+    this.reviewMediaAdmin = this.openReviewMedia(recs, liveStart)
+    this.reviewMedia = this.openReviewMedia(forParticipants, liveStart)
     this.setPhase('review', adminName)
-    this.reviewMedia = media
-    this.broadcast({ type: 'review-media', media })
+    for (const c of this.clients.values()) this.sendReviewMedia(c)
     const connected = { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') }
     const segments = buildSegments(availability.conversationMs, config)
     if (segments.length === 0) {
@@ -346,10 +349,33 @@ export class SessionServer {
     return this.review.start(config, availability.conversationMs, connected)
   }
 
+  /** Serve these recordings under a fresh token and place them on the conversation timeline. */
+  private openReviewMedia(recs: RecordingInfo[], liveStart: number): ReviewMedia {
+    const urls = this.media.open(recs.map((r) => r.path))
+    const media: ReviewMedia = {
+      P1: { altered: [], clean: [] },
+      P2: { altered: [], clean: [] },
+    }
+    recs.forEach((r, i) => {
+      const part: ReviewMediaPart = {
+        url: urls[i],
+        offsetMs: r.startedAtMs - liveStart,
+        durationMs: r.durationMs,
+      }
+      media[r.slot as PSlot][r.kind as VideoVersion].push(part)
+    })
+    return media
+  }
+
+  private sendReviewMedia(ctx: ClientCtx) {
+    const media = ctx.role === 'admin' ? this.reviewMediaAdmin : this.reviewMedia
+    this.send(ctx.ws, { type: 'review-media', media })
+  }
+
   /** Send a (re)joining client everything it needs to show the review. */
   private sendReviewTo(ctx: ClientCtx) {
     if (!this.review.active) return
-    this.send(ctx.ws, { type: 'review-media', media: this.reviewMedia })
+    this.sendReviewMedia(ctx)
     this.send(ctx.ws, { type: 'review-state', state: this.review.state })
     if (ctx.slot === 'P1' || ctx.slot === 'P2') {
       const draft = this.review.draftFor(ctx.slot)
@@ -373,6 +399,8 @@ export class SessionServer {
     this.ruleTimer = null
     if (this.reviewTimer) clearInterval(this.reviewTimer)
     this.reviewTimer = null
+    // A review still running keeps what was written so far.
+    this.review.stop()
     this.log({ event: 'app_stopped' })
     for (const ctx of this.clients.values()) ctx.ws.close()
     this.clients.clear()
@@ -1039,6 +1067,7 @@ export class SessionServer {
       this.review.stop()
       this.media.close()
       this.reviewMedia = null
+      this.reviewMediaAdmin = null
       this.broadcast({ type: 'review-media', media: null })
     }
     if (phase==='ended') {
@@ -1059,7 +1088,8 @@ export class SessionServer {
     // waiting room releases anything a rule left applied.
     this.ruleEngine.onPhaseChange(phase)
     this.log({
-      event: SESSION_PHASE_EVENT_NAMES[phase],
+      // Leaving the review is not the end of the conversation; keep that row unique.
+      event: from === 'review' ? 'review_closed' : SESSION_PHASE_EVENT_NAMES[phase],
       actorRole: 'admin',
       actorSlot: 'ADMIN',
       actorName: adminName,

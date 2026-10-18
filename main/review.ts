@@ -143,7 +143,7 @@ export function cleanText(input: unknown): string {
 
 // ---- Records handed to the logger ----
 
-export type ReviewSubmittedBy = 'participant' | 'researcher_forced' | 'auto'
+export type ReviewSubmittedBy = 'participant' | 'researcher_forced' | 'auto' | 'review_ended'
 
 export interface ReviewResponseRecord {
   segment: ReviewSegment
@@ -165,7 +165,7 @@ export interface ReviewSegmentRecord {
   playedAtMs: number | null
   finishedPlayingAtMs: number | null
   advancedAtMs: number
-  advancedBy: 'both_done' | 'researcher' | 'auto'
+  advancedBy: 'both_done' | 'researcher' | 'auto' | 'review_ended'
   pauses: number
   pauseTotalMs: number
 }
@@ -264,6 +264,8 @@ export class ReviewController {
   /** Back to idle (the researcher ended the review, or the phase changed). */
   stop() {
     if (!this.active) return
+    // Ended mid-turn: keep whatever each person had written, and the turn itself.
+    if (this.s.status !== 'done') this.closeTurn('review_ended')
     this.host.log({
       event: 'review_ended',
       param: 'turn',
@@ -337,6 +339,7 @@ export class ReviewController {
         return null
       case 'resume':
         if (this.s.status !== 'paused') return 'The review is not paused.'
+        if (by !== 'researcher' && this.s.holdReason !== 'participant') return 'Paused by the researcher.'
         this.host.log({ event: 'review_resumed', actorSlot: by === 'researcher' ? 'ADMIN' : by, param: 'turn', value: this.turnNumber })
         this.hold('loading', null)
         return null
@@ -460,11 +463,27 @@ export class ReviewController {
     this.publish()
   }
 
-  private advance(by: ReviewSegmentRecord['advancedBy']) {
+  private advance(by: Exclude<ReviewSegmentRecord['advancedBy'], 'review_ended'>) {
+    this.closeTurn(by)
+    const now = this.host.now()
+    if (this.s.current + 1 >= this.s.segments.length) {
+      this.s = { ...this.s, status: 'done', holdReason: null, autoAdvanceAtMs: null, anchorServerMs: now }
+      this.host.log({ event: 'review_finished', param: 'turns', value: this.s.segments.length })
+      this.publish()
+      return
+    }
+    this.s = { ...this.s, current: this.s.current + 1 }
+    this.beginTurn()
+  }
+
+  /** Save any answers not yet submitted and write the turn's row. */
+  private closeTurn(by: ReviewSegmentRecord['advancedBy']) {
     const now = this.host.now()
     if (by !== 'both_done') {
+      const submittedBy: ReviewSubmittedBy =
+        by === 'auto' ? 'auto' : by === 'review_ended' ? 'review_ended' : 'researcher_forced'
       for (const slot of SEATS) {
-        if (!this.s.done[slot]) this.saveResponse(slot, by === 'auto' ? 'auto' : 'researcher_forced')
+        if (!this.s.done[slot]) this.saveResponse(slot, submittedBy)
       }
     }
     if (this.turn.heldSinceMs !== null) {
@@ -482,14 +501,6 @@ export class ReviewController {
       pauseTotalMs: this.turn.pauseTotalMs,
     })
     this.host.log({ event: 'review_advanced', param: 'turn', value: seg.index, detail: { by } })
-    if (this.s.current + 1 >= this.s.segments.length) {
-      this.s = { ...this.s, status: 'done', holdReason: null, autoAdvanceAtMs: null, anchorServerMs: now }
-      this.host.log({ event: 'review_finished', param: 'turns', value: this.s.segments.length })
-      this.publish()
-      return
-    }
-    this.s = { ...this.s, current: this.s.current + 1 }
-    this.beginTurn()
   }
 
   private saveResponse(slot: PSlot, submittedBy: ReviewSubmittedBy) {
