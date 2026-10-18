@@ -62,26 +62,30 @@ export function fixedSizeStream(
   }
   // One copy per incoming frame keeps the original frame timing. It keeps
   // firing while the dashboard window is hidden or minimised (unlike
-  // requestAnimationFrame); a timer is the fallback where it is missing.
+  // requestAnimationFrame). The timer only draws when no frame callback has
+  // come for a while (missing, or stopped firing), so the recording never
+  // goes black.
   let stopped = false
-  let timer: ReturnType<typeof setInterval> | null = null
+  let lastFrameAt = 0
   if ('requestVideoFrameCallback' in video) {
     const onFrame = () => {
       if (stopped) return
+      lastFrameAt = performance.now()
       draw()
       video.requestVideoFrameCallback(onFrame)
     }
     video.requestVideoFrameCallback(onFrame)
-  } else {
-    timer = setInterval(draw, 1000 / fps)
   }
+  const timer = setInterval(() => {
+    if (performance.now() - lastFrameAt > 500) draw()
+  }, 1000 / fps)
   const canvasTrack = canvas.captureStream(fps).getVideoTracks()[0]
   const stream = new MediaStream([canvasTrack, ...source.getAudioTracks()])
   return {
     stream,
     stop: () => {
       stopped = true
-      if (timer) clearInterval(timer)
+      clearInterval(timer)
       canvasTrack.stop()
       video.pause()
       video.srcObject = null

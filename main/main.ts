@@ -134,10 +134,15 @@ app.on('will-quit', () => {
   globalShortcuts.unregister()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
   allowQuit = true
-  void shutdownServer()
   closeAllRecordings()
+  // Wait for the server to shut down once, so the last rows (e.g. answers from
+  // a review still running) reach the disk before the process exits.
+  if (server) {
+    e.preventDefault()
+    void shutdownServer().finally(() => app.quit())
+  }
 })
 
 async function shutdownServer() {

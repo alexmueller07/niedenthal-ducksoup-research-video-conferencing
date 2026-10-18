@@ -144,6 +144,8 @@ export default function AdminDashboard() {
   const micTrackRef = useRef<MediaStreamTrack | null>(null)
   const recordersRef = useRef<Map<string, { rec: MediaRecorder; id: string; part: number }>>(new Map())
   const recPartsRef = useRef<Map<string, number>>(new Map())
+  /** When a recorder last failed to start, so it is not retried on every re-render. */
+  const recFailedAtRef = useRef<Map<string, number>>(new Map())
   const bootedRef = useRef(false)
   const throttleRef = useRef<Map<string, number>>(new Map())
   const effectsTouchedRef = useRef<Map<PSlot, number>>(new Map())
@@ -473,6 +475,7 @@ export default function AdminDashboard() {
       meta: { slot?: string; participantId?: string; kind?: string },
     ) => {
       if (!hasIpc() || recordersRef.current.has(key)) return
+      if (performance.now() - (recFailedAtRef.current.get(key) ?? -Infinity) < 10_000) return
       const part = (recPartsRef.current.get(key) ?? 0) + 1
       recPartsRef.current.set(key, part)
       const fullLabel = part > 1 ? `${label}_part${part}` : label
@@ -498,6 +501,7 @@ export default function AdminDashboard() {
       } catch (err) {
         // Close the empty file so nothing waits on a recording that never started.
         console.error(`[rec] could not start ${fullLabel}`, err)
+        recFailedAtRef.current.set(key, performance.now())
         fixed?.stop()
         void ipcInvoke('rec:close', opened.id)
         return
