@@ -25,6 +25,9 @@ import type {
   Phase,
   PSlot,
   ReviewAvailability,
+  ReviewMedia,
+  ReviewMediaPart,
+  VideoVersion,
   RosterState,
   ServerMessage,
   SlotId,
@@ -42,6 +45,7 @@ import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule, validRules } from './rules'
 import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
+import { ReviewController, cleanText, parseReviewConfig, parseViewingStats } from './review'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -74,6 +78,16 @@ export interface RecordingInfo {
   durationMs: number
 }
 
+/** A file standing in for a recording in browser-only development. */
+export interface ReviewFixtureFile {
+  slot: PSlot
+  kind: VideoVersion
+  path: string
+  /** Where it starts on the conversation timeline. */
+  offsetMs: number
+  durationMs: number
+}
+
 export interface ServerStatus {
   running: boolean
   port: number
@@ -103,6 +117,11 @@ export class SessionServer {
   /** Plain HTTP on the same port: the WebSocket upgrades from it, and the review streams recordings from it. */
   private http: http.Server | null = null
   private readonly media = new ReviewMediaRoute()
+  private readonly review: ReviewController
+  private reviewMedia: ReviewMedia | null = null
+  private reviewTimer: ReturnType<typeof setInterval> | null = null
+  /** Dev only (npm run server:dev): review these files instead of real recordings. */
+  private reviewFixture: ReviewFixtureFile[] | null = null
   private clients = new Map<WebSocket, ClientCtx>()
   /** Identities remembered per slot so a reconnecting participant keeps their seat. */
   private slotIdentities = new Map<SlotId, Identity>()
@@ -168,6 +187,15 @@ export class SessionServer {
         if (admin) this.send(admin.ws, { type: 'rule-status', active })
       },
     })
+    this.review = new ReviewController({
+      now: () => Date.now(),
+      publish: (state) => this.broadcast({ type: 'review-state', state }),
+      log: (input) => this.log(input),
+      writeResponse: (record) => this.logger.reviewResponse(record),
+      writeSegment: (record) =>
+        this.logger.reviewSegment(record, this.identityOf(record.segment.targetSeat).participantId),
+      identity: (slot) => this.identityOf(slot),
+    })
   }
 
   start(): Promise<void> {
@@ -186,6 +214,7 @@ export class SessionServer {
       wss.on('connection', (ws, req) => this.onConnection(ws, req.socket.remoteAddress ?? ''))
       this.pingTimer = setInterval(() => this.heartbeat(), 5000)
       this.ruleTimer = setInterval(() => this.ruleEngine.tick(Date.now()), 250)
+      this.reviewTimer = setInterval(() => this.review.tick(), 250)
     })
   }
 
@@ -223,6 +252,15 @@ export class SessionServer {
   private reviewRecordings(): RecordingInfo[] {
     const liveStart = this.sessionStartedAt ? Date.parse(this.sessionStartedAt) : null
     if (liveStart === null) return []
+    if (this.reviewFixture) {
+      return this.reviewFixture.map((f) => ({
+        slot: f.slot,
+        kind: f.kind,
+        path: f.path,
+        startedAtMs: liveStart + f.offsetMs,
+        durationMs: f.durationMs,
+      }))
+    }
     return this.finishedRecordings.filter(
       (r) =>
         (r.slot === 'P1' || r.slot === 'P2') &&
@@ -253,6 +291,75 @@ export class SessionServer {
     return { ...base, canStart: true, reason: '' }
   }
 
+  setReviewFixture(files: ReviewFixtureFile[]) {
+    this.reviewFixture = files
+  }
+
+  /**
+   * Start the post-call review: open the recordings for streaming, move
+   * everyone to the review phase, and begin turn 1. Returns an error message
+   * instead if it cannot start.
+   */
+  private startReview(rawConfig: unknown, adminName: string): string | null {
+    const availability = this.reviewAvailability()
+    if (!availability.canStart) return availability.reason
+    const config = parseReviewConfig(rawConfig)
+    const recs = this.reviewRecordings().sort((a, b) => a.startedAtMs - b.startedAtMs)
+    const liveStart = Date.parse(this.sessionStartedAt as string)
+    const urls = this.media.open(recs.map((r) => r.path))
+    const media: ReviewMedia = {
+      P1: { altered: [], clean: [] },
+      P2: { altered: [], clean: [] },
+    }
+    recs.forEach((r, i) => {
+      const part: ReviewMediaPart = {
+        url: urls[i],
+        offsetMs: r.startedAtMs - liveStart,
+        durationMs: r.durationMs,
+      }
+      media[r.slot as PSlot][r.kind as VideoVersion].push(part)
+    })
+    this.setPhase('review', adminName)
+    this.reviewMedia = media
+    this.broadcast({ type: 'review-media', media })
+    const connected = { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') }
+    const err = this.review.start(config, availability.conversationMs, connected)
+    if (err) {
+      this.setPhase('ended', adminName)
+      return err
+    }
+    void this.logger.writeReviewInfo({
+      startedAt: new Date().toISOString(),
+      conversationStartedAt: this.sessionStartedAt,
+      conversationMs: availability.conversationMs,
+      config,
+      segments: this.review.state.segments,
+      recordings: recs.map((r) => ({
+        seat: r.slot,
+        type: r.kind,
+        file: r.path,
+        offsetMs: r.startedAtMs - liveStart,
+        durationMs: r.durationMs,
+      })),
+    })
+    return null
+  }
+
+  /** Send a (re)joining client everything it needs to show the review. */
+  private sendReviewTo(ctx: ClientCtx) {
+    if (!this.review.active) return
+    this.send(ctx.ws, { type: 'review-media', media: this.reviewMedia })
+    this.send(ctx.ws, { type: 'review-state', state: this.review.state })
+    if (ctx.slot === 'P1' || ctx.slot === 'P2') {
+      const draft = this.review.draftFor(ctx.slot)
+      if (draft && (draft.text || draft.submitted)) this.send(ctx.ws, { type: 'review-draft', ...draft })
+    }
+  }
+
+  private identityOf(slot: SlotId): Identity {
+    return this.bySlot(slot)?.identity ?? this.slotIdentities.get(slot) ?? EMPTY_IDENTITY
+  }
+
   private sendReviewAvailability() {
     const admin = this.bySlot('ADMIN')
     if (admin) this.send(admin.ws, { type: 'review-availability', availability: this.reviewAvailability() })
@@ -263,6 +370,8 @@ export class SessionServer {
     this.pingTimer = null
     if (this.ruleTimer) clearInterval(this.ruleTimer)
     this.ruleTimer = null
+    if (this.reviewTimer) clearInterval(this.reviewTimer)
+    this.reviewTimer = null
     this.log({ event: 'app_stopped' })
     for (const ctx of this.clients.values()) ctx.ws.close()
     this.clients.clear()
@@ -358,6 +467,8 @@ export class SessionServer {
       this.send(ws, { type: 'review-availability', availability: this.reviewAvailability() })
     }
     if (slot === 'P1' || slot === 'P2') this.restoreCalibration(slot, identity)
+    this.sendReviewTo(ctx)
+    if (slot === 'P1' || slot === 'P2') this.review.connection(slot, true)
     this.broadcastRoster()
   }
 
@@ -419,6 +530,7 @@ export class SessionServer {
     if (ctx.slot === 'P1' || ctx.slot === 'P2') {
       this.voiceSession.disconnect(ctx.slot)
       this.ruleEngine.onExpression(ctx.slot,null)
+      this.review.connection(ctx.slot, false)
       const other=this.bySlot(otherSlot(ctx.slot))
       if (other) this.send(other.ws,{type:'voice-partner-turn',turn:null})
     }
@@ -817,7 +929,55 @@ export class SessionServer {
       }
       case 'set-phase': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        // The review starts only through review-start (it needs the recordings),
+        // and is left only by ending it.
+        if (msg.phase === 'review') return
+        if (this.phase === 'review' && msg.phase !== 'ended') return
         this.setPhase(msg.phase, ctx.identity.name)
+        return
+      }
+      case 'review-start': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        const err = this.startReview(msg.config, ctx.identity.name)
+        if (err) this.send(ctx.ws, { type: 'review-error', reason: err })
+        return
+      }
+      case 'review-control': {
+        const by = ctx.role === 'admin' ? 'researcher' : ctx.slot === 'ADMIN' ? null : ctx.slot
+        if (!by) return
+        const err = this.review.control(msg.action, by)
+        if (err) this.send(ctx.ws, { type: 'review-error', reason: err })
+        return
+      }
+      case 'review-ready': {
+        if (ctx.slot === 'P1' || ctx.slot === 'P2') this.review.ready(ctx.slot, msg.loadSeq)
+        return
+      }
+      case 'review-buffering': {
+        if (ctx.slot === 'P1' || ctx.slot === 'P2') this.review.buffering(ctx.slot, msg.loadSeq)
+        return
+      }
+      case 'review-draft':
+      case 'review-submit': {
+        if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
+        const text = cleanText(msg.text)
+        const stats = parseViewingStats(msg.stats)
+        if (msg.type === 'review-draft') this.review.draft(ctx.slot, msg.turn, text, stats)
+        else this.review.submit(ctx.slot, msg.turn, text, stats)
+        return
+      }
+      case 'review-view': {
+        if ((ctx.slot !== 'P1' && ctx.slot !== 'P2') || msg.turn !== this.review.turnNumber) return
+        const pick = (v: unknown, allowed: string[]) => (allowed.includes(v as string) ? (v as string) : '')
+        this.logger.reviewView({
+          writerSlot: ctx.slot,
+          writerParticipantId: ctx.identity.participantId,
+          turn: msg.turn,
+          positionMs: typeof msg.positionMs === 'number' && Number.isFinite(msg.positionMs) ? msg.positionMs : 0,
+          mode: pick(msg.mode, ['gallery', 'single', 'active']),
+          person: pick(msg.person, ['P1', 'P2', 'both']),
+          version: pick(msg.version, ['altered', 'clean', 'both']),
+        })
         return
       }
       case 'set-rules': {
@@ -874,6 +1034,12 @@ export class SessionServer {
     if (phase === this.phase) return
     const from = this.phase
     this.phase = phase
+    if (from === 'review') {
+      this.review.stop()
+      this.media.close()
+      this.reviewMedia = null
+      this.broadcast({ type: 'review-media', media: null })
+    }
     if (phase==='ended') {
       this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
       this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
