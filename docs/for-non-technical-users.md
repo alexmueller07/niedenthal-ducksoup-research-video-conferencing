@@ -52,6 +52,44 @@ Participants fill in name, participant ID, dyad ID, and the session address (the
    - Set up **automation rules** so certain changes happen on their own (see below).
 5. **Press "End session"** when the conversation is done. Both participants see an "ended" screen. Everything is saved automatically.
 6. If needed, you can **restart** the same session (continues recording as a new file) or send participants back to the **waiting room**.
+7. Optionally, run the **post-call review** (see below).
+
+## Post-call review (optional)
+
+After the conversation ends, both participants can rewatch it together and write about how they felt. The video is split into short turns that take it in alternating order: Participant 1's video for the first 2.5 minutes, then Participant 2's video for the same 2.5 minutes, then Participant 1's next 2.5 minutes, and so on.
+
+In each turn, both people write at the same time:
+
+- the person whose video it is writes **what they were feeling**
+- the other person writes **what they think that person was feeling**
+
+Both screens always show the same moment. Neither participant can see what the other one writes.
+
+### Running it
+
+1. Press **End session** as usual. A **Post-call review** box appears at the top of your dashboard.
+2. Wait a moment while the recordings finish saving. The box shows how much was recorded and how many turns that makes.
+3. Choose the settings (they are remembered for next time):
+   - **View mode**:
+     - **Active speaker**: only the person whose turn it is.
+     - **Single**: each person sees their partner's video.
+     - **Gallery**: everything at once.
+   - **Turn length**: 150 seconds (2.5 minutes) by default. A last part shorter than 30 seconds is added to the turn before it rather than becoming a tiny turn of its own.
+   - **Goes first**: Participant 1 or 2.
+   - **Next turn starts**: when both people press Done (default), or by itself 10 seconds after the clip ends.
+   - **Show participants the original video too**: off by default. When on, participants can switch between the changed video and the original. *This lets them see the face/voice changes, so check your study protocol before turning it on.*
+   - **Participants can pause**: off by default. A pause always stops the video for both of them.
+4. Press **Start review**.
+
+During each turn, participants can start writing while the clip plays. **Done** unlocks once the clip ends. Your dashboard shows what each person is doing (watching, still writing, done, or disconnected), with a small muted preview. You can:
+
+- **Pause / Resume** the video for both participants
+- **Replay this clip** from the start of the turn
+- **Next turn now**: saves whatever each person has written so far and moves on (useful if someone is stuck)
+- **Start without waiting**: if one participant's screen is slow to load, or they have dropped out
+- **End review** when it's over (or to stop early)
+
+If a participant's connection drops, both videos pause until they are back, and whatever they had typed is still there.
 
 ## Calibration
 
@@ -152,9 +190,12 @@ Each session saves to its own folder (you can open it directly from the dashboar
 - Each calibrated participant's measurements and photos, under `calibration/<participant id>/`
 - A summary file once the session ends
 - Video/audio recordings: each participant's real feed, each participant's modified feed, and the researcher's mic
+- If you ran a post-call review: `review_responses.csv` (every answer, who wrote it, which turn and whose video it was about, which view and video version they were looking at), `review_segments.csv` (one row per turn), `review_viewing.csv` (each time someone switched between the changed and original video), and `review.json` (the settings used)
 
 ## Troubleshooting
 
 - **A participant's dot won't turn green** — their camera or microphone hasn't been detected yet; check their machine.
 - **"Connecting to your partner…" shown mid-call** — the connection between the two participants briefly dropped; it will usually reconnect on its own.
 - **Need to leave a participant station** — see "Leaving a participant station" above.
+- **"Start review" stays greyed out** — the line under the button says why. Usually the recordings are still saving (wait a few seconds). Recording only works in the desktop app.
+- **A review video says "This part of the recording cannot be played"** — recordings made with app versions before October 2026 can stop playing partway, when the video quality changed during the call. Newer recordings are saved in a way that avoids this.

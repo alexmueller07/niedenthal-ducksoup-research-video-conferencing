@@ -20,6 +20,7 @@ Architecture and implementation details for the Lab Video Call app. For a plain-
 12. [Constants reference](#12-constants-reference)
 13. [Known limitations](#13-known-limitations)
 14. [File index](#14-file-index)
+15. [Post-call review](#15-post-call-review)
 
 ---
 
@@ -65,7 +66,7 @@ Architecture and implementation details for the Lab Video Call app. For a plain-
 ```
 
 Key facts:
-- **Media never passes through the server.** WebRTC carries audio/video directly between machines; the server only sees JSON control messages.
+- **Live media never passes through the server.** WebRTC carries audio/video directly between machines; the server only sees JSON control messages. The one exception is the post-call review (§15), when participant machines stream the saved recordings from the researcher's machine over HTTP on the same port.
 - **The server runs inside the researcher's Electron main process** (`main/main.ts`, `server:start` IPC), so rules and logging keep running even if the dashboard tab is busy.
 - **The pipeline pre-warms in the waiting room.** The face model loads, the render loop runs, and the audio graph is live at neutral settings before the conversation starts, so the first modification command lands on an already-hot path.
 
@@ -651,12 +652,13 @@ Each participant sends a `stream-map` telling the admin which stream id is alter
 
 ## 8. Session lifecycle
 
-`Phase = 'waiting' | 'live' | 'ended'`. The admin drives transitions via `set-phase`; the server broadcasts to everyone.
+`Phase = 'waiting' | 'live' | 'ended' | 'review'`. The admin drives transitions via `set-phase`; the server broadcasts to everyone.
 
 - **waiting → live**: stamps a fresh `sessionStartedAt`; timer rules re-arm.
 - **live → ended**: participants see the ended screen; recorders finalize; manifest written ~1.5 s later; rules release.
 - **→ waiting**: clears the clock; rules release; expression state resets.
 - Sessions are restartable: `ended → live` starts a fresh clock and continues recordings as `_partN` files; `ended/live → waiting` returns participants to the waiting room.
+- **ended → review** happens only through `review-start` (never `set-phase`), and only once every recording has closed. **review → ended** is the only way out of a review. See §15.
 
 **Start gating**: enabled once both participants are connected. If both are also ready (`camera && voice`, server-side), it starts immediately; otherwise it asks for confirmation. The face model is reported but doesn't block start — video simply passes through unmorphed if it failed to load.
 
@@ -678,6 +680,10 @@ session_<YYYY-MM-DDTHH-MM-SS>/
 ├── effect_state_P2.csv      # 1 Hz applied-state telemetry for P2 (ground truth)
 ├── recordings.csv           # one row per saved recording, with start/stop times
 ├── session.json             # manifest (written on End)
+├── review_responses.csv     # post-call review answers, one row per person per turn (§15)
+├── review_segments.csv      # one row per review turn
+├── review_viewing.csv       # one row per change of what a participant was looking at
+├── review.json              # review settings, turns, and recording offsets
 ├── calibration/             # one folder per calibrated participant (§5.3)
 │   └── <participant_id>/
 │       ├── calibration.json
@@ -764,6 +770,10 @@ Header: `seat, participant_id, type, started_date, started_time, stopped_date, s
 ### 9.5 Recording format
 
 `renderer/lib/recording.ts`. MP4 preferred (opens everywhere the lab works); candidates in order `video/mp4;codecs=avc1.640028,mp4a.40.2` → `avc1.42E01E,mp4a.40.2` → `video/mp4` → `video/webm;codecs=vp9,opus` → `video/webm`. Falls back to WebM if none of the MP4 variants are supported. Fragmented MP4 stays playable even if the app crashes mid-recording; chunks cut every 1 s.
+
+**Fixed frame size.** Each video stream is drawn onto a 1280×720 canvas (letterboxed) and the canvas is recorded, not the WebRTC track itself (`fixedSizeStream`). WebRTC changes a stream's resolution on the fly (it starts small and steps up as bandwidth allows), and Chromium's fragmented-MP4 recorder cannot follow that: it restarts its encoder at the new size without writing the new parameter sets anywhere, so everything after the first change fails to decode (`PIPELINE_ERROR_DECODE`, in Chromium and with hardware decoding off). Recordings made before this fix are affected; the review reports such files as unplayable from that point instead of stalling (§15.5).
+
+**Start time.** The dashboard notes `Date.now()` right after `MediaRecorder.start()` and passes it to `rec:close`; the main process hands it to `SessionServer.recordingClosed`. That is what lines the four recordings up for the review. In testing they landed within 1 ms of each other, about 40 ms after `sessionStartedAt`.
 
 ---
 
@@ -957,7 +967,9 @@ Things to know before citing or relying on this software in a study.
 | File | Role |
 |---|---|
 | `main.ts` | App entry; kiosk lockdown; permissions; server start/stop IPC; streamed-recording IPC; folder picker; 1-Person Test Station IPC; update check (§11.5). |
-| `server.ts` | `SessionServer`: seats, signaling relay, effect + calibration routing, phase, rule engine host, logging, LAN IP discovery. |
+| `server.ts` | `SessionServer`: seats, signaling relay, effect + calibration routing, phase, rule engine host, review host, logging, LAN IP discovery. HTTP and WebSocket share one port. |
+| `review.ts` | Post-call review: `buildSegments`, `resolveMediaAt`, `reviewPositionMs`, and the `ReviewController` state machine. |
+| `mediaRoute.ts` | Serves recordings to participant machines during a review, with range requests and a per-review token. |
 | `rules.ts` | `RuleEngine`: expression/timer triggers, holds, reverts, release modes. |
 | `presets.ts` | Modification conditions, `getPreset`, `counterbalanceConditions`. |
 | `protocol.ts` | Wire protocol, message types, `EffectState`, `ExpressionState`, `AutomationRule`, `Telemetry`, versions, port. |
@@ -982,12 +994,17 @@ Things to know before citing or relying on this software in a study.
 | `types.ts` | Legacy capture types + `SessionManifest` (v1). |
 | `protocol.ts` / `presets.ts` | Renderer re-exports of the shared `main/` modules. |
 | `ipcUtil.ts` | Typed IPC wrappers that no-op outside Electron. |
+| `reviewSync.ts` | `ReviewTrack`: keeps one `<video>` on the review's shared clock (drift correction, file parts, gaps, stalls, damaged files). |
 
 ### `renderer/components/` — shared UI
 
 | File | Role |
 |---|---|
 | `CalibrationPanel.tsx` | The calibration strip under a participant's video: four phase thumbnails with their numbers (or "Not calibrated"), quality flags, live cap readout, run/redo/accept. Used by both modes. |
+| `ReviewControls.tsx` | The researcher's review panel: settings and Start, then progress, controls and a muted preview. |
+| `review/ReviewScreen.tsx` | The participant's review screen and the per-turn viewing statistics. |
+| `review/ReviewStage.tsx` | The videos for all three view modes, kept mounted so mode and version switches are instant. |
+| `review/ResponseBox.tsx` | The writing panel: turn, question, answer box, Done. |
 
 ### `renderer/pages/` — UI
 
@@ -1005,7 +1022,7 @@ Things to know before citing or relying on this software in a study.
 
 ### `tests/`
 
-`npm test` runs the four TypeScript contract suites; the Playwright suite is run by hand.
+`npm test` runs the TypeScript contract suites, including the four review suites; the Playwright suite is run by hand.
 
 | File | Role |
 |---|---|
@@ -1014,4 +1031,85 @@ Things to know before citing or relying on this software in a study.
 | `expression_contract_test.ts` | `RuleEngine` behaviour against expression states. |
 | `calibration_replay_test.ts` | Camera-free end-to-end replay of a frame timeline through calibration, detection and the cap. |
 | `make_calibration_fixture.ts` | Regenerates `fixtures/calibration_frames.json` (`npm run test:fixture`). |
+| `review_segments_test.ts` | Turn planning (tails, short calls, first seat), media lookup across parts and gaps, the shared clock, config parsing. |
+| `review_controller_test.ts` | `ReviewController`: load/play/write/advance, pauses, disconnects, buffering, force next, auto advance, replay. |
+| `review_media_test.ts` | The recording route: ranges, tokens, refusing unknown files and path tricks. |
+| `review_server_test.ts` | Three real WebSocket clients through a whole review against a `SessionServer`, including a reconnect, and the CSVs it writes. |
 | `e2e_test.py` | Playwright three-seat run. Set `CALIBRATION_Y4M` to a recorded face clip to exercise calibration without a camera. |
+
+---
+
+## 15. Post-call review
+
+`main/review.ts` (logic), `main/server.ts` (hosting), `main/mediaRoute.ts` (file serving), `renderer/components/review/` and `renderer/components/ReviewControls.tsx` (UI), `renderer/lib/reviewSync.ts` (playback sync).
+
+After the conversation ends, both participants rewatch it together in turns. Each turn is one participant's video over one time window, and the turns alternate: P1 0:00–2:30, P2 0:00–2:30, P1 2:30–5:00, … During each turn, the person on screen writes what they felt (`self_report`) and the other writes what they think that person felt (`perceived`).
+
+### 15.1 Turns
+
+`buildSegments(durationMs, {segmentSec, minTailSec, firstSeat})`. The conversation length is from `sessionStartedAt` to the end of the last participant recording of the most recent live run. Windows are `segmentSec` long; a final window shorter than `minTailSec` is merged into the one before it (a 5:20 call at 150/30 gives 0–2:30 and 2:30–5:20). A call shorter than one window is a single window. Each window yields two turns, `firstSeat` first.
+
+### 15.2 Settings (`ReviewConfig`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `viewMode` | `active` | `gallery` (all videos), `single` (the viewer's partner), `active` (the person whose turn it is) |
+| `segmentSec` | 150 | Turn length, 10–1800 s |
+| `minTailSec` | 30 | Shorter last window joins the one before |
+| `firstSeat` | `P1` | Whose video comes first in each window |
+| `allowPause` | false | Participants may pause/resume (always for both) |
+| `advance` | `both-done` | Or `auto`: next turn 10 s after the clip ends |
+| `showOriginal` | false | Also load the clean recordings and offer the toggle. Off by default because it shows participants the manipulation. |
+
+Chosen on the researcher panel and saved in `electron-store` (`prefs.reviewConfig`) as the next default. Validated server-side by `parseReviewConfig`.
+
+### 15.3 Flow and the shared clock
+
+The server owns one clock, `ReviewState.anchorServerMs` / `anchorPosMs`. While playing, the position on the conversation timeline is `anchorPosMs + (serverNow − anchorServerMs)`, capped at the turn's end (`reviewPositionMs`). Participants convert using the offset from the existing `voice-clock` ping; the researcher's dashboard runs on the server machine and uses its own clock.
+
+| Status | Meaning | Leaves when |
+|---|---|---|
+| `loading` | Both machines seek to `anchorPosMs` and report `review-ready {loadSeq}` | Both are ready and connected; play starts 600 ms later so both press play together. The researcher can **Start without waiting**. |
+| `playing` | The clip runs; both can type | The position reaches the turn's end → `writing`; a stall or disconnect → back to `loading` at the current position |
+| `paused` | Researcher (or, if allowed, participant) pause | Resume → `loading` at the same position |
+| `writing` | Clip over; Done is enabled | Both submit (`both_done`), the researcher presses **Next turn now** (`researcher`), or `auto` advance (`auto`). Unsubmitted drafts are saved in the last two cases. |
+| `done` | All turns finished | The researcher ends the review |
+
+`loadSeq` increases on every `loading`, so a late `review-ready` or `review-buffering` from an earlier round is ignored.
+
+**Drift correction** (`ReviewTrack.sync`, every 200 ms): under 80 ms off, nothing; 80–400 ms, play at 1.05× or 0.95×; over 400 ms, jump. Two participant tabs on one machine stayed within about 6 ms of each other, and the four videos within one tab within 10 ms.
+
+**Stalls and disconnects.** An element still buffering 1 s after it should be playing sends `review-buffering`; the server returns both machines to `loading` at the current position. Hidden, silent elements never trigger this. A participant disconnect does the same, with `holdReason: 'disconnect'`. On reconnect the server resends the media list, the state and that participant's draft (`review-draft`). Drafts are sent every 2 s while typing.
+
+### 15.4 Recordings and lining them up
+
+`ReviewMedia` lists, per seat and version, the recording parts with their offset on the conversation timeline (`startedAtMs − sessionStartedAt`, see §9.5) and duration. `_partN` files from reconnects are extra parts; `resolveMediaAt` picks the part covering a moment (the later one if they overlap) or reports a gap, shown as "No video for this moment". A gap does not stop the clock.
+
+Files are served from `GET /review/<token>/<file>` on the session port. Only files registered for the running review are served, the token is random per review, and the route closes when the review ends. Range requests are supported, and seeking within a 5.5-minute recording took 5–60 ms locally.
+
+Every recording in play gets one `<video>` element that stays mounted, so switching view mode or version reloads nothing. Without `showOriginal`, only the altered recordings are loaded. Sound: in gallery the altered recordings play; in the other modes both voices come from the version on screen, so it sounds like the conversation.
+
+### 15.5 Damaged recordings
+
+A file that fails to decode (recordings from before the fixed-size fix in §9.5) is marked broken; its tile says "This part of the recording cannot be played", it never holds up the other machine, and it is retried at the start of the next turn or on a replay, since it usually plays fine up to the point where it broke.
+
+### 15.6 Data
+
+All three CSVs are created only when a review runs, and start with `review_number` (1 unless the researcher runs the review again in the same session). `segment_start_ms`/`segment_end_ms` are on the conversation clock, the same as `conversation_elapsed_ms`.
+
+- `review_responses.csv`: `review_number, pair_id, segment_number, window_number, segment_start_ms, segment_end_ms, about_seat, about_participant_id, writer_seat, writer_participant_id, response_type, view_mode, version_at_submit, ms_watched_altered, ms_watched_clean, toggle_count, clip_started_date, clip_started_time, clip_started_elapsed_ms, first_typed_elapsed_ms, submitted_date, submitted_time, submitted_elapsed_ms, submitted_by, edit_count, word_count, response_text`. `submitted_by` is `participant`, `researcher_forced` or `auto`. `ms_watched_*` counts time on screen until Done (both count in gallery). `first_typed_elapsed_ms` comes from the participant's clock converted to the server's.
+- `review_segments.csv`: `review_number, segment_number, window_number, about_seat, about_participant_id, segment_start_ms, segment_end_ms, played_date, played_time, played_elapsed_ms, finished_playing_elapsed_ms, advanced_date, advanced_time, advanced_elapsed_ms, advanced_by, pauses, pause_total_ms`.
+- `review_viewing.csv`: `review_number, writer_seat, writer_participant_id, segment_number, date, time, elapsed_ms, video_position_ms, view_mode, shown_person, shown_version`. One row at the start of each turn and one per switch.
+- `review.json`: `{ reviews: [{ reviewNumber, startedAt, conversationStartedAt, conversationMs, config, segments, recordings: [{seat, type, file, offsetMs, durationMs}] }] }`.
+- `events.csv`: `moved_to_review`, `review_started`, `review_turn_started`, `review_clip_finished`, `review_paused`, `review_resumed`, `review_started_without_waiting`, `review_turn_restarted`, `review_video_catching_up`, `review_response_submitted`, `review_advanced`, `review_finished`, `review_ended`.
+
+### 15.7 Developing without Electron
+
+Browser tabs cannot record, so `npm run server:dev` has nothing to review. Set `REVIEW_FIXTURE` to a JSON list of stand-in files (`[{ "slot": "P1", "kind": "altered", "path": "/abs/file.mp4", "offsetMs": 0, "durationMs": 40000 }, …]`) and the review plays those instead.
+
+### 15.8 Limitations
+
+- **Showing the original video reveals the manipulation.** `showOriginal` is off by default; check the study protocol and IRB before turning it on.
+- **Network load.** Gallery with the original video on streams four files to each participant machine, so eight streams leave the researcher's laptop (about 2.5 Mbps each at 1280×720). That's fine on wired LAN, but untested on weak Wi-Fi. A struggling machine pauses both people rather than letting them drift.
+- **Single view during your own turn** shows your partner, not you (the person you watched during the call). Use Active speaker to always show whoever the turn is about.
+- **The webcam keeps running** during the review, as it does in the ended screen; nothing is recorded.

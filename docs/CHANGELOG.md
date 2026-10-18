@@ -19,6 +19,21 @@
 
 ## Update History
 
+* **Date:** 18-10-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Post-call review, and recordings that play all the way through
+
+* **Previous behavior:**
+When the conversation ended, participants saw an "ended" screen and nothing else happened. Recordings could stop playing partway through: whenever the video quality changed during the call (which happens on its own, especially at the start), everything after that point in the saved file would not play.
+
+* **New behavior:**
+After ending the conversation, the researcher can start a review. Both participants rewatch the call together, in sync, in alternating turns (Participant 1's first 2.5 minutes, then Participant 2's first 2.5 minutes, and so on). In each turn the person on screen writes what they were feeling, and the other person writes what they think that person was feeling. The researcher chooses the view (only the person whose turn it is, each person's partner, or everyone at once), the turn length, who goes first, whether the next turn waits for both to press Done, whether participants can pause, and whether participants may also see the original (unchanged) video. The researcher can pause, replay a turn, move on, or end the review at any time. If someone's connection drops, both videos pause and their answer is kept. Answers, turns and video switches are saved to new review files in the session folder. Recordings are now saved at one fixed size, so they play from start to finish.
+
+* **Why this matters:**
+The review collects each person's own feelings and their read of their partner's feelings for every part of the conversation, lined up exactly with the recordings and the effect logs. The recording fix matters for every session, not just the review: older recordings may not play past the first change in video quality.
+
+---
+
 * **Date:** 08-10-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** More natural voice changes and a new smiling voice
