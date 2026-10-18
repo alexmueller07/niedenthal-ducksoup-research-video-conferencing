@@ -198,6 +198,7 @@ try {
     return Object.fromEntries(header.map((h, i) => [h, c[i]]))
   }
   const r1 = row(responses[1])
+  assert.equal(r1.review_number, '1')
   assert.equal(r1.pair_id, 'D7')
   assert.equal(r1.segment_number, '1')
   assert.equal(r1.about_seat, 'P1')
@@ -220,11 +221,13 @@ try {
   const viewing = (await readFile(path.join(logger.dir, 'review_viewing.csv'), 'utf-8')).trim().split('\n')
   assert.equal(viewing.length, 2)
   const v = cells(viewing[1])
-  assert.deepEqual([...v.slice(0, 3), ...v.slice(-4)], ['P1', 'Ana-pid', '1', '1234', 'gallery', 'both', 'both'])
+  assert.deepEqual([...v.slice(0, 4), ...v.slice(-4)], ['1', 'P1', 'Ana-pid', '1', '1234', 'gallery', 'both', 'both'])
 
   const info = JSON.parse(await readFile(path.join(logger.dir, 'review.json'), 'utf-8'))
-  assert.equal(info.segments.length, 6)
-  assert.equal(info.recordings.length, 4)
+  assert.equal(info.reviews.length, 1)
+  assert.equal(info.reviews[0].reviewNumber, 1)
+  assert.equal(info.reviews[0].segments.length, 6)
+  assert.equal(info.reviews[0].recordings.length, 4)
 
   const events = await readFile(path.join(logger.dir, 'events.csv'), 'utf-8')
   for (const e of ['moved_to_review', 'review_started', 'review_turn_started', 'review_clip_finished', 'review_ended']) {

@@ -143,11 +143,11 @@ const RECORDINGS_HEADER =
   'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
 const REVIEW_RESPONSES_HEADER =
-  'pair_id,segment_number,window_number,segment_start_ms,segment_end_ms,about_seat,about_participant_id,writer_seat,writer_participant_id,response_type,view_mode,version_at_submit,ms_watched_altered,ms_watched_clean,toggle_count,clip_started_date,clip_started_time,clip_started_elapsed_ms,first_typed_elapsed_ms,submitted_date,submitted_time,submitted_elapsed_ms,submitted_by,edit_count,word_count,response_text\n'
+  'review_number,pair_id,segment_number,window_number,segment_start_ms,segment_end_ms,about_seat,about_participant_id,writer_seat,writer_participant_id,response_type,view_mode,version_at_submit,ms_watched_altered,ms_watched_clean,toggle_count,clip_started_date,clip_started_time,clip_started_elapsed_ms,first_typed_elapsed_ms,submitted_date,submitted_time,submitted_elapsed_ms,submitted_by,edit_count,word_count,response_text\n'
 const REVIEW_SEGMENTS_HEADER =
-  'segment_number,window_number,about_seat,about_participant_id,segment_start_ms,segment_end_ms,played_date,played_time,played_elapsed_ms,finished_playing_elapsed_ms,advanced_date,advanced_time,advanced_elapsed_ms,advanced_by,pauses,pause_total_ms\n'
+  'review_number,segment_number,window_number,about_seat,about_participant_id,segment_start_ms,segment_end_ms,played_date,played_time,played_elapsed_ms,finished_playing_elapsed_ms,advanced_date,advanced_time,advanced_elapsed_ms,advanced_by,pauses,pause_total_ms\n'
 const REVIEW_VIEWING_HEADER =
-  'writer_seat,writer_participant_id,segment_number,date,time,elapsed_ms,video_position_ms,view_mode,shown_person,shown_version\n'
+  'review_number,writer_seat,writer_participant_id,segment_number,date,time,elapsed_ms,video_position_ms,view_mode,shown_person,shown_version\n'
 
 export interface ReviewViewInput {
   writerSlot: string
@@ -202,7 +202,7 @@ review_segments.csv      One row per review turn: when it played, when it
                           moved on, and how long it was paused.
 review_viewing.csv       One row each time a participant switched which
                           video they were looking at during the review.
-review.json              The review settings, the list of turns, and where
+review.json              The settings and turns of each review, and where
                           each recording sits on the conversation timeline.
 
 Times
@@ -229,6 +229,9 @@ turns that alternate between them: Participant 1's video for the first
 Participant 1's next 2.5 minutes, and so on. In each turn the person on
 screen writes what they were feeling (response_type self_report) and the
 other person writes what they think that person was feeling (perceived).
+
+review_number counts reviews within this session (1 unless the researcher
+started the review again).
 
 segment_start_ms / segment_end_ms are positions in the conversation, on
 the same clock as conversation_elapsed_ms — so they point straight at the
@@ -421,6 +424,9 @@ export class SessionLogger {
   private stateStreams = new Map<string, fs.WriteStream>()
   /** Review CSVs, created only once a review actually runs. */
   private reviewStreams = new Map<string, fs.WriteStream>()
+  /** Which review this is, if the researcher runs more than one in a session. */
+  private reviewNumber = 0
+  private reviewInfos: unknown[] = []
   private pendingRecordings = new Map<string, PendingRecording>()
   /** Which expression-detection build produced each seat's readings — captured once, written into the manifest. */
   private detectorInfo = new Map<string, { classifierMode?: string; classifierVersion?: string }>()
@@ -692,6 +698,7 @@ export class SessionLogger {
     const opened = r.openedAtMs
     this.reviewStream('review_responses.csv', REVIEW_RESPONSES_HEADER).write(
       [
+        this.reviewNumber,
         csvField(r.writer.dyadId || r.about.dyadId),
         r.segment.index,
         r.segment.window,
@@ -727,6 +734,7 @@ export class SessionLogger {
     const played = r.playedAtMs
     this.reviewStream('review_segments.csv', REVIEW_SEGMENTS_HEADER).write(
       [
+        this.reviewNumber,
         r.segment.index,
         r.segment.window,
         csvField(r.segment.targetSeat),
@@ -752,6 +760,7 @@ export class SessionLogger {
     const now = Date.now()
     this.reviewStream('review_viewing.csv', REVIEW_VIEWING_HEADER).write(
       [
+        this.reviewNumber,
         csvField(input.writerSlot),
         csvField(input.writerParticipantId),
         input.turn,
@@ -766,10 +775,20 @@ export class SessionLogger {
     )
   }
 
-  /** review.json: the settings, the turns, and where each recording sits on the timeline. */
-  async writeReviewInfo(info: unknown): Promise<void> {
+  /**
+   * A new review is starting. review.json lists every review run in this
+   * session: its settings, its turns, and where each recording sits on the
+   * timeline.
+   */
+  async startReview(info: Record<string, unknown>): Promise<void> {
+    this.reviewNumber += 1
+    this.reviewInfos.push({ reviewNumber: this.reviewNumber, ...info })
     try {
-      await fsp.writeFile(path.join(this.dir, 'review.json'), JSON.stringify(info, null, 2), 'utf-8')
+      await fsp.writeFile(
+        path.join(this.dir, 'review.json'),
+        JSON.stringify({ reviews: this.reviewInfos }, null, 2),
+        'utf-8',
+      )
     } catch (err) {
       console.warn('[logger] could not write review.json', err)
     }

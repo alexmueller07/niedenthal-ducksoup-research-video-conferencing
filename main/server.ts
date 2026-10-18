@@ -45,7 +45,7 @@ import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule, validRules } from './rules'
 import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
-import { ReviewController, cleanText, parseReviewConfig, parseViewingStats } from './review'
+import { ReviewController, buildSegments, cleanText, parseReviewConfig, parseViewingStats } from './review'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -323,17 +323,18 @@ export class SessionServer {
     this.reviewMedia = media
     this.broadcast({ type: 'review-media', media })
     const connected = { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') }
-    const err = this.review.start(config, availability.conversationMs, connected)
-    if (err) {
+    const segments = buildSegments(availability.conversationMs, config)
+    if (segments.length === 0) {
       this.setPhase('ended', adminName)
-      return err
+      return 'The recording is too short to review.'
     }
-    void this.logger.writeReviewInfo({
+    // Numbered before the first turn starts, so every row of this run carries it.
+    void this.logger.startReview({
       startedAt: new Date().toISOString(),
       conversationStartedAt: this.sessionStartedAt,
       conversationMs: availability.conversationMs,
       config,
-      segments: this.review.state.segments,
+      segments,
       recordings: recs.map((r) => ({
         seat: r.slot,
         type: r.kind,
@@ -342,7 +343,7 @@ export class SessionServer {
         durationMs: r.durationMs,
       })),
     })
-    return null
+    return this.review.start(config, availability.conversationMs, connected)
   }
 
   /** Send a (re)joining client everything it needs to show the review. */
