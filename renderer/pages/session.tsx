@@ -21,12 +21,17 @@ import type {
   CalibrationPhase,
   Identity,
   Phase,
+  PSlot,
+  ReviewMedia,
+  ReviewState,
   RosterState,
   ServerMessage,
   SignalData,
   SlotId,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke, ipcOn } from '../lib/ipcUtil'
+import { httpBaseFor } from '../lib/reviewSync'
+import { ReviewScreen, type RestoredDraft } from '../components/review/ReviewScreen'
 
 interface BootConfig {
   role: 'participant' | 'admin'
@@ -71,6 +76,11 @@ export default function ParticipantSession() {
   const [testFaceMode, setTestFaceMode] = useState(false)
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
   const [setupCheck, setSetupCheck] = useState<CalibrationProgress | null>(null)
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null)
+  const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
+  const [reviewDraft, setReviewDraft] = useState<RestoredDraft | null>(null)
+  const [mySlot, setMySlot] = useState<PSlot | null>(null)
+  const [serverHttp, setServerHttp] = useState('')
   // Hide the cursor only in the real Electron kiosk. In a plain browser tab
   // (dev/testing) a hidden cursor is just an annoyance with no lockdown value.
   const [browserMode, setBrowserMode] = useState(false)
@@ -86,6 +96,8 @@ export default function ParticipantSession() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootedRef = useRef(false)
   const setupRunRef = useRef(0)
+  /** Server clock minus ours, from the voice-clock pings; the review plays on the server's clock. */
+  const serverOffsetRef = useRef(0)
 
   const partnerVideoRef = useRef<HTMLVideoElement | null>(null)
   const selfVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -120,6 +132,7 @@ export default function ParticipantSession() {
     }
 
     void ipcInvoke('role:participant')
+    setServerHttp(httpBaseFor(normalizeServerUrl(cfg.serverAddr, DEFAULT_PORT)))
 
     const mySlot = () => mySlotRef.current
     const partnerSlot = (): SlotId | null =>
@@ -267,6 +280,7 @@ export default function ParticipantSession() {
           const now=Date.now(), rtt=now-msg.sentAt
           if (rtt>=0 && rtt<bestClockRtt) {
             bestClockRtt=rtt
+            serverOffsetRef.current=msg.serverAt-(msg.sentAt+now)/2
             effectsRef.current?.setVoiceClock(msg.serverAt-(msg.sentAt+now)/2,rtt/2)
           }
           return
@@ -275,6 +289,7 @@ export default function ParticipantSession() {
         case 'voice-reset': effectsRef.current?.resetVoiceCalibration();return
         case 'welcome':
           mySlotRef.current = msg.slot
+          if (msg.slot === 'P1' || msg.slot === 'P2') setMySlot(msg.slot)
           voicePhase=msg.phase
           if (msg.slot==='P1'||msg.slot==='P2') effectsRef.current?.setVoiceSlot(msg.slot)
           effectsRef.current?.setVoicePhase(voicePhaseOf(msg.phase))
@@ -352,6 +367,18 @@ export default function ParticipantSession() {
           return
         case 'peer-left':
           dropLink(msg.slot)
+          return
+        case 'review-state':
+          setReviewState(msg.state)
+          return
+        case 'review-media':
+          setReviewMedia(msg.media)
+          return
+        case 'review-draft':
+          setReviewDraft({ turn: msg.turn, text: msg.text, submitted: msg.submitted })
+          return
+        case 'review-error':
+          console.warn('[review]', msg.reason)
           return
         case 'rejected':
           return
@@ -562,6 +589,9 @@ export default function ParticipantSession() {
     if (escapeOpen) escapeInputRef.current?.focus()
   }, [escapeOpen, escapeShake])
 
+  const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
+  const sendToServer = useCallback((msg: ClientMessage) => clientRef.current?.send(msg), [])
+
   function confirmEscape() {
     if (escapeText.trim().toLowerCase() !== 'confirm') {
       setEscapeError('Type "confirm" to close the participant station.')
@@ -590,18 +620,21 @@ export default function ParticipantSession() {
   // a dead link (failed/closed drops the stream) shows the connecting overlay.
   const partnerLive =
     partnerStream !== null && partnerConn !== 'failed' && partnerConn !== 'closed'
+  // The review needs the pointer and text selection that the call hides.
+  const reviewing = phase === 'review'
+  const partnerSeat: PSlot = mySlot === 'P1' ? 'P2' : 'P1'
 
   return (
     <div
-      className={`relative h-screen w-screen select-none overflow-hidden bg-gray-950 ${
-        browserMode ? '' : 'cursor-none'
-      }`}
+      className={`relative h-screen w-screen overflow-hidden bg-gray-950 ${
+        reviewing ? '' : 'select-none'
+      } ${browserMode || reviewing ? '' : 'cursor-none'}`}
     >
       {/* Researcher audio — invisible, plays only if they unmute. */}
       <audio ref={adminAudioRef} autoPlay />
 
       {/* ---- Test mode (access code "test"): example-face switcher panel ---- */}
-      {testFaceMode && (
+      {testFaceMode && !reviewing && (
         <>
           <div className="absolute right-3 top-1/2 z-40 w-44 -translate-y-1/2 cursor-auto rounded-xl border border-gray-700 bg-gray-900/90 p-3 backdrop-blur">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
@@ -697,8 +730,29 @@ export default function ParticipantSession() {
         </div>
       )}
 
+      {/* ---- Post-call review ---- */}
+      {reviewing && (
+        reviewState && reviewState.status !== 'idle' && reviewMedia && mySlot ? (
+          <ReviewScreen
+            state={reviewState}
+            media={reviewMedia}
+            mySlot={mySlot}
+            names={{ [partnerSeat]: partnerName || 'your partner', [mySlot]: 'you' } as Record<PSlot, string>}
+            baseUrl={serverHttp}
+            serverNow={serverNow}
+            send={sendToServer}
+            restored={reviewDraft}
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gray-950">
+            <Spinner />
+            <p className="text-sm text-gray-400">Getting the review ready…</p>
+          </div>
+        )
+      )}
+
       {/* ---- Self-view PiP (always the raw, unaltered camera) ---- */}
-      {phase !== 'ended' && selfStream && (
+      {phase !== 'ended' && !reviewing && selfStream && (
         <div className="absolute bottom-6 right-6 h-[124px] w-[220px] overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl">
           <video
             ref={selfVideoRef}

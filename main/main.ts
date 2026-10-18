@@ -106,15 +106,17 @@ function loadRoute(win: BrowserWindow, route: string) {
       return
     }
     // Researcher closing mid-session gets one confirmation.
-    if (server && server.currentPhase === 'live') {
+    if (server && (server.currentPhase === 'live' || server.currentPhase === 'review')) {
       const choice = dialog.showMessageBoxSync(win, {
         type: 'warning',
         buttons: ['Stay in session', 'Close anyway'],
         defaultId: 0,
         cancelId: 0,
-        title: 'Session is live',
+        title: server.currentPhase === 'review' ? 'Review is running' : 'Session is live',
         message:
-          'The conversation is still running. Closing this window shuts down the session server for everyone.',
+          server.currentPhase === 'review'
+            ? 'The participants are still reviewing the call. Closing this window shuts down the session server for everyone.'
+            : 'The conversation is still running. Closing this window shuts down the session server for everyone.',
       })
       if (choice === 0) e.preventDefault()
     }

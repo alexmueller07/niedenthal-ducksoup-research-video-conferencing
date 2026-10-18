@@ -39,6 +39,9 @@ import type {
   Identity,
   LogRow,
   Phase,
+  ReviewAvailability,
+  ReviewMedia,
+  ReviewState,
   RosterState,
   RuleExpression,
   RuleRelease,
@@ -48,6 +51,7 @@ import type {
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
 import { VoicePanel } from '../components/VoiceControls'
+import { ReviewControls } from '../components/ReviewControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
@@ -123,6 +127,10 @@ export default function AdminDashboard() {
   const [endConfirm, setEndConfirm] = useState(false)
   const [startConfirm, setStartConfirm] = useState(false)
   const [adminName, setAdminName] = useState('')
+  const [reviewAvailability, setReviewAvailability] = useState<ReviewAvailability | null>(null)
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null)
+  const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
+  const [reviewError, setReviewError] = useState('')
 
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<PSlot, PeerLink>>(new Map())
@@ -314,6 +322,19 @@ export default function AdminDashboard() {
               return
             case 'peer-left':
               if (msg.slot === 'P1' || msg.slot === 'P2') dropLink(msg.slot)
+              return
+            case 'review-availability':
+              setReviewAvailability(msg.availability)
+              return
+            case 'review-state':
+              setReviewState(msg.state)
+              return
+            case 'review-media':
+              setReviewMedia(msg.media)
+              return
+            case 'review-error':
+              setReviewError(msg.reason)
+              setTimeout(() => setReviewError(''), 6000)
               return
             default:
               return
@@ -687,6 +708,9 @@ export default function AdminDashboard() {
     : 0
 
   async function goHome() {
+    if (phase === 'review' && !window.confirm('End the review and return home? Answers for the turn on screen that have not been saved are lost.')) {
+      return
+    }
     if (phase === 'live') {
       const ok = window.confirm(
         'End session and return home? This will end the participant session, finalize recordings, write the session manifest, and then return to the home screen.',
@@ -835,6 +859,25 @@ export default function AdminDashboard() {
 
       {/* ===== Body ===== */}
       <main className="grid grid-cols-12 gap-4 p-4">
+        {(phase === 'ended' || phase === 'review') && (
+          <div className="col-span-12">
+            <ReviewControls
+              phase={phase}
+              availability={reviewAvailability}
+              state={reviewState}
+              media={reviewMedia}
+              error={reviewError}
+              names={{
+                P1: roster?.slots.P1?.identity.name || 'Participant 1',
+                P2: roster?.slots.P2?.identity.name || 'Participant 2',
+              }}
+              baseUrl={`http://localhost:${server?.port ?? DEFAULT_PORT}`}
+              onStart={(config) => clientRef.current?.send({ type: 'review-start', config })}
+              onControl={(action) => clientRef.current?.send({ type: 'review-control', action })}
+              onEnd={() => clientRef.current?.send({ type: 'set-phase', phase: 'ended' })}
+            />
+          </div>
+        )}
         {/* --- Participant panels --- */}
         <div className="col-span-12 grid grid-cols-1 gap-4 xl:col-span-8 xl:grid-cols-2">
           {PSLOTS.map((slot) => (
@@ -1983,6 +2026,7 @@ function eventColor(event: string): string {
   )
     return 'text-red-300'
   if (event.startsWith('calibration')) return 'text-cyan-300'
+  if (event.startsWith('review') || event === 'moved_to_review') return 'text-sky-300'
   if (event.startsWith('researcher_mic') || event === 'message_sent') return 'text-sky-300'
   if (event.startsWith('exit_attempt') || event.startsWith('switched_')) return 'text-amber-300'
   return 'text-gray-300'
