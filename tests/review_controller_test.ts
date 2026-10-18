@@ -292,6 +292,19 @@ const stats = (o: Partial<ReviewViewingStats> = {}): ReviewViewingStats => ({
   assert.equal(h.c.control('resume', 'P2'), null)
 }
 
+// ---- Moving on mid-clip does not count as a pause in the next turn ----
+{
+  const h = harness()
+  h.readyBoth()
+  h.advance(REVIEW_START_LEAD_MS + 3000)
+  h.c.control('force-next', 'researcher')
+  h.readyBoth()
+  h.advance(REVIEW_START_LEAD_MS + 150_000)
+  h.c.control('force-next', 'researcher')
+  assert.equal(h.segments[1].pauses, 0)
+  assert.equal(h.segments[1].pauseTotalMs, 0)
+}
+
 // ---- Too short to review ----
 {
   const h = harness({}, 200)

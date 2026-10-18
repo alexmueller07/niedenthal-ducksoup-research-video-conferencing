@@ -410,6 +410,8 @@ export class ReviewController {
     this.turn = this.freshTurn()
     this.s = {
       ...this.s,
+      // Not 'playing' any more: stopping the previous clip is not a pause in this turn.
+      status: 'loading',
       anchorPosMs: seg.startMs,
       done: both(false),
       autoAdvanceAtMs: null,
