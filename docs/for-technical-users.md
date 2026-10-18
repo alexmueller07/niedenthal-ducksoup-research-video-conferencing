@@ -771,7 +771,7 @@ Header: `seat, participant_id, type, started_date, started_time, stopped_date, s
 
 `renderer/lib/recording.ts`. MP4 preferred (opens everywhere the lab works); candidates in order `video/mp4;codecs=avc1.640028,mp4a.40.2` → `avc1.42E01E,mp4a.40.2` → `video/mp4` → `video/webm;codecs=vp9,opus` → `video/webm`. Falls back to WebM if none of the MP4 variants are supported. Fragmented MP4 stays playable even if the app crashes mid-recording; chunks cut every 1 s.
 
-**Fixed frame size.** Each video stream is drawn onto a 1280×720 canvas (letterboxed) and the canvas is recorded, not the WebRTC track itself (`fixedSizeStream`). WebRTC changes a stream's resolution on the fly (it starts small and steps up as bandwidth allows), and Chromium's fragmented-MP4 recorder cannot follow that: it restarts its encoder at the new size without writing the new parameter sets anywhere, so everything after the first change fails to decode (`PIPELINE_ERROR_DECODE`, in Chromium and with hardware decoding off). Recordings made before this fix are affected; the review reports such files as unplayable from that point instead of stalling (§15.5).
+**Fixed frame size.** Each video stream is drawn onto a 1280×720 canvas (letterboxed), one copy per incoming frame (`requestVideoFrameCallback`, which keeps firing in a hidden window), and the canvas is recorded, not the WebRTC track itself (`fixedSizeStream`). WebRTC changes a stream's resolution on the fly (it starts small and steps up as bandwidth allows), and Chromium's fragmented-MP4 recorder cannot follow that: it restarts its encoder at the new size without writing the new parameter sets anywhere, so everything after the first change fails to decode (`PIPELINE_ERROR_DECODE`, in Chromium and with hardware decoding off). Recordings made before this fix are affected; the review reports such files as unplayable from that point instead of stalling (§15.6).
 
 **Start time.** The dashboard notes `Date.now()` right after `MediaRecorder.start()` and passes it to `rec:close`; the main process hands it to `SessionServer.recordingClosed`. That is what lines the four recordings up for the review. In testing they landed within 1 ms of each other, about 40 ms after `sessionStartedAt`.
 
@@ -1079,35 +1079,43 @@ The server owns one clock, `ReviewState.anchorServerMs` / `anchorPosMs`. While p
 
 **Drift correction** (`ReviewTrack.sync`, every 200 ms): under 80 ms off, nothing; 80–400 ms, play at 1.05× or 0.95×; over 400 ms, jump. Two participant tabs on one machine stayed within about 6 ms of each other, and the four videos within one tab within 10 ms.
 
-**Stalls and disconnects.** An element still buffering 1 s after it should be playing sends `review-buffering`; the server returns both machines to `loading` at the current position. Hidden, silent elements never trigger this. A participant disconnect does the same, with `holdReason: 'disconnect'`. On reconnect the server resends the media list, the state and that participant's draft (`review-draft`). Drafts are sent every 2 s while typing.
+**Stalls and disconnects.** An element still buffering 1 s after it should be playing sends `review-buffering`; the server returns both machines to `loading` at the current position. Hidden, silent elements never trigger this. A participant disconnect does the same, with `holdReason: 'disconnect'`. On reconnect the server resends the media list, the state and that participant's draft (`review-draft`).
+
+**Answers reach the server.** Each participant sends its current answer and viewing numbers every second (`review-draft`), whether or not they are typing, so a forced, automatic or end-of-review save holds up-to-date text and stats. Done shows "Saving…" until the server's state marks that seat done, and the submit is resent every 1.5 s until it is.
+
+**Who can pause.** The researcher can always pause and resume. With `allowPause`, participants can pause, and can resume only a participant's pause.
 
 ### 15.4 Recordings and lining them up
 
 `ReviewMedia` lists, per seat and version, the recording parts with their offset on the conversation timeline (`startedAtMs − sessionStartedAt`, see §9.5) and duration. `_partN` files from reconnects are extra parts; `resolveMediaAt` picks the part covering a moment (the later one if they overlap) or reports a gap, shown as "No video for this moment". A gap does not stop the clock.
 
-Files are served from `GET /review/<token>/<file>` on the session port. Only files registered for the running review are served, the token is random per review, and the route closes when the review ends. Range requests are supported, and seeking within a 5.5-minute recording took 5–60 ms locally.
+Files are served from `GET /review/<token>/<n>.mp4` on the session port. Each audience gets its own random token and neutral numbered file names. Participants' token covers only what they may see: **without `showOriginal`, the original recordings are not served to them at all** (not merely hidden). The researcher's token covers everything, for the preview. All tokens stop working when the review ends. Range requests are supported, and seeking within a 5.5-minute recording took 5–60 ms locally.
 
-Every recording in play gets one `<video>` element that stays mounted, so switching view mode or version reloads nothing. Without `showOriginal`, only the altered recordings are loaded. Sound: in gallery the altered recordings play; in the other modes both voices come from the version on screen, so it sounds like the conversation.
+Every recording in play gets one `<video>` element that stays mounted, so switching view mode or version reloads nothing. Sound: in gallery the altered recordings play; in the other modes both voices come from the version on screen, so it sounds like the conversation.
 
-### 15.5 Damaged recordings
+### 15.5 Before starting
+
+"Start review" is enabled once the phase is `ended`, every recorder has reported closing (the main process reports a close even if finishing the file failed, and a recorder that fails to start closes its file straight away), and at least one participant recording of the latest live run exists. Missing recordings (e.g. a seat's original video) are listed under the button as a warning, but don't block the start.
+
+### 15.6 Damaged recordings
 
 A file that fails to decode (recordings from before the fixed-size fix in §9.5) is marked broken; its tile says "This part of the recording cannot be played", it never holds up the other machine, and it is retried at the start of the next turn or on a replay, since it usually plays fine up to the point where it broke.
 
-### 15.6 Data
+### 15.7 Data
 
 All three CSVs are created only when a review runs, and start with `review_number` (1 unless the researcher runs the review again in the same session). `segment_start_ms`/`segment_end_ms` are on the conversation clock, the same as `conversation_elapsed_ms`.
 
-- `review_responses.csv`: `review_number, pair_id, segment_number, window_number, segment_start_ms, segment_end_ms, about_seat, about_participant_id, writer_seat, writer_participant_id, response_type, view_mode, version_at_submit, ms_watched_altered, ms_watched_clean, toggle_count, clip_started_date, clip_started_time, clip_started_elapsed_ms, first_typed_elapsed_ms, submitted_date, submitted_time, submitted_elapsed_ms, submitted_by, edit_count, word_count, response_text`. `submitted_by` is `participant`, `researcher_forced` or `auto`. `ms_watched_*` counts time on screen until Done (both count in gallery). `first_typed_elapsed_ms` comes from the participant's clock converted to the server's.
+- `review_responses.csv`: `review_number, pair_id, segment_number, window_number, segment_start_ms, segment_end_ms, about_seat, about_participant_id, writer_seat, writer_participant_id, response_type, view_mode, version_at_submit, ms_watched_altered, ms_watched_clean, toggle_count, clip_started_date, clip_started_time, clip_started_elapsed_ms, first_typed_elapsed_ms, submitted_date, submitted_time, submitted_elapsed_ms, submitted_by, edit_count, word_count, response_text`. `submitted_by` is `participant`, `researcher_forced`, `auto` or `review_ended` (the review was ended, or the app closed, during that turn). An answer starting with `=`, `+`, `-` or `@` gets a leading `'` so spreadsheets don't read it as a formula. `ms_watched_*` counts time on screen until Done (both count in gallery). `first_typed_elapsed_ms` comes from the participant's clock converted to the server's.
 - `review_segments.csv`: `review_number, segment_number, window_number, about_seat, about_participant_id, segment_start_ms, segment_end_ms, played_date, played_time, played_elapsed_ms, finished_playing_elapsed_ms, advanced_date, advanced_time, advanced_elapsed_ms, advanced_by, pauses, pause_total_ms`.
 - `review_viewing.csv`: `review_number, writer_seat, writer_participant_id, segment_number, date, time, elapsed_ms, video_position_ms, view_mode, shown_person, shown_version`. One row at the start of each turn and one per switch.
 - `review.json`: `{ reviews: [{ reviewNumber, startedAt, conversationStartedAt, conversationMs, config, segments, recordings: [{seat, type, file, offsetMs, durationMs}] }] }`.
-- `events.csv`: `moved_to_review`, `review_started`, `review_turn_started`, `review_clip_finished`, `review_paused`, `review_resumed`, `review_started_without_waiting`, `review_turn_restarted`, `review_video_catching_up`, `review_response_submitted`, `review_advanced`, `review_finished`, `review_ended`.
+- `events.csv`: `moved_to_review`, `review_closed` (leaving the review; `conversation_ended` is logged only once, when the call itself ends), `review_started`, `review_turn_started`, `review_clip_finished`, `review_paused`, `review_resumed`, `review_started_without_waiting`, `review_turn_restarted`, `review_video_catching_up`, `review_response_submitted`, `review_advanced`, `review_finished`, `review_ended`.
 
-### 15.7 Developing without Electron
+### 15.8 Developing without Electron
 
 Browser tabs cannot record, so `npm run server:dev` has nothing to review. Set `REVIEW_FIXTURE` to a JSON list of stand-in files (`[{ "slot": "P1", "kind": "altered", "path": "/abs/file.mp4", "offsetMs": 0, "durationMs": 40000 }, …]`) and the review plays those instead.
 
-### 15.8 Limitations
+### 15.9 Limitations
 
 - **Showing the original video reveals the manipulation.** `showOriginal` is off by default; check the study protocol and IRB before turning it on.
 - **Network load.** Gallery with the original video on streams four files to each participant machine, so eight streams leave the researcher's laptop (about 2.5 Mbps each at 1280×720). That's fine on wired LAN, but untested on weak Wi-Fi. A struggling machine pauses both people rather than letting them drift.
