@@ -73,10 +73,13 @@ export class SignalClient {
     }, RETRY_MS)
   }
 
-  send(msg: ClientMessage) {
+  /** False if the socket is not open and the message was dropped. */
+  send(msg: ClientMessage): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg))
+      return true
     }
+    return false
   }
 
   get isOpen(): boolean {

@@ -36,6 +36,8 @@ export interface ReviewTrackOptions {
 export class ReviewTrack {
   private url = ''
   private busy = false
+  /** Bumped by each prepare(), so an older one that is still waiting steps aside. */
+  private generation = 0
   private wantPlaying = false
   private gap: boolean | null = null
   private broken = false
@@ -78,6 +80,7 @@ export class ReviewTrack {
 
   /** Get ready to play from this moment; resolves once it can (or straight away for a gap). */
   async prepare(timelineMs: number): Promise<void> {
+    const gen = ++this.generation
     this.wantPlaying = false
     this.clearStall()
     const hit = resolveMediaAt(this.opts.parts, timelineMs)
@@ -92,12 +95,15 @@ export class ReviewTrack {
     this.busy = true
     try {
       await this.load(hit.part)
+      if (gen !== this.generation) return
       this.video.pause()
       this.video.playbackRate = 1
       await this.seek(hit.localMs / 1000)
+      if (gen !== this.generation) return
       await this.canPlay()
     } finally {
-      this.busy = false
+      // Only the newest prepare() hands control back to sync().
+      if (gen === this.generation) this.busy = false
     }
   }
 
@@ -117,14 +123,15 @@ export class ReviewTrack {
     if (this.broken && hit.part.url === this.url) return
     if (hit.part.url !== this.url) {
       // Crossed into the next file (after a reconnect gap).
+      const gen = ++this.generation
       this.busy = true
       void this.load(hit.part)
         .then(() => {
-          this.video.currentTime = local
+          if (gen === this.generation) this.video.currentTime = local
         })
         .catch(() => {})
         .finally(() => {
-          this.busy = false
+          if (gen === this.generation) this.busy = false
         })
       return
     }

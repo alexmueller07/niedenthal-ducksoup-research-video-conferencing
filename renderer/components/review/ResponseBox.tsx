@@ -14,7 +14,10 @@ export interface ResponseBoxProps {
   status: ReviewStatus
   positionMs: number
   text: string
+  /** The server has the answer. */
   submitted: boolean
+  /** Done was pressed and the answer is on its way. */
+  saving: boolean
   partnerDone: boolean
   /** Seconds until the next turn starts by itself, or null. */
   autoAdvanceIn: number | null
@@ -34,6 +37,7 @@ export function ResponseBox({
   positionMs,
   text,
   submitted,
+  saving,
   partnerDone,
   autoAdvanceIn,
   canPause,
@@ -87,13 +91,15 @@ export function ResponseBox({
         id="review-answer"
         value={text}
         onChange={(e) => onText(e.target.value)}
-        disabled={submitted}
+        disabled={submitted || saving}
         placeholder="Write as much or as little as you like…"
         className="mt-3 min-h-[160px] w-full flex-1 resize-none rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm leading-relaxed text-white outline-none transition placeholder:text-gray-600 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-60"
       />
 
       <div className="mt-4">
-        {submitted ? (
+        {saving ? (
+          <p className="rounded-lg bg-gray-800/80 px-3 py-2.5 text-sm text-gray-300 ring-1 ring-gray-700">Saving…</p>
+        ) : submitted ? (
           <p className="rounded-lg bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-200 ring-1 ring-emerald-500/30">
             Saved.{' '}
             {partnerDone ? 'Starting the next turn…' : `Waiting for ${partnerName} to finish…`}

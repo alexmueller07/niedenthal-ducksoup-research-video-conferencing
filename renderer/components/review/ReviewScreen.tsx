@@ -18,7 +18,8 @@ import type {
   VideoVersion,
 } from '../../lib/protocol'
 
-const DRAFT_SEND_MS = 2000
+const DRAFT_SEND_MS = 1000
+const SUBMIT_RETRY_MS = 1500
 const STATS_TICK_MS = 250
 
 export interface RestoredDraft {
@@ -34,7 +35,8 @@ export interface ReviewScreenProps {
   names: Record<PSlot, string>
   baseUrl: string
   serverNow: () => number
-  send: (msg: ClientMessage) => void
+  /** False if the message could not be sent (connection down). */
+  send: (msg: ClientMessage) => boolean
   restored: RestoredDraft | null
 }
 
@@ -57,17 +59,19 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
 
   const [version, setVersion] = useState<VideoVersion>('altered')
   const [text, setText] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  /** Done was pressed; the answer counts as saved only once the server says so. */
+  const [pressedDone, setPressedDone] = useState(false)
   const [, setTick] = useState(0)
+  const submitted = state.done[mySlot]
+  const locked = submitted || pressedDone
 
   const statsRef = useRef<TurnStats>(freshStats())
   const textRef = useRef('')
-  const dirtyRef = useRef(false)
   const versionRef = useRef<VideoVersion>('altered')
-  const submittedRef = useRef(false)
+  const lockedRef = useRef(false)
   textRef.current = text
   versionRef.current = version
-  submittedRef.current = submitted
+  lockedRef.current = locked
 
   const statsNow = useCallback(
     (): ReviewViewingStats => ({ ...statsRef.current, versionNow: versionRef.current }),
@@ -91,11 +95,10 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
   useEffect(() => {
     if (!turn) return
     statsRef.current = freshStats()
-    dirtyRef.current = false
     setVersion('altered')
     versionRef.current = 'altered'
     setText('')
-    setSubmitted(false)
+    setPressedDone(false)
     send(viewPayload('altered'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turn])
@@ -103,14 +106,13 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
   useEffect(() => {
     if (!restored || restored.turn !== turn) return
     setText(restored.text)
-    setSubmitted(restored.submitted)
   }, [restored, turn])
 
   // Time on screen per version, and a re-render for the clock.
   useEffect(() => {
     const id = setInterval(() => {
       setTick((t) => t + 1)
-      if (submittedRef.current || state.status === 'done') return
+      if (lockedRef.current || state.status === 'done') return
       const s = statsRef.current
       const onScreen: VideoVersion[] = mode === 'gallery' ? versions : [versionRef.current]
       if (onScreen.includes('altered')) s.msAltered += STATS_TICK_MS
@@ -120,26 +122,36 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, versions.length, state.status])
 
-  // Keep the server's copy of the answer fresh, so nothing is lost on a drop.
+  // Keep the server's copy of the answer and the viewing numbers fresh, even
+  // when nothing is typed: if the researcher moves on (or the turn moves on by
+  // itself) that copy is what gets saved. A send that fails is simply sent
+  // again on the next tick.
   useEffect(() => {
     const id = setInterval(() => {
-      if (!dirtyRef.current || submittedRef.current || !turn) return
-      dirtyRef.current = false
+      if (lockedRef.current || !turn) return
       send({ type: 'review-draft', turn, text: textRef.current, stats: statsNow() })
     }, DRAFT_SEND_MS)
     return () => clearInterval(id)
   }, [turn, send, statsNow])
 
+  // Done pressed but not confirmed yet (e.g. the connection dropped): send it again.
+  useEffect(() => {
+    if (!pressedDone || submitted) return
+    const id = setInterval(() => {
+      if (state.status === 'writing') send({ type: 'review-submit', turn, text: textRef.current, stats: statsNow() })
+    }, SUBMIT_RETRY_MS)
+    return () => clearInterval(id)
+  }, [pressedDone, submitted, state.status, turn, send, statsNow])
+
   function onText(next: string) {
     const s = statsRef.current
     s.edits += 1
     if (s.firstTypedAtMs === null && next.trim()) s.firstTypedAtMs = Math.round(serverNow())
-    dirtyRef.current = true
     setText(next)
   }
 
   function onDone() {
-    setSubmitted(true)
+    setPressedDone(true)
     send({ type: 'review-submit', turn, text, stats: statsNow() })
   }
 
@@ -238,6 +250,7 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
           positionMs={positionMs}
           text={text}
           submitted={submitted}
+          saving={pressedDone && !submitted}
           partnerDone={state.done[partner]}
           autoAdvanceIn={autoAdvanceIn}
           canPause={state.config.allowPause}

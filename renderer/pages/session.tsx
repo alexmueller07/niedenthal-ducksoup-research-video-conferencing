@@ -373,6 +373,8 @@ export default function ParticipantSession() {
           return
         case 'review-media':
           setReviewMedia(msg.media)
+          // A new (or ended) review: an answer kept from an earlier one does not belong to it.
+          setReviewDraft(null)
           return
         case 'review-draft':
           setReviewDraft({ turn: msg.turn, text: msg.text, submitted: msg.submitted })
@@ -590,7 +592,7 @@ export default function ParticipantSession() {
   }, [escapeOpen, escapeShake])
 
   const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
-  const sendToServer = useCallback((msg: ClientMessage) => clientRef.current?.send(msg), [])
+  const sendToServer = useCallback((msg: ClientMessage) => clientRef.current?.send(msg) ?? false, [])
 
   function confirmEscape() {
     if (escapeText.trim().toLowerCase() !== 'confirm') {
