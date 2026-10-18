@@ -487,11 +487,21 @@ export default function AdminDashboard() {
       )
       if (!opened) return
       // A fixed frame size, or the MP4 stops playing at the first resolution change.
-      const fixed = hasVideo ? fixedSizeStream(stream) : null
-      const rec = new MediaRecorder(
-        fixed?.stream ?? stream,
-        format.mimeType ? { mimeType: format.mimeType } : undefined,
-      )
+      let fixed: ReturnType<typeof fixedSizeStream> | null = null
+      let rec: MediaRecorder
+      try {
+        fixed = hasVideo ? fixedSizeStream(stream) : null
+        rec = new MediaRecorder(
+          fixed?.stream ?? stream,
+          format.mimeType ? { mimeType: format.mimeType } : undefined,
+        )
+      } catch (err) {
+        // Close the empty file so nothing waits on a recording that never started.
+        console.error(`[rec] could not start ${fullLabel}`, err)
+        fixed?.stop()
+        void ipcInvoke('rec:close', opened.id)
+        return
+      }
       const startedPerf = performance.now()
       // Wall-clock moment recording actually began (not when the file was
       // opened), so the review can line the four recordings up with each other.

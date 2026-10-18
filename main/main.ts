@@ -415,6 +415,22 @@ ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number, started
   const sink = recordings.get(id)
   if (!sink) return null
   recordings.delete(id)
+  try {
+    return await finishRecording(sink, durationSec)
+  } finally {
+    // Always, even if finishing failed: the review waits for every recording
+    // to close, and plays them back lined up by when each one started.
+    server?.recordingClosed(id, {
+      slot: sink.meta.slot ?? '',
+      kind: sink.meta.kind ?? '',
+      path: sink.path,
+      startedAtMs: typeof startedAtMs === 'number' ? startedAtMs : sink.openedAtMs,
+      durationMs: sink.bytes > 0 && typeof durationSec === 'number' ? Math.round(durationSec * 1000) : 0,
+    })
+  }
+})
+
+async function finishRecording(sink: RecSink, durationSec?: number) {
   await new Promise<void>((r) => sink.stream.end(() => r()))
 
   // Chromium's fragmented-MP4 MediaRecorder output leaves the moov header's
@@ -437,16 +453,8 @@ ipcMain.handle('rec:close', async (_e, id: string, durationSec?: number, started
     detail: { path: sink.path, bytes: sink.bytes, durationSec, durationPatched },
   })
   server?.logger.recordingStopped({ label: sink.label, durationSec, bytes: sink.bytes })
-  // The review plays these files back, lined up by when each one started.
-  server?.recordingClosed(id, {
-    slot: sink.meta.slot ?? '',
-    kind: sink.meta.kind ?? '',
-    path: sink.path,
-    startedAtMs: typeof startedAtMs === 'number' ? startedAtMs : sink.openedAtMs,
-    durationMs: typeof durationSec === 'number' ? Math.round(durationSec * 1000) : 0,
-  })
   return { path: sink.path, bytes: sink.bytes }
-})
+}
 
 function closeAllRecordings() {
   for (const sink of recordings.values()) sink.stream.end()

@@ -50,9 +50,7 @@ export function fixedSizeStream(
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, width, height)
-  // A timer rather than requestAnimationFrame, so recording carries on while
-  // the dashboard window is hidden or minimised.
-  const timer = setInterval(() => {
+  const draw = () => {
     const vw = video.videoWidth
     const vh = video.videoHeight
     if (!vw || !vh) return
@@ -61,13 +59,29 @@ export function fixedSizeStream(
     const h = Math.round(vh * scale)
     ctx.fillRect(0, 0, width, height)
     ctx.drawImage(video, Math.round((width - w) / 2), Math.round((height - h) / 2), w, h)
-  }, 1000 / fps)
+  }
+  // One copy per incoming frame keeps the original frame timing. It keeps
+  // firing while the dashboard window is hidden or minimised (unlike
+  // requestAnimationFrame); a timer is the fallback where it is missing.
+  let stopped = false
+  let timer: ReturnType<typeof setInterval> | null = null
+  if ('requestVideoFrameCallback' in video) {
+    const onFrame = () => {
+      if (stopped) return
+      draw()
+      video.requestVideoFrameCallback(onFrame)
+    }
+    video.requestVideoFrameCallback(onFrame)
+  } else {
+    timer = setInterval(draw, 1000 / fps)
+  }
   const canvasTrack = canvas.captureStream(fps).getVideoTracks()[0]
   const stream = new MediaStream([canvasTrack, ...source.getAudioTracks()])
   return {
     stream,
     stop: () => {
-      clearInterval(timer)
+      stopped = true
+      if (timer) clearInterval(timer)
       canvasTrack.stop()
       video.pause()
       video.srcObject = null
