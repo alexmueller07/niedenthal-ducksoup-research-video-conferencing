@@ -768,6 +768,23 @@ One row per saved recording (each participant's clean track, altered track, and 
 
 Header: `seat, participant_id, type, started_date, started_time, stopped_date, stopped_time, elapsed_start_ms, elapsed_stop_ms, duration_sec, file_path, file_size_mb`. `type` is `clean`, `altered`, or `mic`. `recording_name` isn't a separate column — `seat` + `participant_id` + `type` already identify the recording, and `file_path` gives the actual filename.
 
+### 9.3c `voice/voice_measurements_P1.csv` / `_P2.csv` and `voice/speaking_turns.csv`
+
+`main/voiceLogger.ts`. Written from each participant's voice reports, which arrive several times a second. Laid out like the face file: `pair_id, participant_id, partner_id, seat, date, time, elapsed_ms, conversation_elapsed_ms, phase`, then:
+
+- **Main readings** from the clean microphone: `speaking`, `pitch_hz`, `loudness_db`, `relative_pitch`, `relative_loudness`, `pitch_range`, `loudness_range`. Partner-heard pitch and loudness (`partner_heard_*`) come from the altered signal.
+- **Baseline:** `voice_baseline`, `voice_baseline_confidence`.
+- **Changes applied:** `voice_condition` (`natural`, `audibility`, `match` or `detone`; `natural` is the internal `bypass`), `voice_condition_target`, `voice_change_active`, `pitch_change`, `volume_change`, `pitch_range_change`, `loudness_range_change`, `audibility_boost`, `fell_back_to_natural_because`.
+- **Pair synchrony** (exploratory): `pitch_sync`, `loudness_sync`, `turn_taking_sync`, `convergence`, `overall_sync`, `paired_turns`.
+- **Raw:** every `VoiceFeatures` value for both signals, as `raw_clean_*` and `raw_altered_*`.
+- **Quality:** `noise_floor_db`, `signal_to_noise_db`, `clipping_rate`, `voice_processor`.
+
+Pitch is in Hz (ranges in semitones). Loudness is dB relative to digital full scale, so it is negative, not room loudness. Numbers are rounded to two decimals, pitch in Hz to one.
+
+These were dropped as debugging-only: report sequence numbers, UTC capture times and clock uncertainty, requested condition parameters (each condition change is in `events.csv`), limiter reduction, analysis dropped frames, underruns, buffer depth, latency, sample rate, and the per-row baseline values. The baseline values and engine settings are still in `session_summary.json` under `voice`.
+
+`speaking_turns.csv` has one row per detected turn: `pair_id, participant_id, partner_id, seat, turn, date, time, elapsed_ms, conversation_elapsed_ms, phase, duration_sec, speaking_sec, pause_share, average_pitch_hz, pitch_range_semitones, average_loudness_db, loudness_range_db, relative_pitch, relative_loudness, pitch_range_vs_usual, loudness_range_vs_usual, gap_after_partner_ms, overlap_with_partner_ms, usable`. The gap and overlap are blank when the two machines' clocks aren't known to within 50 ms.
+
 ### 9.4 Manifests
 
 - **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, detection:{P1:{classifierMode, classifierVersion}, P2:{...}} }` → `session_summary.json`. `detection` is added automatically by `SessionLogger.writeManifest` from whatever each seat's telemetry reported first, so callers don't need to supply it.

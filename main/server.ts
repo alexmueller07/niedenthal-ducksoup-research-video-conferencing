@@ -593,7 +593,7 @@ export class SessionServer {
         const turns=this.voiceSession.update(ctx.slot,msg.data)
         const pair=this.voiceSession.snapshot()
         this.logger.voice.write({slot:ctx.slot,participantId:ctx.identity.participantId,dyadId:ctx.identity.dyadId,
-          phase:this.phase,liveStartedAtMs:this.sessionStartedAt?Date.parse(this.sessionStartedAt):null},msg.data,pair,turns)
+          partnerId:this.bySlot(otherSlot(ctx.slot))?.identity.participantId,phase:this.phase,liveStartedAtMs:this.sessionStartedAt?Date.parse(this.sessionStartedAt):null},msg.data,pair,turns)
         const admin=this.bySlot('ADMIN')
         if (admin) this.send(admin.ws,{type:'voice-state',state:pair})
         const partner=this.bySlot(otherSlot(ctx.slot))

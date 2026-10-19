@@ -25,7 +25,8 @@
 import path from 'path'
 import fs from 'fs'
 import fsp from 'fs/promises'
-import { VoiceLogger } from './voiceLogger'
+import { VoiceLogger, modeName } from './voiceLogger'
+import { formatLocalDate, formatLocalTimeOfDay } from './timeFormat'
 import type { VoiceReport } from './voiceProtocol'
 import type { ReviewResponseRecord } from './review'
 import type { ReviewConfig, ReviewViewMode } from './protocol'
@@ -172,20 +173,6 @@ export interface ReviewSettingsInput {
   firstPerson: string
 }
 
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-]
 
 const README_CONTENT = `This session folder
 ====================
@@ -279,16 +266,52 @@ smiling voice (vocal resonances raised, pitch unchanged). Negative = darker.
 "self" is this file's own participant; "partner" is what was being done to
 the other participant, at that same moment.
 
-Voice synchrony columns
-------------------------
-Voice levels use digital dBFS, not room loudness or acoustic SPL. Pitch is
-stored in semitones and normalized relative to each participant's baseline.
-"clean" is the microphone measurement before alteration; "altered" is the
-signal sent to the partner. requested_* records the researcher's condition,
-while applied_* records what the processor actually produced. A non-empty
-fallback_reason means the app conservatively sent natural audio instead.
-The synchrony index is exploratory engineering telemetry, not a validated
-measure of rapport, emotion, or participant intent.
+Voice columns (voice/voice_measurements_P1.csv, _P2.csv)
+---------------------------------------------------------
+Several rows a second per participant. Laid out like the face file: who and
+when, then the main readings, the changes applied, how in sync the pair
+was, the raw measurements, and quality checks last.
+
+speaking: true while they were talking.
+pitch_hz: how high their voice was (typical speaking voices are roughly
+80-250). loudness_db: how loud their microphone signal was; 0 is the
+loudest possible, so numbers are negative and closer to 0 is louder. This
+is the recording level, not how loud they were in the room.
+relative_pitch / relative_loudness: the same, on their OWN scale (0 = their
+usual voice; positive = higher or louder than usual). pitch_range /
+loudness_range: how much their voice was varying over the last few seconds.
+partner_heard_pitch_hz / partner_heard_loudness_db: what their partner
+actually heard, after any change.
+voice_baseline: whether enough of their natural speech had been heard to
+know their usual voice (collecting, usable, strong). Own-scale values are
+blank until then.
+
+voice_condition: the voice setting in use (natural = no change, or
+audibility, match, detone). voice_change_active: whether a change was
+actually being applied at that moment. pitch_change (semitones) and
+volume_change (decibels): 0 = no change. pitch_range_change /
+loudness_range_change: 1 = no change, above 1 = more varied, below 1 =
+flatter. fell_back_to_natural_because: if filled in, the app sent their
+natural voice instead, for the reason given.
+
+pitch_sync / loudness_sync / turn_taking_sync / convergence / overall_sync:
+how closely the two people's voices tracked each other, from -1 to 1.
+These are exploratory measures of the sound only, not validated measures of
+rapport or emotion. paired_turns: how many back-and-forth turns they are
+based on.
+
+raw_clean_* / raw_altered_*: every individual measurement, before ("clean")
+and after ("altered") any change, kept for later analysis.
+
+noise_floor_db / signal_to_noise_db / clipping_rate / voice_processor:
+recording quality. A high noise floor, low signal-to-noise or clipping
+above 0 means the measurements may be unreliable.
+
+voice/speaking_turns.csv has one row each time someone spoke: how long,
+how high and loud their voice was on average, the same on their own scale,
+how quickly they started after their partner (gap_after_partner_ms) and
+how much they talked over them (overlap_with_partner_ms). usable is false
+for turns too short or unclear to measure.
 
 Facial expression columns
 --------------------------
@@ -387,24 +410,6 @@ function minSec(ms: number): string {
 function localStamp(d: Date): string {
   const two = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}-${two(d.getMinutes())}-${two(d.getSeconds())}`
-}
-
-/** Your computer's own local date, e.g. "Aug 18, 2026". Not UTC. */
-function formatLocalDate(epochMs: number): string {
-  const d = new Date(epochMs)
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
-}
-
-/** Your computer's own local time of day, e.g. "3:46:51.175 PM". Not UTC. */
-function formatLocalTimeOfDay(epochMs: number): string {
-  const d = new Date(epochMs)
-  let hours = d.getHours()
-  const ampm = hours >= 12 ? 'PM' : 'AM'
-  hours = hours % 12 || 12
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  const seconds = String(d.getSeconds()).padStart(2, '0')
-  const millis = String(d.getMilliseconds()).padStart(3, '0')
-  return `${hours}:${minutes}:${seconds}.${millis} ${ampm}`
 }
 
 /**
@@ -647,7 +652,7 @@ export class SessionLogger {
         input.faceFound,
         input.cameraOn,
         Math.round(input.fps * 10) / 10,
-        csvField(input.voice?.condition.mode ?? ''),
+        csvField(input.voice ? modeName(input.voice.condition.mode) : ''),
         csvField(input.voice?.condition.targetSlot ?? ''),
         csvField(input.voice?.calibration.state ?? ''),
         csvField(input.voice?.calibration.confidence ?? ''),
