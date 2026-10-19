@@ -102,7 +102,7 @@ export class VoiceLogger {
         ...ids,t.id,...this.when(ctx,t.startedAt),
         r1(t.durationMs/1000),r1(t.voicedMs/1000),r2(t.pauseFraction),r1(stToHz(t.meanPitchSt)),r2(t.pitchRangeSt),
         r2(t.meanIntensityDbfs),r2(t.intensityRangeDb),r2(t.relativePitchZ),r2(t.relativeIntensityDb),
-        r2(t.pitchRangeRatio),r2(t.intensityRangeRatio),gap,overlap,t.valid,
+        r2(t.pitchRangeRatio),r2(t.intensityRangeRatio),gap===null?'':Math.round(gap),overlap===null?'':Math.round(overlap),t.valid,
       ]))
       this.previous[ctx.slot]=t
     }
