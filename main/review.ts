@@ -155,20 +155,13 @@ export interface ReviewResponseRecord {
   stats: ReviewViewingStats
   text: string
   submittedBy: ReviewSubmittedBy
-  /** When this turn's clip first started playing (server clock), or null. */
-  openedAtMs: number | null
   submittedAtMs: number
+  /** Whether participants were shown the original video in this review. */
+  originalShown: boolean
 }
 
-export interface ReviewSegmentRecord {
-  segment: ReviewSegment
-  playedAtMs: number | null
-  finishedPlayingAtMs: number | null
-  advancedAtMs: number
-  advancedBy: 'both_done' | 'researcher' | 'auto' | 'review_ended'
-  pauses: number
-  pauseTotalMs: number
-}
+/** How a turn ended. */
+export type ReviewTurnEnd = 'both_done' | 'researcher' | 'auto' | 'review_ended'
 
 export interface ReviewHost {
   now(): number
@@ -182,7 +175,6 @@ export interface ReviewHost {
     detail?: unknown
   }): void
   writeResponse(record: ReviewResponseRecord): void
-  writeSegment(record: ReviewSegmentRecord): void
   identity(slot: PSlot): Identity
 }
 
@@ -465,7 +457,7 @@ export class ReviewController {
     this.publish()
   }
 
-  private advance(by: Exclude<ReviewSegmentRecord['advancedBy'], 'review_ended'>) {
+  private advance(by: Exclude<ReviewTurnEnd, 'review_ended'>) {
     this.closeTurn(by)
     const now = this.host.now()
     if (this.s.current + 1 >= this.s.segments.length) {
@@ -478,8 +470,8 @@ export class ReviewController {
     this.beginTurn()
   }
 
-  /** Save any answers not yet submitted and write the turn's row. */
-  private closeTurn(by: ReviewSegmentRecord['advancedBy']) {
+  /** Save any answers not yet submitted, and log how the turn went. */
+  private closeTurn(by: ReviewTurnEnd) {
     const now = this.host.now()
     if (by !== 'both_done') {
       const submittedBy: ReviewSubmittedBy =
@@ -493,16 +485,18 @@ export class ReviewController {
       this.turn.heldSinceMs = null
     }
     const seg = this.s.segments[this.s.current]
-    this.host.writeSegment({
-      segment: seg,
-      playedAtMs: this.turn.playedAtMs,
-      finishedPlayingAtMs: this.turn.finishedPlayingAtMs,
-      advancedAtMs: now,
-      advancedBy: by,
-      pauses: this.turn.pauses,
-      pauseTotalMs: this.turn.pauseTotalMs,
+    this.host.log({
+      event: 'review_advanced',
+      param: 'turn',
+      value: seg.index,
+      detail: {
+        by,
+        pauses: this.turn.pauses,
+        pauseTotalMs: this.turn.pauseTotalMs,
+        clipPlayed: this.turn.playedAtMs !== null,
+        clipFinished: this.turn.finishedPlayingAtMs !== null,
+      },
     })
-    this.host.log({ event: 'review_advanced', param: 'turn', value: seg.index, detail: { by } })
   }
 
   private saveResponse(slot: PSlot, submittedBy: ReviewSubmittedBy) {
@@ -519,8 +513,8 @@ export class ReviewController {
       stats: draft.stats,
       text: draft.text,
       submittedBy,
-      openedAtMs: this.turn.playedAtMs,
       submittedAtMs: now,
+      originalShown: this.s.config.showOriginal,
     })
     this.host.log({
       event: 'review_response_submitted',

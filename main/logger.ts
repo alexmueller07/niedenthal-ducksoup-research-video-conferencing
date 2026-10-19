@@ -1,15 +1,17 @@
 // SessionLogger: the session's permanent record.
 //
-// Creates one session folder per server run and writes:
-//   events.csv              — every discrete thing that happens (sign-ins, effect
-//                              commands, banners, mic changes, escapes, disconnects…)
-//   effect_state_<seat>.csv — one file per participant seat (P1, P2), 1 Hz
-//                              applied-state telemetry (the ground truth of what
-//                              was actually shown to and by that person)
-//   recordings.csv          — one row per saved recording (clean/altered video
-//                              per participant, researcher mic), with its start/
-//                              stop time so it can be lined up with the other files
-// plus session.json, a manifest tying IDs, times, and produced files together.
+// Creates one session folder per server run (named by the local start time)
+// and writes, grouped into folders by kind of data:
+//   events.csv                        — every discrete thing that happens
+//   session_summary.json              — written on End: IDs, times, files
+//   videos/                           — the recordings, plus recordings.csv
+//                                        (one row per file, with start/stop)
+//   face/face_and_voice_changes_<seat>.csv
+//                                     — 1 Hz applied-state telemetry per seat
+//                                        (the ground truth of what was shown)
+//   voice/                            — written by VoiceLogger
+//   calibration/<participant_id>/     — accepted calibration and photos
+//   review/answers.csv, settings.txt  — the post-call review, if run
 //
 // Appends use a write stream (flags 'a') so rows hit disk as they happen — a
 // crash mid-session loses at most the OS buffer, never the whole log.
@@ -25,7 +27,8 @@ import fs from 'fs'
 import fsp from 'fs/promises'
 import { VoiceLogger } from './voiceLogger'
 import type { VoiceReport } from './voiceProtocol'
-import { countWords, type ReviewResponseRecord, type ReviewSegmentRecord } from './review'
+import type { ReviewResponseRecord } from './review'
+import type { ReviewConfig, ReviewViewMode } from './protocol'
 
 export interface EventInput {
   actorRole?: string
@@ -142,21 +145,31 @@ const STATE_HEADER =
 const RECORDINGS_HEADER =
   'seat,participant_id,type,started_date,started_time,stopped_date,stopped_time,elapsed_start_ms,elapsed_stop_ms,duration_sec,file_path,file_size_mb\n'
 
-const REVIEW_RESPONSES_HEADER =
-  'review_number,pair_id,segment_number,window_number,segment_start_ms,segment_end_ms,about_seat,about_participant_id,writer_seat,writer_participant_id,response_type,view_mode,version_at_submit,ms_watched_altered,ms_watched_clean,toggle_count,clip_started_date,clip_started_time,clip_started_elapsed_ms,first_typed_elapsed_ms,submitted_date,submitted_time,submitted_elapsed_ms,submitted_by,edit_count,word_count,response_text\n'
-const REVIEW_SEGMENTS_HEADER =
-  'review_number,segment_number,window_number,about_seat,about_participant_id,segment_start_ms,segment_end_ms,played_date,played_time,played_elapsed_ms,finished_playing_elapsed_ms,advanced_date,advanced_time,advanced_elapsed_ms,advanced_by,pauses,pause_total_ms\n'
-const REVIEW_VIEWING_HEADER =
-  'review_number,writer_seat,writer_participant_id,segment_number,date,time,elapsed_ms,video_position_ms,view_mode,shown_person,shown_version\n'
+const REVIEW_ANSWERS_HEADER =
+  'pair_id,turn,clip_from,clip_to,whose_video,written_by,question,answer,how_saved,date,time,view,seconds_on_original_video,switches_between_videos\n'
 
-export interface ReviewViewInput {
-  writerSlot: string
-  writerParticipantId: string
-  turn: number
-  positionMs: number
-  mode: string
-  person: string
-  version: string
+const QUESTION_TEXT: Record<ReviewResponseRecord['responseType'], string> = {
+  self_report: 'their own feelings',
+  perceived: "their partner's feelings",
+}
+const HOW_SAVED_TEXT: Record<ReviewResponseRecord['submittedBy'], string> = {
+  participant: 'pressed Done',
+  researcher_forced: 'researcher moved on',
+  auto: 'moved on automatically',
+  review_ended: 'review ended early',
+}
+const VIEW_TEXT: Record<ReviewViewMode, string> = {
+  active: 'active speaker',
+  single: 'single',
+  gallery: 'gallery',
+}
+
+export interface ReviewSettingsInput {
+  config: ReviewConfig
+  conversationMs: number
+  turns: number
+  /** e.g. "Ana (P1)" */
+  firstPerson: string
 }
 
 const MONTHS = [
@@ -177,33 +190,40 @@ const MONTHS = [
 const README_CONTENT = `This session folder
 ====================
 
-events.csv               Every discrete thing that happened during the
-                          session (someone joined, a setting changed, a
-                          message was sent, a connection dropped, etc.) —
-                          one row per event, in plain English.
-effect_state_P1.csv      What was actually shown to/by Participant 1, once
-effect_state_P2.csv      per second — the ground truth of what was applied,
-                          not just what was commanded. One file per person.
-recordings.csv           One row per saved video/audio file, with its start
-                          and stop time.
-voice_features_P1.csv    Clean and altered acoustic measurements for
-voice_features_P2.csv    each participant, including baseline quality,
-                          requested settings, actual applied pitch/gain,
-                          safety fallback, limiter, and processor health.
-voice_turns.csv          One row per detected speech turn, with pitch and
-                          intensity ranges relative to each speaker's own
-                          baseline. These are acoustic measures, not emotion.
-session.json             Summary written when the session ends (who was in
-                          it, which recordings were made, what detection
-                          software version was used).
-review_responses.csv     Only if a post-call review was run. One row per
-                          answer: what each person wrote about each turn.
-review_segments.csv      One row per review turn: when it played, when it
-                          moved on, and how long it was paused.
-review_viewing.csv       One row each time a participant switched which
-                          video they were looking at during the review.
-review.json              The settings and turns of each review, and where
-                          each recording sits on the conversation timeline.
+README.txt               This file.
+events.csv               Everything that happened during the session, one
+                          row per event (someone joined, a setting changed,
+                          a message was sent, a connection dropped, etc.).
+session_summary.json     Written when the session ends: who was in it and
+                          which recordings were made.
+
+videos/
+  P1_<id>_altered.mp4    Each participant as their partner saw them
+  P1_<id>_clean.mp4      (altered) and their real camera (clean). "P1"/"P2"
+  P2_<id>_altered.mp4    is the seat, <id> the participant ID. A restarted
+  P2_<id>_clean.mp4      or reconnected call adds _part2, _part3 files.
+  researcher_mic.mp4     The researcher's microphone.
+  recordings.csv         One row per file above, with when it started and
+                          stopped.
+
+face/
+  face_and_voice_changes_P1.csv   Once per second, for each participant:
+  face_and_voice_changes_P2.csv   how much their face and voice were being
+                                   changed, and what their real face was
+                                   doing (smiling, frowning, ...).
+
+voice/
+  voice_measurements_P1.csv   Voice measurements for each participant,
+  voice_measurements_P2.csv   several times a second.
+  speaking_turns.csv          One row each time someone spoke.
+
+calibration/<id>/        Only if a participant was calibrated: their
+                          measurements and a photo of each expression.
+
+review/                  Only if the post-call review was run (review_2/
+                          and so on if it was run again):
+  answers.csv            Everything each person wrote, one row per answer.
+  settings.txt           The review settings that were used.
 
 Times
 -----
@@ -214,45 +234,39 @@ are your computer's own local clock, e.g. "Aug 18, 2026" and
 "elapsed_ms" is milliseconds since the whole session began (including any
 time spent in the waiting room before the conversation started).
 
-"conversation_elapsed_ms" (effect_state files only) is milliseconds since
+"conversation_elapsed_ms" (face_and_voice_changes files) is milliseconds since
 the researcher actually started the live conversation — blank while still
 in the waiting room, ~0 the moment the conversation starts. Recordings also
 start at that same moment, so this number is effectively the timestamp
 inside the recorded video: to find when something happened in the video,
 look up its conversation_elapsed_ms directly instead of subtracting times.
 
-Post-call review
-----------------
-After the conversation, both participants can rewatch it together in
-turns that alternate between them: Participant 1's video for the first
-2.5 minutes, then Participant 2's video for the same 2.5 minutes, then
-Participant 1's next 2.5 minutes, and so on. In each turn the person on
-screen writes what they were feeling (response_type self_report) and the
-other person writes what they think that person was feeling (perceived).
+Post-call review (review/answers.csv)
+-------------------------------------
+After the conversation, both participants rewatched it together in turns:
+Participant 1's video for the first part, then Participant 2's video for
+the same part, then Participant 1's next part, and so on. In each turn
+both people wrote at the same time.
 
-review_number counts reviews within this session (1 unless the researcher
-started the review again).
-
-segment_start_ms / segment_end_ms are positions in the conversation, on
-the same clock as conversation_elapsed_ms — so they point straight at the
-matching stretch of the recordings and of effect_state_P1/P2.csv.
-
-submitted_by: "participant" means they pressed Done. "researcher_forced"
-means the researcher moved on before they did, and "auto" means the turn
-moved on by itself, and "review_ended" means the review was ended (or the
-app closed) during that turn. In those cases whatever they had typed so far
-is saved, and review_segments.csv shows the same value in advanced_by.
-
-response_text is exactly what they typed, except that an answer starting
-with = + - or @ has an apostrophe (') added in front, so that spreadsheet
-programs show it as text instead of trying to run it as a formula.
-
-ms_watched_altered / ms_watched_clean: how long the changed and the
-original video were on their screen during that turn (in the gallery view
-both are on screen, so both count). toggle_count: how many times they
-switched between the two. version_at_submit: which one was showing when
-they pressed Done. view_mode: gallery (all videos at once), single (their
-partner's video), or active (only the person whose turn it is).
+turn: 1, 2, 3, ... in the order they were watched.
+clip_from / clip_to: which part of the conversation the turn showed, as
+minutes:seconds. This is the same as the time inside the videos.
+whose_video: whose video the turn showed (participant ID).
+written_by: who wrote this answer (participant ID).
+question: "their own feelings" when someone wrote about their own video,
+"their partner's feelings" when they wrote about their partner's.
+answer: exactly what they typed. An answer starting with = + - or @ has an
+apostrophe (') added in front, so spreadsheet programs show it as text.
+how_saved: "pressed Done", or if they hadn't yet: "researcher moved on",
+"moved on automatically", or "review ended early". In those cases whatever
+they had typed so far is what was saved.
+date / time: when the answer was saved.
+view: what they were looking at: active speaker (only the person whose
+turn it was), single (their partner), or gallery (everyone).
+seconds_on_original_video / switches_between_videos: only filled in when
+participants were allowed to see the original (unchanged) video: how long
+it was on their screen, and how many times they switched between the
+changed and original video.
 
 Face and voice change numbers
 ------------------------------
@@ -363,6 +377,18 @@ first second right after the pipeline starts up (the one-second average
 hasn't filled up yet) — that's expected, not a fault.
 `
 
+/** A position in the conversation as m:ss, e.g. 2:30. */
+function minSec(ms: number): string {
+  const total = Math.round(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** Folder-name timestamp on your computer's own clock, e.g. 2026-10-18_17-33-05. */
+function localStamp(d: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}-${two(d.getMinutes())}-${two(d.getSeconds())}`
+}
+
 /** Your computer's own local date, e.g. "Aug 18, 2026". Not UTC. */
 function formatLocalDate(epochMs: number): string {
   const d = new Date(epochMs)
@@ -437,11 +463,10 @@ export class SessionLogger {
   private events: fs.WriteStream
   private recordings: fs.WriteStream
   private stateStreams = new Map<string, fs.WriteStream>()
-  /** Review CSVs, created only once a review actually runs. */
-  private reviewStreams = new Map<string, fs.WriteStream>()
-  /** Which review this is, if the researcher runs more than one in a session. */
-  private reviewNumber = 0
-  private reviewInfos: unknown[] = []
+  /** review/ (then review_2/, … if the researcher runs it again), created when a review starts. */
+  private reviewDir: string | null = null
+  private reviewCount = 0
+  private answers: fs.WriteStream | null = null
   private pendingRecordings = new Map<string, PendingRecording>()
   /** Which expression-detection build produced each seat's readings — captured once, written into the manifest. */
   private detectorInfo = new Map<string, { classifierMode?: string; classifierVersion?: string }>()
@@ -453,23 +478,22 @@ export class SessionLogger {
     this.eventsPath = path.join(dir, 'events.csv')
     this.startedAtMs = Date.now()
     this.startedAtIso = new Date(this.startedAtMs).toISOString()
-    this.voice = new VoiceLogger(dir, this.startedAtMs)
+    this.voice = new VoiceLogger(path.join(dir, 'voice'), this.startedAtMs)
     this.events = fs.createWriteStream(this.eventsPath, { flags: 'a' })
     this.events.write(EVENT_HEADER)
-    this.recordings = fs.createWriteStream(path.join(dir, 'recordings.csv'), { flags: 'a' })
+    this.recordings = fs.createWriteStream(path.join(dir, 'videos', 'recordings.csv'), { flags: 'a' })
     this.recordings.write(RECORDINGS_HEADER)
   }
 
   static async create(outputRoot: string): Promise<SessionLogger> {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const dir = path.join(outputRoot, `session_${stamp}`)
-    await fsp.mkdir(path.join(dir, 'recordings'), { recursive: true })
+    const dir = path.join(outputRoot, `session_${localStamp(new Date())}`)
+    await fsp.mkdir(path.join(dir, 'videos'), { recursive: true })
     await fsp.writeFile(path.join(dir, 'README.txt'), README_CONTENT, 'utf-8')
     return new SessionLogger(dir)
   }
 
   get recordingsDir(): string {
-    return path.join(this.dir, 'recordings')
+    return path.join(this.dir, 'videos')
   }
 
   /**
@@ -546,7 +570,8 @@ export class SessionLogger {
     const key = sanitize(slot)
     let s = this.stateStreams.get(key)
     if (!s) {
-      s = fs.createWriteStream(path.join(this.dir, `effect_state_${key}.csv`), { flags: 'a' })
+      fs.mkdirSync(path.join(this.dir, 'face'), { recursive: true })
+      s = fs.createWriteStream(path.join(this.dir, 'face', `face_and_voice_changes_${key}.csv`), { flags: 'a' })
       s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason,self_voice_smile,partner_voice_smile\n')
       this.stateStreams.set(key, s)
     }
@@ -558,7 +583,7 @@ export class SessionLogger {
     const now = Date.now()
 
     // classifier mode/version never change mid-session — captured once here
-    // instead of repeating it on every single row; written into session.json.
+    // instead of repeating it on every single row; written into session_summary.json.
     if (!this.detectorInfo.has(input.slot) && (input.classifierMode || input.classifierVersion)) {
       this.detectorInfo.set(input.slot, {
         classifierMode: input.classifierMode,
@@ -681,7 +706,7 @@ export class SessionLogger {
   }
 
   async writeManifest(manifest: unknown): Promise<string> {
-    const p = path.join(this.dir, 'session.json')
+    const p = path.join(this.dir, 'session_summary.json')
     const withDetection = {
       ...(manifest as Record<string, unknown>),
       detection: Object.fromEntries(this.detectorInfo),
@@ -693,123 +718,65 @@ export class SessionLogger {
 
   // ---- Post-call review ----
 
-  private reviewStream(name: string, header: string): fs.WriteStream {
-    let s = this.reviewStreams.get(name)
-    if (!s) {
-      s = fs.createWriteStream(path.join(this.dir, name), { flags: 'a' })
-      s.write(header)
-      this.reviewStreams.set(name, s)
-    }
-    return s
-  }
-
-  /** Blank instead of a time when the moment never happened. */
-  private elapsedOrBlank(epochMs: number | null): number | string {
-    return epochMs === null ? '' : epochMs - this.startedAtMs
-  }
-
-  reviewResponse(r: ReviewResponseRecord): void {
+  /** A review is starting: its own folder, with a plain note of the settings used. */
+  startReview(input: ReviewSettingsInput): void {
     if (this.closed) return
-    const opened = r.openedAtMs
-    this.reviewStream('review_responses.csv', REVIEW_RESPONSES_HEADER).write(
+    this.reviewCount += 1
+    this.answers?.end()
+    this.answers = null
+    this.reviewDir = path.join(this.dir, this.reviewCount === 1 ? 'review' : `review_${this.reviewCount}`)
+    const c = input.config
+    const now = Date.now()
+    const lines: [string, string][] = [
+      ['Started', `${formatLocalDate(now)} ${formatLocalTimeOfDay(now).replace(/\.\d+ /, ' ')}`],
+      ['Conversation reviewed', `${minSec(input.conversationMs)}, in ${input.turns} turns`],
+      ['View', `${VIEW_TEXT[c.viewMode]}`],
+      ['Turn length', `${c.segmentSec} seconds`],
+      ['Goes first', input.firstPerson],
+      ['Next turn starts', c.advance === 'auto' ? 'automatically, 10 seconds after the clip ends' : 'when both press Done'],
+      ['Original video shown', c.showOriginal ? 'yes' : 'no'],
+      ['Participants could pause', c.allowPause ? 'yes' : 'no'],
+    ]
+    const text =
+      'Review settings\n===============\n' +
+      lines.map(([k, v]) => `${(k + ':').padEnd(27)}${v}`).join('\n') +
+      '\n'
+    try {
+      fs.mkdirSync(this.reviewDir, { recursive: true })
+      fs.writeFileSync(path.join(this.reviewDir, 'settings.txt'), text, 'utf-8')
+    } catch (err) {
+      console.warn('[logger] could not write review settings', err)
+    }
+  }
+
+  /** One answer: one row of review/answers.csv. */
+  reviewAnswer(r: ReviewResponseRecord): void {
+    if (this.closed || !this.reviewDir) return
+    if (!this.answers) {
+      this.answers = fs.createWriteStream(path.join(this.reviewDir, 'answers.csv'), { flags: 'a' })
+      this.answers.write(REVIEW_ANSWERS_HEADER)
+    }
+    this.answers.write(
       [
-        this.reviewNumber,
         csvField(r.writer.dyadId || r.about.dyadId),
         r.segment.index,
-        r.segment.window,
-        r.segment.startMs,
-        r.segment.endMs,
-        csvField(r.segment.targetSeat),
-        csvField(r.about.participantId),
-        csvField(r.writerSlot),
-        csvField(r.writer.participantId),
-        csvField(r.responseType),
-        csvField(r.viewMode),
-        csvField(r.stats.versionNow),
-        r.stats.msAltered,
-        r.stats.msClean,
-        r.stats.toggles,
-        csvField(opened === null ? '' : formatLocalDate(opened)),
-        csvField(opened === null ? '' : formatLocalTimeOfDay(opened)),
-        this.elapsedOrBlank(opened),
-        this.elapsedOrBlank(r.stats.firstTypedAtMs),
+        minSec(r.segment.startMs),
+        minSec(r.segment.endMs),
+        csvField(r.about.participantId || r.segment.targetSeat),
+        csvField(r.writer.participantId || r.writerSlot),
+        csvField(QUESTION_TEXT[r.responseType]),
+        csvField(spreadsheetSafe(r.text)),
+        csvField(HOW_SAVED_TEXT[r.submittedBy]),
         csvField(formatLocalDate(r.submittedAtMs)),
         csvField(formatLocalTimeOfDay(r.submittedAtMs)),
-        r.submittedAtMs - this.startedAtMs,
-        csvField(r.submittedBy),
-        r.stats.edits,
-        countWords(r.text),
-        csvField(spreadsheetSafe(r.text)),
+        csvField(VIEW_TEXT[r.viewMode]),
+        r.originalShown ? Math.round(r.stats.msClean / 1000) : '',
+        r.originalShown ? r.stats.toggles : '',
       ].join(',') + '\n',
     )
   }
 
-  reviewSegment(r: ReviewSegmentRecord, aboutParticipantId: string): void {
-    if (this.closed) return
-    const played = r.playedAtMs
-    this.reviewStream('review_segments.csv', REVIEW_SEGMENTS_HEADER).write(
-      [
-        this.reviewNumber,
-        r.segment.index,
-        r.segment.window,
-        csvField(r.segment.targetSeat),
-        csvField(aboutParticipantId),
-        r.segment.startMs,
-        r.segment.endMs,
-        csvField(played === null ? '' : formatLocalDate(played)),
-        csvField(played === null ? '' : formatLocalTimeOfDay(played)),
-        this.elapsedOrBlank(played),
-        this.elapsedOrBlank(r.finishedPlayingAtMs),
-        csvField(formatLocalDate(r.advancedAtMs)),
-        csvField(formatLocalTimeOfDay(r.advancedAtMs)),
-        r.advancedAtMs - this.startedAtMs,
-        csvField(r.advancedBy),
-        r.pauses,
-        r.pauseTotalMs,
-      ].join(',') + '\n',
-    )
-  }
-
-  reviewView(input: ReviewViewInput): void {
-    if (this.closed) return
-    const now = Date.now()
-    this.reviewStream('review_viewing.csv', REVIEW_VIEWING_HEADER).write(
-      [
-        this.reviewNumber,
-        csvField(input.writerSlot),
-        csvField(input.writerParticipantId),
-        input.turn,
-        csvField(formatLocalDate(now)),
-        csvField(formatLocalTimeOfDay(now)),
-        now - this.startedAtMs,
-        Math.round(input.positionMs),
-        csvField(input.mode),
-        csvField(input.person),
-        csvField(input.version),
-      ].join(',') + '\n',
-    )
-  }
-
-  /**
-   * A new review is starting. review.json lists every review run in this
-   * session: its settings, its turns, and where each recording sits on the
-   * timeline.
-   */
-  async startReview(info: Record<string, unknown>): Promise<void> {
-    this.reviewNumber += 1
-    this.reviewInfos.push({ reviewNumber: this.reviewNumber, ...info })
-    try {
-      await fsp.writeFile(
-        path.join(this.dir, 'review.json'),
-        JSON.stringify({ reviews: this.reviewInfos }, null, 2),
-        'utf-8',
-      )
-    } catch (err) {
-      console.warn('[logger] could not write review.json', err)
-    }
-  }
-
-  /** Safe filename for a recording, namespaced under recordings/. */
+  /** Safe filename for a recording, namespaced under videos/. */
   recordingPath(label: string, ext = 'webm'): string {
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : 'webm'
     return path.join(this.recordingsDir, `${sanitize(label)}.${safeExt}`)
@@ -822,7 +789,7 @@ export class SessionLogger {
       new Promise<void>((r) => this.events.end(() => r())),
       new Promise<void>((r) => this.recordings.end(() => r())),
     ]
-    for (const s of [...this.stateStreams.values(), ...this.reviewStreams.values()]) {
+    for (const s of [...this.stateStreams.values(), ...(this.answers ? [this.answers] : [])]) {
       ends.push(new Promise<void>((r) => s.end(() => r())))
     }
     await Promise.all(ends)

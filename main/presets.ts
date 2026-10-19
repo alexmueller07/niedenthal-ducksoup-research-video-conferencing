@@ -18,7 +18,7 @@
 //
 // Because the cap is on the TOTAL, a preset also delivers less than its number
 // while the participant is already smiling: their real expression has taken
-// part of the budget. effect_state_<seat>.csv records what was actually
+// part of the budget. face/face_and_voice_changes_<seat>.csv records what was actually
 // applied, which is the number to analyse.
 //
 // Still pilot settings. No psychophysical validation (detection threshold,

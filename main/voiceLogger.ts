@@ -35,7 +35,10 @@ export class VoiceLogger {
   constructor(private dir: string, private startedAt: number) {}
   private stream(name: string, columns: string[]) {
     let s=this.streams.get(name)
-    if (!s) { s=fs.createWriteStream(path.join(this.dir,name),{flags:'a'});s.write(row(columns));this.streams.set(name,s) }
+    if (!s) {
+      fs.mkdirSync(this.dir,{recursive:true})
+      s=fs.createWriteStream(path.join(this.dir,name),{flags:'a'});s.write(row(columns));this.streams.set(name,s)
+    }
     return s
   }
   condition(c: VoiceCondition) { this.conditions.push({at:new Date().toISOString(),condition:{...c}}) }
@@ -44,7 +47,7 @@ export class VoiceLogger {
     const now=Date.now(), c=r.calibration, a=r.applied
     const common=[ctx.slot,ctx.participantId,ctx.dyadId,ctx.phase,new Date(now).toISOString(),now-this.startedAt,
       ctx.liveStartedAtMs===null?'':now-ctx.liveStartedAtMs]
-    this.stream(`voice_features_${ctx.slot}.csv`,header).write(row([
+    this.stream(`voice_measurements_${ctx.slot}.csv`,header).write(row([
       ...common,r.sequence,new Date(r.capturedAt).toISOString(),r.clockUncertaintyMs,
       ...[r.clean,r.altered].flatMap(f=>featureKeys.map(k=>f[k])),
       c.state,c.confidence,c.voicedSeconds,c.validTurns,c.baselinePitchSt,c.baselinePitchRangeSt,
@@ -61,7 +64,7 @@ export class VoiceLogger {
       const timed=r.clockUncertaintyMs!==null&&r.clockUncertaintyMs<=50
       const gap=other&&timed?t.startedAt-other.endedAt:null
       const overlap=other&&timed?Math.max(0,Math.min(t.endedAt,other.endedAt)-Math.max(t.startedAt,other.startedAt)):null
-      this.stream('voice_turns.csv',turnHeader).write(row([
+      this.stream('speaking_turns.csv',turnHeader).write(row([
         ...common,t.id,new Date(t.startedAt).toISOString(),new Date(t.endedAt).toISOString(),t.durationMs,t.voicedMs,
         t.pauseFraction,t.meanPitchSt,t.pitchRangeSt,t.meanIntensityDbfs,t.intensityRangeDb,t.relativePitchZ,t.relativeIntensityDb,
         t.pitchRangeRatio,t.intensityRangeRatio,t.valid,gap,overlap,r.clockUncertaintyMs,

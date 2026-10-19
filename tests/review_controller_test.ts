@@ -4,7 +4,7 @@ import {
   REVIEW_START_LEAD_MS,
   reviewPositionMs,
   type ReviewResponseRecord,
-  type ReviewSegmentRecord,
+  type ReviewTurnEnd,
 } from '../main/review'
 import {
   DEFAULT_REVIEW_CONFIG,
@@ -19,14 +19,20 @@ function harness(config: Partial<ReviewConfig> = {}, conversationMs = 300_000) {
   let now = 1_000_000
   const published: ReviewState[] = []
   const responses: ReviewResponseRecord[] = []
-  const segments: ReviewSegmentRecord[] = []
+  /** How each turn ended, from its review_advanced log row. */
+  const segments: { advancedBy: ReviewTurnEnd; pauses: number; pauseTotalMs: number }[] = []
   const events: string[] = []
   const c = new ReviewController({
     now: () => now,
     publish: (s) => published.push(s),
-    log: (e) => events.push(e.event),
+    log: (e) => {
+      events.push(e.event)
+      if (e.event === 'review_advanced') {
+        const d = e.detail as { by: ReviewTurnEnd; pauses: number; pauseTotalMs: number }
+        segments.push({ advancedBy: d.by, pauses: d.pauses, pauseTotalMs: d.pauseTotalMs })
+      }
+    },
     writeResponse: (r) => responses.push(r),
-    writeSegment: (r) => segments.push(r),
     identity: (slot) => ({ ...EMPTY_IDENTITY, name: slot === 'P1' ? 'Ana' : 'Ben', participantId: `${slot}-id` }),
   })
   const err = c.start({ ...DEFAULT_REVIEW_CONFIG, ...config }, conversationMs, { P1: true, P2: true })

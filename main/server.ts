@@ -193,9 +193,7 @@ export class SessionServer {
       now: () => Date.now(),
       publish: (state) => this.broadcast({ type: 'review-state', state }),
       log: (input) => this.log(input),
-      writeResponse: (record) => this.logger.reviewResponse(record),
-      writeSegment: (record) =>
-        this.logger.reviewSegment(record, this.identityOf(record.segment.targetSeat).participantId),
+      writeResponse: (record) => this.logger.reviewAnswer(record),
       identity: (slot) => this.identityOf(slot),
     })
   }
@@ -331,20 +329,13 @@ export class SessionServer {
       this.setPhase('ended', adminName)
       return 'The recording is too short to review.'
     }
-    // Numbered before the first turn starts, so every row of this run carries it.
-    void this.logger.startReview({
-      startedAt: new Date().toISOString(),
-      conversationStartedAt: this.sessionStartedAt,
-      conversationMs: availability.conversationMs,
+    // Its folder and settings note exist before the first answer comes in.
+    const first = this.identityOf(config.firstSeat).name
+    this.logger.startReview({
       config,
-      segments,
-      recordings: recs.map((r) => ({
-        seat: r.slot,
-        type: r.kind,
-        file: r.path,
-        offsetMs: r.startedAtMs - liveStart,
-        durationMs: r.durationMs,
-      })),
+      conversationMs: availability.conversationMs,
+      turns: segments.length,
+      firstPerson: first ? `${first} (${config.firstSeat})` : config.firstSeat,
     })
     return this.review.start(config, availability.conversationMs, connected)
   }
@@ -993,20 +984,6 @@ export class SessionServer {
         const stats = parseViewingStats(msg.stats)
         if (msg.type === 'review-draft') this.review.draft(ctx.slot, msg.turn, text, stats)
         else this.review.submit(ctx.slot, msg.turn, text, stats)
-        return
-      }
-      case 'review-view': {
-        if ((ctx.slot !== 'P1' && ctx.slot !== 'P2') || msg.turn !== this.review.turnNumber) return
-        const pick = (v: unknown, allowed: string[]) => (allowed.includes(v as string) ? (v as string) : '')
-        this.logger.reviewView({
-          writerSlot: ctx.slot,
-          writerParticipantId: ctx.identity.participantId,
-          turn: msg.turn,
-          positionMs: typeof msg.positionMs === 'number' && Number.isFinite(msg.positionMs) ? msg.positionMs : 0,
-          mode: pick(msg.mode, ['gallery', 'single', 'active']),
-          person: pick(msg.person, ['P1', 'P2', 'both']),
-          version: pick(msg.version, ['altered', 'clean', 'both']),
-        })
         return
       }
       case 'set-rules': {

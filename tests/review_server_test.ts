@@ -1,7 +1,7 @@
 // Three real WebSocket clients against a real SessionServer: start a review,
 // play a turn, write, reconnect, force on, and check the CSVs.
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { WebSocket } from 'ws'
@@ -212,55 +212,59 @@ try {
   await sleep(100)
   await server.stop()
 
-  const responses = (await readFile(path.join(logger.dir, 'review_responses.csv'), 'utf-8')).trim().split('\n')
-  assert.equal(
-    responses.length,
-    1 + 2 + 2 + 2 + 2,
-    'header + turn 1 answers + turn 2 forced + turn 3 ended mid-turn + review 2 ended at once',
-  )
-  const header = responses[0].split(',')
-  const row = (line: string) => {
-    const c = cells(line)
-    return Object.fromEntries(header.map((h, i) => [h, c[i]]))
+  const csv = async (...parts: string[]) => {
+    const lines = (await readFile(path.join(logger.dir, ...parts), 'utf-8')).trim().split('\n')
+    const header = cells(lines[0])
+    return lines.slice(1).map((line) => {
+      const c = cells(line)
+      return Object.fromEntries(header.map((h, k) => [h, c[k]]))
+    })
   }
-  const r1 = row(responses[1])
-  assert.equal(r1.review_number, '1')
-  assert.equal(r1.pair_id, 'D7')
-  assert.equal(r1.segment_number, '1')
-  assert.equal(r1.about_seat, 'P1')
-  assert.equal(r1.writer_seat, 'P1')
-  assert.equal(r1.response_type, 'self_report')
-  assert.equal(r1.view_mode, 'gallery')
-  assert.equal(r1.version_at_submit, 'clean')
-  assert.equal(r1.submitted_by, 'participant')
-  assert.equal(r1.response_text, 'a bit tense, then fine')
-  assert.equal(r1.toggle_count, '1')
-  assert.equal(row(responses[2]).response_type, 'perceived')
-  assert.equal(row(responses[3]).submitted_by, 'researcher_forced')
-  assert.equal(row(responses[3]).segment_number, '2')
-  assert.equal(row(responses[5]).submitted_by, 'review_ended')
-  assert.equal(row(responses[5]).segment_number, '3')
-  assert.equal(row(responses[7]).review_number, '2')
-  assert.equal(row(responses[7]).submitted_by, 'review_ended')
 
-  const segments = (await readFile(path.join(logger.dir, 'review_segments.csv'), 'utf-8')).trim().split('\n')
-  assert.equal(segments.length, 1 + 3 + 1)
-  assert.deepEqual(cells(segments[1]).slice(-3, -1), ['both_done', '1'], 'turn 1 was held once by the disconnect')
-  assert.deepEqual(cells(segments[2]).slice(-3), ['researcher', '0', '0'])
-  assert.equal(cells(segments[3]).slice(-3)[0], 'review_ended')
-  assert.deepEqual(cells(segments[4]).slice(0, 2), ['2', '1'])
+  // Each review gets its own folder; nothing about the review sits loose at the top.
+  const top = await readdir(logger.dir)
+  assert.ok(top.includes('review') && top.includes('review_2'))
+  assert.ok(!top.some((f) => f.startsWith('review_') && f.endsWith('.csv')), 'no loose review files')
+  assert.ok(!top.includes('review.json'))
 
-  const viewing = (await readFile(path.join(logger.dir, 'review_viewing.csv'), 'utf-8')).trim().split('\n')
-  assert.equal(viewing.length, 2)
-  const v = cells(viewing[1])
-  assert.deepEqual([...v.slice(0, 4), ...v.slice(-4)], ['1', 'P1', 'Ana-pid', '1', '1234', 'gallery', 'both', 'both'])
+  const answers = await csv('review', 'answers.csv')
+  assert.equal(answers.length, 2 + 2 + 2, 'turn 1 answers + turn 2 forced + turn 3 ended mid-turn')
+  assert.deepEqual(answers[0], {
+    pair_id: 'D7',
+    turn: '1',
+    clip_from: '0:00',
+    clip_to: '0:10',
+    whose_video: 'Ana-pid',
+    written_by: 'Ana-pid',
+    question: 'their own feelings',
+    answer: 'a bit tense, then fine',
+    how_saved: 'pressed Done',
+    date: answers[0].date,
+    time: answers[0].time,
+    view: 'gallery',
+    seconds_on_original_video: '0',
+    switches_between_videos: '1',
+  })
+  assert.equal(answers[1].question, "their partner's feelings")
+  assert.equal(answers[1].written_by, 'Ben-pid')
+  assert.equal(answers[2].how_saved, 'researcher moved on')
+  assert.equal(answers[2].turn, '2')
+  assert.equal(answers[2].whose_video, 'Ben-pid')
+  assert.equal(answers[4].how_saved, 'review ended early')
+  assert.equal(answers[4].turn, '3')
 
-  const info = JSON.parse(await readFile(path.join(logger.dir, 'review.json'), 'utf-8'))
-  assert.equal(info.reviews.length, 2)
-  assert.equal(info.reviews[0].reviewNumber, 1)
-  assert.equal(info.reviews[1].config.showOriginal, false)
-  assert.equal(info.reviews[0].segments.length, 6)
-  assert.equal(info.reviews[0].recordings.length, 4)
+  const second = await csv('review_2', 'answers.csv')
+  assert.equal(second.length, 2)
+  assert.equal(second[0].seconds_on_original_video, '', 'blank when the original was not shown')
+  assert.equal(second[0].switches_between_videos, '')
+
+  const settings = await readFile(path.join(logger.dir, 'review', 'settings.txt'), 'utf-8')
+  assert.match(settings, /View:\s+gallery/)
+  assert.match(settings, /Turn length:\s+10 seconds/)
+  assert.match(settings, /Goes first:\s+Ana \(P1\)/)
+  assert.match(settings, /Original video shown:\s+yes/)
+  assert.match(settings, /Conversation reviewed:\s+0:25, in 6 turns/)
+  assert.match(await readFile(path.join(logger.dir, 'review_2', 'settings.txt'), 'utf-8'), /Original video shown:\s+no/)
 
   const events = await readFile(path.join(logger.dir, 'events.csv'), 'utf-8')
   for (const e of ['moved_to_review', 'review_started', 'review_turn_started', 'review_clip_finished', 'review_ended', 'review_closed']) {
@@ -268,6 +272,7 @@ try {
   }
   assert.ok(events.includes('blocked_action'), 'participant review-start is logged as blocked')
   assert.equal(events.split('conversation_ended').length - 1, 1, 'leaving a review is not logged as the call ending')
+  assert.ok(events.includes('""by"":""both_done"",""pauses"":1'), 'turn 1 summary: done by both, held once by the disconnect')
 } finally {
   for (const c of clients) c.ws.close()
   await server.stop().catch(() => {})

@@ -183,14 +183,16 @@ Participant screens are locked down (full-screen, no way to click out) so partic
 
 ## Where the data goes
 
-Each session saves to its own folder (you can open it directly from the dashboard's "Data folder" button):
+Each session saves to its own folder, named by the date and time it started (you can open it directly from the dashboard's "Data folder" button). Inside:
 
-- A log of every event (connections, messages, button presses, detected expressions, calibration results, etc. — see [Calibration](#calibration) above)
-- A log of exactly what was applied to each participant, once per second — including how much was actually applied after the per-person limit, and their smile/frown readings on their own scale if they were calibrated
-- Each calibrated participant's measurements and photos, under `calibration/<participant id>/`
-- A summary file once the session ends
-- Video/audio recordings: each participant's real feed, each participant's modified feed, and the researcher's mic
-- If you ran a post-call review: `review_responses.csv` (every answer, who wrote it, which turn and whose video it was about, which view and video version they were looking at), `review_segments.csv` (one row per turn), `review_viewing.csv` (each time someone switched between the changed and original video), and `review.json` (the settings used)
+- `README.txt`: explains every file and column in plain language
+- `events.csv`: everything that happened, one row per event (connections, messages, button presses, detected expressions, calibration results, etc.)
+- `session_summary.json`: a summary written when the session ends
+- `videos/`: each participant's real camera and the changed video their partner saw, the researcher's mic, and `recordings.csv` listing them
+- `face/`: once per second, how much each participant's face and voice were being changed and what their real face was doing
+- `voice/`: voice measurements for each participant, and one row each time someone spoke
+- `calibration/<participant id>/`: each calibrated participant's measurements and photos
+- `review/`: only if you ran a post-call review. `answers.csv` has everything each person wrote (which turn, whose video it was, who wrote it, and whether it was about their own or their partner's feelings). `settings.txt` has the settings you used.
 
 ## Troubleshooting
 

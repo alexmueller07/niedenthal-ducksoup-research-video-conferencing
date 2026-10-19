@@ -206,7 +206,7 @@ applied  = min(|α_commanded|, headroom) × cornerTravel × yawScale × openScal
 - `L` is jaw-compensated (§3.6), so speech does not eat the headroom.
 - The cap is applied to the **target** before the 350 ms tween, so headroom changes ease in rather
   than jittering frame to frame.
-- **Consequence for analysis**: the commanded α is no longer ground truth. `effect_state_<seat>.csv`
+- **Consequence for analysis**: the commanded α is no longer ground truth. `face/face_and_voice_changes_<seat>.csv`
   records `commanded_alpha`, `applied_alpha`, `live_level` and `headroom` per second;
   `applied_alpha` is the number to analyse.
 
@@ -335,7 +335,7 @@ shifter on every analysis frame.
 - Presets: "Lower voice" = −1 st, "Higher voice" = +1 st, "Smiling voice" = smile 1. All other
   presets = 0.
 - Both manual controls are blocked while a Match/Detone/Audibility condition is on, and reset when
-  one starts. `effect_state_<seat>.csv` records `self_voice_smile` / `partner_voice_smile` as its
+  one starts. `face/face_and_voice_changes_<seat>.csv` records `self_voice_smile` / `partner_voice_smile` as its
   last two columns.
 - Reference: pitch ratio ≈ `2^(n/12)`; +1 st ≈ 1.059×, −1 st ≈ 0.944×. Larger shifts sounded unnatural, so ±1 st is the cap.
 - `micLevel()` exposes a short-window RMS of the raw mic for the talking detector (§3.6). Read-only;
@@ -393,7 +393,7 @@ the morphed output, so a rule like "when P1 smiles" reacts to what actually happ
 | `eyeConstriction` | mean(`eyeSquintL`,`eyeSquintR`,`cheekSquintL`,`cheekSquintR`) — logged only, not used to classify |
 
 All features are EMA-smoothed (**τ = 80 ms**) before thresholding. 18 raw MediaPipe scores are
-smoothed individually and kept: 15 are streamed to `effect_state_<seat>.csv` as `raw_*` columns
+smoothed individually and kept: 15 are streamed to `face/face_and_voice_changes_<seat>.csv` as `raw_*` columns
 (§9.3), and all 18 are recorded per calibration phase (§5). **These are MediaPipe's own
 facial-movement scores, not OpenFace/FACS Action Units** — this app doesn't run OpenFace, so they
 shouldn't be cited as FACS-coded AU data.
@@ -673,26 +673,32 @@ Each participant sends a `stream-map` telling the admin which stream id is alter
 Default root `Documents/NiedenthalLab/video-call-sessions` (selectable via folder picker):
 
 ```
-session_<YYYY-MM-DDTHH-MM-SS>/
-├── README.txt               # plain-English column/convention reference
-├── events.csv               # every discrete event
-├── effect_state_P1.csv      # 1 Hz applied-state telemetry for P1 (ground truth)
-├── effect_state_P2.csv      # 1 Hz applied-state telemetry for P2 (ground truth)
-├── recordings.csv           # one row per saved recording, with start/stop times
-├── session.json             # manifest (written on End)
-├── review_responses.csv     # post-call review answers, one row per person per turn (§15)
-├── review_segments.csv      # one row per review turn
-├── review_viewing.csv       # one row per change of what a participant was looking at
-├── review.json              # review settings, turns, and recording offsets
-├── calibration/             # one folder per calibrated participant (§5.3)
+session_<YYYY-MM-DD_HH-MM-SS>/        # local start time
+├── README.txt                         # plain-English guide to the folder and columns
+├── events.csv                         # every discrete event
+├── session_summary.json               # manifest (written on End)
+├── videos/
+│   ├── recordings.csv                 # one row per saved recording, with start/stop times
+│   ├── P1_<pid>_clean.mp4   P1_<pid>_altered.mp4
+│   ├── P2_<pid>_clean.mp4   P2_<pid>_altered.mp4
+│   └── researcher_mic.mp4             (…_part2, _part3 on restart/reconnect)
+├── face/
+│   ├── face_and_voice_changes_P1.csv  # 1 Hz applied-state telemetry for P1 (ground truth)
+│   └── face_and_voice_changes_P2.csv
+├── voice/
+│   ├── voice_measurements_P1.csv      # VoiceLogger, per participant
+│   ├── voice_measurements_P2.csv
+│   └── speaking_turns.csv
+├── calibration/                       # one folder per calibrated participant (§5.3)
 │   └── <participant_id>/
 │       ├── calibration.json
 │       └── neutral.jpg  max_smile_closed.jpg  max_smile_open.jpg  max_frown.jpg
-└── recordings/
-    ├── P1_<pid>_clean.mp4      P1_<pid>_altered.mp4
-    ├── P2_<pid>_clean.mp4      P2_<pid>_altered.mp4
-    └── researcher_mic.mp4      (…_part2, _part3 on restart/reconnect)
+└── review/                            # only if the post-call review ran (§15); review_2/ … if re-run
+    ├── answers.csv
+    └── settings.txt
 ```
+
+`face/`, `voice/` and `review/` are created when their first row is written, so a folder only exists if it has data in it.
 
 CSVs use append write-streams so rows hit disk as they happen; recording chunks flush every 1 s. A crash mid-session loses at most the OS buffer. `README.txt` (`main/logger.ts`, `README_CONTENT`) is written once per session so the column/convention reference travels with the actual data, not just with this doc.
 
@@ -700,7 +706,7 @@ Every CSV follows the same conventions:
 - Column headers are plain English (e.g. `time`, not `ts_iso`), grouped left to right as **who/when → what happened → data-quality detail**, so the files are readable without a data dictionary.
 - `date`/`time` (and `started_date`/`started_time`/`stopped_date`/`stopped_time`) are your computer's own local clock, split into two columns, written like `Aug 18, 2026` and `3:46:51.175 PM` — not UTC, not ISO 8601.
 - `elapsed_ms` (and `elapsed_start_ms`/`elapsed_stop_ms`) is milliseconds since the session began, on the same clock across every file in the session, so a row in one file can be matched to a moment in another (or inside a recording) by comparing these numbers directly.
-- `effect_state_<seat>.csv` also has `conversation_elapsed_ms`: milliseconds since the researcher started the *live conversation* specifically (blank while still in the waiting room), anchored to the same `sessionStartedAt` moment used to start recordings — so this number doubles as the row's approximate timestamp inside the recorded video, with no subtraction needed.
+- `face/face_and_voice_changes_<seat>.csv` also has `conversation_elapsed_ms`: milliseconds since the researcher started the *live conversation* specifically (blank while still in the waiting room), anchored to the same `sessionStartedAt` moment used to start recordings — so this number doubles as the row's approximate timestamp inside the recorded video, with no subtraction needed.
 
 ### 9.2 `events.csv`
 
@@ -723,11 +729,11 @@ Event names are plain English on purpose — this column is read by researchers,
 
 `video_connection_lost`/`video_connection_restored` are the only two states logged out of WebRTC's full connection-state machinery (new/connecting/connected/disconnected/failed/closed) — routine call setup and teardown isn't written, only an actual drop and its recovery.
 
-Three earlier events were removed as pure internal bookkeeping with no research value: `stream_map` (matching up which video stream is the altered one — still happens, just isn't logged), `detector_info` (which expression-detection build was used — now written once into `session.json`'s `detection` field instead, see §9.4), and `recording_duration_patch_failed` (an internal repair-attempt failure — now only a developer-console warning).
+Three earlier events were removed as pure internal bookkeeping with no research value: `stream_map` (matching up which video stream is the altered one — still happens, just isn't logged), `detector_info` (which expression-detection build was used — now written once into `session_summary.json`'s `detection` field instead, see §9.4), and `recording_duration_patch_failed` (an internal repair-attempt failure — now only a developer-console warning).
 
 A per-row sequence number is still sent to the live dashboard feed (for React list keys) but isn't written to the CSV — file order already reflects it.
 
-### 9.3 `effect_state_P1.csv` / `effect_state_P2.csv`
+### 9.3 `face/face_and_voice_changes_P1.csv` / `_P2.csv`
 
 One file per participant seat instead of one shared file, so each person's data stands alone and never needs to be filtered out of a mixed file.
 
@@ -754,9 +760,9 @@ confidence-scaling scheme that calibration replaced.
 
 `raw_mouth_smile_left` through `raw_cheek_squint_right` are the 15 individual MediaPipe facial-movement scores behind the `expression`/`smile_type` label — see §4.1 for exactly which formula uses which raw score, and why they aren't OpenFace/FACS Action Units.
 
-`detection_mode`/`detection_version` are **not** columns here — they never change during a session, so repeating them on every row was pure clutter. They're captured once per seat instead and written into `session.json`'s `detection` field (see §9.4).
+`detection_mode`/`detection_version` are **not** columns here — they never change during a session, so repeating them on every row was pure clutter. They're captured once per seat instead and written into `session_summary.json`'s `detection` field (see §9.4).
 
-### 9.3b `recordings.csv`
+### 9.3b `videos/recordings.csv`
 
 One row per saved recording (each participant's clean track, altered track, and the researcher mic), written once the recording stops — so if the app crashes mid-recording, that row is missing here but the start is still in `events.csv`.
 
@@ -764,7 +770,7 @@ Header: `seat, participant_id, type, started_date, started_time, stopped_date, s
 
 ### 9.4 Manifests
 
-- **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, detection:{P1:{classifierMode, classifierVersion}, P2:{...}} }` → `session.json`. `detection` is added automatically by `SessionLogger.writeManifest` from whatever each seat's telemetry reported first, so callers don't need to supply it.
+- **Three-seat call** (written on End): `{ schemaVersion:2, app:'Niedenthal Lab Video Call', appVersion:'3.0.0', writtenAt, sessionStartedAt, raName, participants:[{slot, identity}], recordings:[{label, bytes}], eventCount, detection:{P1:{classifierMode, classifierVersion}, P2:{...}} }` → `session_summary.json`. `detection` is added automatically by `SessionLogger.writeManifest` from whatever each seat's telemetry reported first, so callers don't need to supply it.
 - **1-Person Test Station** (`renderer/lib/capture.ts`): `{ schemaVersion:1, app:'DuckSoup Experimenter Platform', appVersion:'2.0.0', ... }` — a simplified manifest for quick self-testing (no study/dyad/participant IDs), not the PPS questionnaire pipeline's real intake format; see §13.
 
 ### 9.5 Recording format
@@ -941,14 +947,14 @@ Things to know before citing or relying on this software in a study.
 
 1. **Preset intensities are pilot settings.** α is now a fraction of each participant's own calibrated maximum, and the preset values were rescaled to that meaning to keep the visible effect near where the old fixed geometry put it (§3.8). That rescaling was a judgement call, not a measurement. No psychophysical validation (detection threshold, naturalness, believability) has been run — describe presets as pilot settings, not validated intensities, and revisit the numbers once real per-participant corner-travel data exists.
 2. **The smile sub-type classifier is a heuristic tuned to five still images**, not validated against FACS-coded or human-rated video. The Duchenne eye-constriction cue is deliberately unused (unreliable on webcams with this model). Treat sub-type as exploratory unless independently validated.
-3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry, a lower-lip pout, and a measured cheek raise and brow movement — but no change to the eyes themselves, no teeth, and no lighting consistent with a real smile. The eye aperture is deliberately left alone (§3.3), so the eye-narrowing part of a genuine Duchenne smile is still absent. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_detected` in `effect_state_P1.csv`/`effect_state_P2.csv` for affected frames.
+3. **The morph is a 2-D planar mesh warp, not a 3-D face model.** It moves mouth-corner geometry, a lower-lip pout, and a measured cheek raise and brow movement — but no change to the eyes themselves, no teeth, and no lighting consistent with a real smile. The eye aperture is deliberately left alone (§3.3), so the eye-narrowing part of a genuine Duchenne smile is still absent. It fades out on head turn and does nothing when no face is detected, so brief head turns or tracking dropouts show the unmodified partner. Check `face_detected` in `face_and_voice_changes_P1.csv`/`face_and_voice_changes_P2.csv` for affected frames.
 4. **Detection latency**: ~5 Hz sampling, 80 ms EMA smoothing, 100 ms debounce — expression onset is reported with roughly ~0.2 s latency (down from ~0.5–0.7 s before calibration allowed the longer windows to be shortened). Interpret rule "hold" durations accordingly.
-5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `effect_state_P1.csv`/`effect_state_P2.csv` record the true per-second trajectory.
+5. **Effect ease-in**: a commanded change reaches ~95% of target in ~1.05 s (τ = 350 ms) — not instantaneous. `face_and_voice_changes_P1.csv`/`face_and_voice_changes_P2.csv` record the true per-second trajectory.
 6. **Condition counterbalancing isn't automated.** `counterbalanceConditions()` exists and is deterministic but isn't called from the UI — condition assignment is currently manual (RA's procedure). Document how it was done for the study; consider wiring the helper in for the main study.
 7. **There is no silent auto-update on macOS.** `electron-updater`'s Mac update mechanism (Squirrel.Mac) requires a real Apple Developer ID signature to verify updates come from the same publisher, which this app doesn't have. Instead, the sign-in screen checks GitHub Releases for a newer version and links the RA to the new installer (§11.5); installing it is still a manual right-click → Open, same as today.
 8. **The 1-Person Test Station is a testing tool, not for study data collection.** `renderer/pages/dashboard.tsx`/`renderer/lib/capture.ts` share the same `0 = neutral` alpha convention as the three-seat call app — there is no alpha-convention mismatch to adjust for. It runs the same calibration sequence, the same maths and the same review panel as the three-seat app, but it has no participant intake, so its calibration folder is always named `self-test`. Its `SessionManifest` is a simplified shape (no study/dyad/participant IDs) meant for quick self-testing, not the PPS questionnaire pipeline's real intake format.
 
-9. **The researcher can no longer over-drive a participant past their own maximum.** α is clamped to ±1 and the total cap subtracts whatever the participant's real face is already doing, so a preset delivers less than its nominal value whenever they are already expressing. This is deliberate (it is what keeps the morph looking like their face), but it means the commanded value is not the manipulation — always analyse `applied_alpha` from `effect_state_<seat>.csv`, not the preset's α or `commanded_alpha`.
+9. **The researcher can no longer over-drive a participant past their own maximum.** α is clamped to ±1 and the total cap subtracts whatever the participant's real face is already doing, so a preset delivers less than its nominal value whenever they are already expressing. This is deliberate (it is what keeps the morph looking like their face), but it means the commanded value is not the manipulation — always analyse `applied_alpha` from `face/face_and_voice_changes_<seat>.csv`, not the preset's α or `commanded_alpha`.
 
 10. **Calibration is not reused across sessions.** It is written into the session folder only, so a participant who returns for a second session is calibrated again from scratch. Their two sessions may therefore be scaled against slightly different measurements.
 
@@ -973,7 +979,7 @@ Things to know before citing or relying on this software in a study.
 | `rules.ts` | `RuleEngine`: expression/timer triggers, holds, reverts, release modes. |
 | `presets.ts` | Modification conditions, `getPreset`, `counterbalanceConditions`. |
 | `protocol.ts` | Wire protocol, message types, `EffectState`, `ExpressionState`, `AutomationRule`, `Telemetry`, versions, port. |
-| `logger.ts` | `SessionLogger`: `events.csv`, `effect_state_<seat>.csv`, `recordings.csv`, `session.json`, `calibration/<pid>/`, recording paths. |
+| `logger.ts` | `SessionLogger`: `events.csv`, `face/face_and_voice_changes_<seat>.csv`, `videos/recordings.csv`, `session_summary.json`, `calibration/<pid>/`, recording paths. |
 | `preload.ts` | Context-bridge IPC (`window.ipc.invoke/on/send`). |
 | `server-standalone.ts` | Browser-dev standalone server entry (`npm run server:dev`). |
 | `helpers/create-window.ts` | Window creation + persisted window state. |
@@ -1103,12 +1109,18 @@ A file that fails to decode (recordings from before the fixed-size fix in §9.5)
 
 ### 15.7 Data
 
-All three CSVs are created only when a review runs, and start with `review_number` (1 unless the researcher runs the review again in the same session). `segment_start_ms`/`segment_end_ms` are on the conversation clock, the same as `conversation_elapsed_ms`.
+Each review writes to its own folder: `review/`, then `review_2/`, … if the researcher runs it again in the same session. Both files are meant to be read by RAs as-is.
 
-- `review_responses.csv`: `review_number, pair_id, segment_number, window_number, segment_start_ms, segment_end_ms, about_seat, about_participant_id, writer_seat, writer_participant_id, response_type, view_mode, version_at_submit, ms_watched_altered, ms_watched_clean, toggle_count, clip_started_date, clip_started_time, clip_started_elapsed_ms, first_typed_elapsed_ms, submitted_date, submitted_time, submitted_elapsed_ms, submitted_by, edit_count, word_count, response_text`. `submitted_by` is `participant`, `researcher_forced`, `auto` or `review_ended` (the review was ended, or the app closed, during that turn). An answer starting with `=`, `+`, `-` or `@` gets a leading `'` so spreadsheets don't read it as a formula. `ms_watched_*` counts time on screen until Done (both count in gallery). `first_typed_elapsed_ms` comes from the participant's clock converted to the server's.
-- `review_segments.csv`: `review_number, segment_number, window_number, about_seat, about_participant_id, segment_start_ms, segment_end_ms, played_date, played_time, played_elapsed_ms, finished_playing_elapsed_ms, advanced_date, advanced_time, advanced_elapsed_ms, advanced_by, pauses, pause_total_ms`.
-- `review_viewing.csv`: `review_number, writer_seat, writer_participant_id, segment_number, date, time, elapsed_ms, video_position_ms, view_mode, shown_person, shown_version`. One row at the start of each turn and one per switch.
-- `review.json`: `{ reviews: [{ reviewNumber, startedAt, conversationStartedAt, conversationMs, config, segments, recordings: [{seat, type, file, offsetMs, durationMs}] }] }`.
+- `answers.csv`: one row per person per turn. `pair_id, turn, clip_from, clip_to, whose_video, written_by, question, answer, how_saved, date, time, view, seconds_on_original_video, switches_between_videos`.
+  - `clip_from`/`clip_to` are `m:ss` positions in the conversation, i.e. the time inside the videos.
+  - `whose_video`/`written_by` are participant IDs, or the seat if no ID was entered.
+  - `question` is `their own feelings` or `their partner's feelings`.
+  - `how_saved` is `pressed Done`, `researcher moved on`, `moved on automatically` or `review ended early`. In the last three, whatever had been typed was saved.
+  - `view` is `active speaker`, `single` or `gallery`.
+  - The last two columns are blank unless participants were shown the original video.
+  - An answer starting with `=`, `+`, `-` or `@` gets a leading `'` so spreadsheets don't read it as a formula.
+- `settings.txt`: a short plain-text note covering when the review started, the length reviewed and number of turns, the view, turn length, who went first, how turns advanced, and whether the original video was shown and pausing allowed.
+- Per-turn detail (how each turn ended, its pauses) is in `events.csv` on the `review_advanced` rows, not in a file of its own.
 - `events.csv`: `moved_to_review`, `review_closed` (leaving the review; `conversation_ended` is logged only once, when the call itself ends), `review_started`, `review_turn_started`, `review_clip_finished`, `review_paused`, `review_resumed`, `review_started_without_waiting`, `review_turn_restarted`, `review_video_catching_up`, `review_response_submitted`, `review_advanced`, `review_finished`, `review_ended`.
 
 ### 15.8 Developing without Electron

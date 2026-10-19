@@ -21,6 +21,21 @@
 
 * **Date:** 18-10-2026
 * **Author:** Aditya Harshavardhan
+* **Changes Made:** Organized session folders and simpler review files
+
+* **Previous behavior:**
+Every file of a session sat loose in one folder, with names like `effect_state_P1.csv` and `voice_features_P1.csv`. The post-call review wrote four files full of technical columns (`review_responses.csv`, `review_segments.csv`, `review_viewing.csv`, `review.json`). Session folders were named by UTC time.
+
+* **New behavior:**
+Each session folder is named by its local start time and grouped into folders: `videos/` (recordings and `recordings.csv`), `face/` (`face_and_voice_changes_P1/P2.csv`), `voice/` (`voice_measurements_P1/P2.csv`, `speaking_turns.csv`), `calibration/`, and `review/`. `events.csv`, `README.txt` and `session_summary.json` stay at the top. The review now writes just `review/answers.csv`, one plain row per answer (turn, which part of the call, whose video, who wrote it, own or partner's feelings, the answer, how it was saved), and `review/settings.txt`. Columns inside the existing files are unchanged.
+
+* **Why this matters:**
+Session folders were getting hard to find things in. The review answers can now be read straight away without a data dictionary. Any analysis scripts that read the old file names or locations need updating.
+
+---
+
+* **Date:** 18-10-2026
+* **Author:** Aditya Harshavardhan
 * **Changes Made:** Post-call review, and recordings that play all the way through
 
 * **Previous behavior:**

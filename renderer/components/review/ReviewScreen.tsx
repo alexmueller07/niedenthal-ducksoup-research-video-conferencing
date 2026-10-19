@@ -1,9 +1,8 @@
 // The participant's screen during the post-call review: the videos on the
 // left (in the researcher's chosen view mode), the writing panel on the right.
 //
-// Also keeps the numbers that go into review_responses.csv for each turn:
-// how long each video version was on screen, how often they switched, how
-// many edits they made, and when they first typed.
+// Also keeps the numbers that go into review/answers.csv for each turn:
+// how long the original video was on screen and how often they switched.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { reviewPositionMs } from '../../../main/review'
@@ -78,19 +77,6 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
     [],
   )
 
-  const viewPayload = useCallback(
-    (v: VideoVersion) => ({
-      type: 'review-view' as const,
-      turn,
-      mode,
-      person: mode === 'gallery' ? ('both' as const) : mode === 'single' ? partner : (segment?.targetSeat ?? partner),
-      version: mode === 'gallery' ? (versions.length > 1 ? ('both' as const) : 'altered') : v,
-      positionMs: reviewPositionMs(state, serverNow()),
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [turn, mode, partner, segment?.targetSeat, versions.length, state, serverNow],
-  )
-
   // A new turn: clear the answer (or put back what the server kept for us).
   useEffect(() => {
     if (!turn) return
@@ -99,8 +85,6 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
     versionRef.current = 'altered'
     setText('')
     setPressedDone(false)
-    send(viewPayload('altered'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turn])
 
   // After a reload the box is empty and the server's copy is all there is.
@@ -162,7 +146,6 @@ export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, 
     statsRef.current.toggles += 1
     setVersion(v)
     versionRef.current = v
-    send(viewPayload(v))
   }
 
   const onReady = useCallback((loadSeq: number) => send({ type: 'review-ready', loadSeq }), [send])

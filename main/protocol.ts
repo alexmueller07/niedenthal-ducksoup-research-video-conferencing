@@ -584,14 +584,7 @@ export type ClientMessage =
   | { type: 'review-buffering'; loadSeq: number }
   | { type: 'review-draft'; turn: number; text: string; stats: ReviewViewingStats }
   | { type: 'review-submit'; turn: number; text: string; stats: ReviewViewingStats }
-  | {
-      type: 'review-view'
-      turn: number
-      mode: ReviewViewMode
-      person: PSlot | 'both'
-      version: VideoVersion | 'both'
-      positionMs: number
-    }
+
 
 // ---- Server → Client ----
 
