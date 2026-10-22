@@ -30,6 +30,8 @@ import { SessionServer, lanIps } from './server'
 import { SessionLogger } from './logger'
 import { DEFAULT_PORT, APP_VERSION } from './protocol'
 import { patchMp4Duration } from './mp4duration'
+import { scanSessionRoot, resolveSessionFile } from './sessionCatalog'
+import { checkReleaseUpdate } from '../shared/releaseUpdate'
 
 const isProd = process.env.NODE_ENV === 'production'
 const store = new Store<Record<string, unknown>>({ name: 'lab-video-call' })
@@ -88,7 +90,7 @@ function loadRoute(win: BrowserWindow, route: string) {
     height: 800,
     minWidth: 980,
     minHeight: 640,
-    title: 'Video Call',
+    title: 'Session View',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(import.meta.dirname, 'preload.js'),
@@ -234,6 +236,7 @@ ipcMain.handle('role:admin', () => {
 })
 
 ipcMain.handle('app:platform', () => process.platform)
+ipcMain.handle('suite:check-update', () => checkReleaseUpdate(APP_VERSION, process.platform))
 
 // ---- Update check (no auto-update: macOS auto-update needs a real Apple
 // Developer ID signature, which this app doesn't have — see
@@ -331,6 +334,45 @@ ipcMain.handle('prefs:set', (_e, key: string, value: unknown) => {
 function defaultOutputRoot(): string {
   return path.join(app.getPath('documents'), 'NiedenthalLab', 'video-call-sessions')
 }
+
+let suiteReadRoot: string | null = null
+const outputRoot = () => (store.get('prefs.outputRoot', null) as string | null) || defaultOutputRoot()
+
+ipcMain.handle('suite:catalog', async () => {
+  const root = suiteReadRoot || outputRoot()
+  if (!fs.existsSync(root)) return { root, sessions: [], warnings: [] }
+  return scanSessionRoot(root)
+})
+
+ipcMain.handle('suite:choose-data', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'], title: 'Open a session folder or sessions library' })
+  if (result.canceled) return null
+  const catalog = await scanSessionRoot(result.filePaths[0])
+  suiteReadRoot = catalog.root
+  return catalog
+})
+
+ipcMain.handle('suite:read-text', async (_e, sessionId: string, relativePath: string) => {
+  const file = await resolveSessionFile(suiteReadRoot || outputRoot(), sessionId, relativePath)
+  if (!/\.(csv|json|txt)$/i.test(file)) throw new Error('Select a CSV, JSON, or text file.')
+  if ((await fs.promises.stat(file)).size > 5 * 1024 * 1024) throw new Error('This file is larger than the 5 MB preview limit. Open it externally for full analysis.')
+  return fs.promises.readFile(file, 'utf8')
+})
+
+ipcMain.handle('suite:open-file', async (_e, sessionId: string, relativePath: string) => {
+  const file = await resolveSessionFile(suiteReadRoot || outputRoot(), sessionId, relativePath)
+  const error = await shell.openPath(file)
+  if (error) throw new Error(error)
+  return true
+})
+
+ipcMain.handle('suite:output-root', () => outputRoot())
+ipcMain.handle('suite:choose-output', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Save future call sessions to' })
+  if (result.canceled) return null
+  store.set('prefs.outputRoot', result.filePaths[0])
+  return result.filePaths[0]
+})
 
 ipcMain.handle(
   'server:start',
