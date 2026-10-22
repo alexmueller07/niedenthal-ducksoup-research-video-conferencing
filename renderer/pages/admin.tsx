@@ -50,6 +50,7 @@ import type {
   Telemetry,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
+import { preferredConstraints } from '../lib/suitePreferences'
 import { VoicePanel } from '../components/VoiceControls'
 import { ReviewControls } from '../components/ReviewControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
@@ -204,7 +205,7 @@ export default function AdminDashboard() {
       // 2. Researcher mic — captured now, sent to participants but disabled
       //    (muted) until the researcher deliberately goes live.
       try {
-        const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const mic = await navigator.mediaDevices.getUserMedia(preferredConstraints({ audio: true }))
         micStreamRef.current = mic
         const track = mic.getAudioTracks()[0]
         track.enabled = false

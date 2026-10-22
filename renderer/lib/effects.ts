@@ -13,6 +13,7 @@
 
 import { FaceMorphProcessor } from './faceMorph'
 import { VoiceProcessor } from './voice'
+import { preferredConstraints } from './suitePreferences'
 import type { VoiceCondition, VoiceSeat, VoiceTurn } from '../../main/voiceProtocol'
 import type { CalibrationFrame } from './calibration'
 import type { CalibrationProfile, ExpressionState, Telemetry } from './protocol'
@@ -87,10 +88,10 @@ export class LiveEffects {
       this.camera = await this.makeTestFaceStream(opts.testFaceUrl)
       onLog('TEST MODE: example face image used instead of the camera', 'warn')
     } else {
-      this.camera = await navigator.mediaDevices.getUserMedia({
+      this.camera = await navigator.mediaDevices.getUserMedia(preferredConstraints({
         video: { width: 1280, height: 720 },
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 },
-      })
+      }))
     }
     this.status.camera = true
     this.cleanStream = this.camera

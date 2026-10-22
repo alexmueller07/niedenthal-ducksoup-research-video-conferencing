@@ -14,6 +14,7 @@
 // simpler and does not crash outside Electron.
 
 import { FaceMorphProcessor } from './faceMorph'
+import { preferredConstraints } from './suitePreferences'
 import { getPreset } from './presets'
 import { pickRecorderFormat, type RecorderFormat } from './recording'
 import { buildCalibrationProfile } from './calibration'
@@ -146,10 +147,10 @@ export class CaptureStation {
     }
 
     try {
-      this.camera = await navigator.mediaDevices.getUserMedia({
+      this.camera = await navigator.mediaDevices.getUserMedia(preferredConstraints({
         video: { width: 1280, height: 720 },
         audio: true,
-      })
+      }))
     } catch (err) {
       this.connection = 'error'
       this.emit()
