@@ -22,10 +22,9 @@ import type {
   ReviewViewMode,
   VideoVersion,
 } from '../lib/protocol'
-import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
+import { readReviewDefaults, saveReviewDefaults } from '../lib/suitePreferences'
 
 const SEATS: PSlot[] = ['P1', 'P2']
-const PREF_KEY = 'reviewConfig'
 
 const MODES: { id: ReviewViewMode; label: string; hint: string }[] = [
   { id: 'active', label: 'Active speaker', hint: 'Only the person whose turn it is' },
@@ -53,11 +52,10 @@ export function ReviewControls(props: ReviewControlsProps) {
 
   // The last settings used on this machine come back as the default.
   useEffect(() => {
-    if (!hasIpc()) return
-    void ipcInvoke<Partial<ReviewConfig> | null>('prefs:get', PREF_KEY).then((saved) => {
+    void readReviewDefaults().then((saved) => {
       // minTailSec is no longer a setting on screen; always use the default.
       if (saved) setConfig((c) => ({ ...c, ...saved, minTailSec: DEFAULT_REVIEW_CONFIG.minTailSec }))
-    })
+    }).catch(() => {})
   }, [])
 
   return (
@@ -86,7 +84,7 @@ function ReviewSetup({
   const turns = availability ? buildSegments(availability.conversationMs, config).length : 0
 
   function start() {
-    if (hasIpc()) void ipcInvoke('prefs:set', PREF_KEY, config)
+    void saveReviewDefaults(config).catch(() => {})
     onStart(config)
   }
 
