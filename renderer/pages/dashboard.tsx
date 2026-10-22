@@ -249,7 +249,7 @@ export default function DashboardPage() {
       if (!ok) return
       await stop()
     }
-    void router.push('/')
+    void router.push('/testing')
   }
 
   const goFullscreen = () => {
