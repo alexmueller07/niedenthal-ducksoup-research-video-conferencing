@@ -1,330 +1,63 @@
-// Sign-in. One screen for everyone:
-//   - RA types the participant's info on each participant laptop → Join →
-//     locked participant view.
-//   - RA types the access code "Admin" on the researcher machine → researcher
-//     dashboard (their "name" becomes the RA name on the session log).
-//
-// The session address (the researcher machine) is remembered per machine, so
-// after first setup the RA only fills names/IDs.
+import Link from 'next/link'
+import { ArrowRight, Video, ClipboardList, FolderOpen } from 'lucide-react'
+import {
+  PageHeading,
+  SUITE_SECTIONS,
+  OpenArrow,
+} from '../components/SuiteShell'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
-import { DEFAULT_PORT } from '../lib/protocol'
-import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
-
-export default function SignInPage() {
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [participantId, setParticipantId] = useState('')
-  const [dyadId, setDyadId] = useState('')
-  const [accessCode, setAccessCode] = useState('')
-  const [serverAddr, setServerAddr] = useState('')
-  const [joinError, setJoinError] = useState('')
-  const [joinShake, setJoinShake] = useState(0)
-  const [joining, setJoining] = useState(false)
-  const [isMac, setIsMac] = useState(false)
-  const [launchingInstance, setLaunchingInstance] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string } | null>(null)
-  const [showSignIn, setShowSignIn] = useState(false)
-
-  useEffect(() => {
-    void (async () => {
-      if (!hasIpc()) return
-      const saved = await ipcInvoke<string | null>('prefs:get', 'serverAddr')
-      if (saved) setServerAddr(saved)
-      const platform = await ipcInvoke<string | null>('app:platform')
-      setIsMac(platform === 'darwin')
-    })()
-    ipcInvoke<{ latestVersion: string; downloadUrl: string }>('app:check-update').then(
-      (info) => setUpdateInfo(info),
-    )
-  }, [])
-
-  // Mac only opens one window per double-click by default, which makes it
-  // hard to test researcher + participant on one laptop. This spawns a
-  // second, fully separate copy of the app.
-  async function openAnotherInstance() {
-    if (launchingInstance) return
-    setLaunchingInstance(true)
-    await ipcInvoke('app:new-instance')
-    setLaunchingInstance(false)
-  }
-
-  const isAdmin = accessCode.trim().toLowerCase() === 'admin'
-  // Access code "test" joins as a participant running on bundled example
-  // faces instead of the camera, with a switcher panel (single-laptop testing).
-  const isTest = accessCode.trim().toLowerCase() === 'test'
-
-  async function join() {
-    if (joining) return
-    const role = isAdmin ? 'admin' : 'participant'
-    if (role === 'admin' && !name.trim()) {
-      setJoinError('Enter the researcher name before opening the dashboard.')
-      setJoinShake((shake) => shake + 1)
-      return
-    }
-    if (role === 'participant' && (!name.trim() || !participantId.trim() || !dyadId.trim())) {
-      setJoinError('Enter full name, participant ID, and dyad ID before joining.')
-      setJoinShake((shake) => shake + 1)
-      return
-    }
-    setJoinError('')
-    setJoining(true)
-    // Admin hosts the server on its own machine; participants need the address.
-    const addr = role === 'admin' ? 'localhost' : serverAddr.trim() || 'localhost'
-    if (hasIpc()) {
-      await ipcInvoke('prefs:set', 'serverAddr', serverAddr.trim())
-    }
-    sessionStorage.setItem(
-      'labcall',
-      JSON.stringify({
-        role,
-        testMode: isTest,
-        serverAddr: addr,
-        identity: {
-          name: name.trim(),
-          participantId: isAdmin ? '' : participantId.trim(),
-          dyadId: isAdmin ? '' : dyadId.trim(),
-          studyId: '',
-        },
-      }),
-    )
-    void router.push(role === 'admin' ? '/admin' : '/session')
-  }
-
-  const input =
-    'w-full rounded-lg border border-gray-700 bg-gray-800/80 px-3 py-2.5 text-sm text-white ' +
-    'placeholder-gray-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30'
-  const inputClass = (missing: boolean) =>
-    `${input} ${missing ? 'border-red-400/70 bg-red-950/20 focus:border-red-300 focus:ring-red-400/25' : ''}`
-  const label = 'mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-400'
-  const missingName = !!joinError && !name.trim()
-  const missingParticipantId = !!joinError && !participantId.trim()
-  const missingDyadId = !!joinError && !dyadId.trim()
-
-  if (!showSignIn) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6 text-white">
-        <div className="pointer-events-none absolute inset-0 opacity-45">
-          <div
-            className="h-full w-full"
-            style={{
-              backgroundImage:
-                'linear-gradient(rgba(96, 165, 250, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(96, 165, 250, 0.06) 1px, transparent 1px)',
-              backgroundSize: '30px 30px',
-            }}
-          />
-        </div>
-        <main className="relative flex min-h-[560px] w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/70 px-8 py-14 shadow-2xl ring-1 ring-sky-500/10 backdrop-blur">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-400/70 to-transparent" />
-          <div className="absolute inset-y-12 left-0 w-px bg-gradient-to-b from-transparent via-sky-500/35 to-transparent" />
-          <div className="absolute inset-y-12 right-0 w-px bg-gradient-to-b from-transparent via-violet-500/35 to-transparent" />
-          <div className="relative text-center">
-            <div className="mx-auto mb-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
-              <svg viewBox="0 0 24 24" className="h-8 w-8 text-sky-300" fill="currentColor" aria-hidden="true">
-                <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z" />
-              </svg>
-            </div>
-            <h1 className="text-6xl font-black leading-none tracking-normal text-white drop-shadow-[0_0_30px_rgba(56,189,248,0.14)] sm:text-7xl md:text-8xl">
-              Session
-              <br />
-              <span className="font-black italic text-sky-100">View</span>
-            </h1>
-            <button
-              type="button"
-              onClick={() => setShowSignIn(true)}
-              className="mt-20 rounded-full bg-white px-12 py-4 text-sm font-black uppercase tracking-[0.18em] text-gray-950 shadow-[0_0_38px_rgba(56,189,248,0.22)] transition hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-400/30"
-            >
-              Continue
-            </button>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
+export default function SuiteHome() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6">
-      <button
-        type="button"
-        onClick={() => {
-          setJoinError('')
-          setShowSignIn(false)
-        }}
-        className="absolute left-6 top-6 inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900/80 px-4 py-2.5 text-sm font-semibold text-gray-200 shadow-lg backdrop-blur transition hover:border-sky-500/60 hover:bg-gray-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-      >
-        <span className="text-lg leading-none" aria-hidden="true">
-          ‹
-        </span>
-        Back
-      </button>
-
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-600/20 ring-1 ring-sky-500/40">
-            <svg viewBox="0 0 24 24" className="h-7 w-7 text-sky-400" fill="currentColor">
-              <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z" />
-            </svg>
-          </div>
-          <h1 className="text-4xl font-semibold tracking-normal text-white">Session View</h1>
-        </div>
-
-        {updateInfo && (
-          <button
-            type="button"
-            onClick={() => void ipcInvoke('app:open-external', updateInfo.downloadUrl)}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/20 px-4 py-2.5 text-sm font-semibold text-amber-300 ring-1 ring-amber-500/40 transition hover:bg-amber-500/30"
-            title="Downloads a .dmg — install it the same way as before (right-click, Open)"
+    <main className="suite-content">
+      <PageHeading eyebrow="Session View" title="Research workspace">
+        <p>Choose a station to begin.</p>
+      </PageHeading>
+      <div className="suite-launchers">
+        {SUITE_SECTIONS.map((s, i) => (
+          <Link
+            className={`suite-launcher tone-${s.tone}`}
+            href={s.href}
+            key={s.href}
           >
-            Update available — v{updateInfo.latestVersion} (click to download)
-          </button>
-        )}
-
-        <div
-          key={joinShake}
-          className={`rounded-2xl border border-gray-800 bg-gray-900/70 p-6 shadow-2xl backdrop-blur ${
-            joinError ? 'animate-[joinShake_.28s_ease-in-out]' : ''
-          }`}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className={label}>Full name</label>
-              <input
-                className={inputClass(missingName)}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value)
-                  setJoinError('')
-                }}
-                placeholder="First and last name"
-                autoFocus
-                aria-invalid={missingName}
-              />
+            <div className="suite-launcher-top">
+              <span className="suite-mode-icon">
+                <s.icon size={24} />
+              </span>
+              <OpenArrow />
             </div>
-            {!isAdmin && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={label}>Participant ID</label>
-                  <input
-                    className={inputClass(missingParticipantId)}
-                    value={participantId}
-                    onChange={(e) => {
-                      setParticipantId(e.target.value)
-                      setJoinError('')
-                    }}
-                    placeholder="e.g. 1043"
-                    aria-invalid={missingParticipantId}
-                  />
-                </div>
-                <div>
-                  <label className={label}>Dyad ID</label>
-                  <input
-                    className={inputClass(missingDyadId)}
-                    value={dyadId}
-                    onChange={(e) => {
-                      setDyadId(e.target.value)
-                      setJoinError('')
-                    }}
-                    placeholder="e.g. D22"
-                    aria-invalid={missingDyadId}
-                  />
-                </div>
-              </div>
-            )}
             <div>
-              <label className={label}>
-                Access code <span className="normal-case text-gray-600">(optional)</span>
-              </label>
-              <input
-                className={input}
-                type="password"
-                value={accessCode}
-                onChange={(e) => {
-                  setAccessCode(e.target.value)
-                  setJoinError('')
-                }}
-                placeholder="Leave blank to join as participant"
-              />
+              <span className="suite-eyebrow">
+                0{i + 1}
+                {s.badge ? ' / Preview' : ''}
+              </span>
+              <h2>{s.title}</h2>
+              <p>{s.detail}</p>
             </div>
-            {!isAdmin && (
-              <div>
-                <label className={label}>Session address</label>
-                <input
-                  className={input}
-                  value={serverAddr}
-                  onChange={(e) => setServerAddr(e.target.value)}
-                  placeholder={`researcher machine, e.g. 10.140.2.15:${DEFAULT_PORT}`}
-                />
-                <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
-                  Shown on the researcher dashboard. Remembered on this machine after the first session.
-                </p>
-              </div>
-            )}
-            {joinError && (
-              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200">
-                {joinError}
-              </p>
-            )}
-
-            <button
-              type="button"
-              onClick={() => void join()}
-              disabled={joining}
-              className={
-                'mt-2 w-full rounded-xl px-4 py-3 text-sm font-semibold transition ' +
-                (isAdmin
-                  ? 'bg-violet-600 text-white hover:bg-violet-500'
-                  : 'bg-sky-600 text-white hover:bg-sky-500') +
-                (joining ? ' cursor-wait opacity-60' : '')
-              }
-            >
-              {joining
-                ? 'Joining…'
-                : isAdmin
-                  ? 'Open researcher dashboard'
-                  : isTest
-                    ? 'Join as test participant (example faces)'
-                    : 'Join the call'}
-            </button>
-          </div>
-        </div>
-
-        <p className="mt-6 text-center text-[11px] text-gray-600">
-          IRB 2020-1657 · For lab use only ·{' '}
-          <a href="/dashboard" className="underline underline-offset-2 hover:text-gray-300">
-            1-person test station
-          </a>
-          {isMac && (
-            <>
-              {' · '}
-              <button
-                type="button"
-                onClick={() => void openAnotherInstance()}
-                disabled={launchingInstance}
-                className="underline underline-offset-2 hover:text-gray-300 disabled:opacity-60"
-              >
-                {launchingInstance ? 'opening…' : 'open another window'}
-              </button>
-            </>
-          )}
-        </p>
+            <span className="suite-open">
+              Open station <ArrowRight size={16} />
+            </span>
+          </Link>
+        ))}
       </div>
-      <style jsx global>{`
-        @keyframes joinShake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          20%,
-          60% {
-            transform: translateX(-8px);
-          }
-          40%,
-          80% {
-            transform: translateX(8px);
-          }
-        }
-      `}</style>
-    </div>
+      <section className="suite-workflow">
+        <h2>Session workflow</h2>
+        <div>
+          <span>
+            <Video size={18} />
+            Run a conversation
+          </span>
+          <ArrowRight size={16} />
+          <span>
+            <ClipboardList size={18} />
+            Review & rate
+          </span>
+          <ArrowRight size={16} />
+          <span>
+            <FolderOpen size={18} />
+            Explore session data
+          </span>
+        </div>
+      </section>
+    </main>
   )
 }
