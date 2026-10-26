@@ -27,6 +27,8 @@ import type {
   ReviewViewMode,
 } from './protocol'
 import { DEFAULT_REVIEW_CONFIG, REVIEW_AUTO_ADVANCE_SEC } from './protocol'
+import type { RatingSample } from './protocol'
+import { validQuestionnaire } from './ratingTask'
 
 const SEATS: PSlot[] = ['P1', 'P2']
 /** Play starts this long after both are ready, so both machines press play together. */
@@ -47,7 +49,7 @@ const MAX_TEXT = 20000
  */
 export function buildSegments(
   durationMs: number,
-  config: Pick<ReviewConfig, 'segmentSec' | 'minTailSec' | 'firstSeat'>,
+  config: Pick<ReviewConfig, 'segmentSec' | 'minTailSec' | 'firstSeat' | 'task'>,
 ): ReviewSegment[] {
   if (!(durationMs >= MIN_REVIEW_MS)) return []
   const len = config.segmentSec * 1000
@@ -56,7 +58,7 @@ export function buildSegments(
   for (let start = 0; start < durationMs; start += len) {
     windows.push([start, Math.min(start + len, durationMs)])
   }
-  if (windows.length > 1) {
+  if (config.task !== 'continuous' && windows.length > 1) {
     const last = windows[windows.length - 1]
     if (last[1] - last[0] < tail) {
       windows.pop()
@@ -66,6 +68,10 @@ export function buildSegments(
   const second: PSlot = config.firstSeat === 'P1' ? 'P2' : 'P1'
   const out: ReviewSegment[] = []
   windows.forEach(([startMs, endMs], i) => {
+    if (config.task === 'continuous') {
+      out.push({ index: i + 1, window: i + 1, targetSeat: i % 2 ? second : config.firstSeat, startMs, endMs })
+      return
+    }
     for (const targetSeat of [config.firstSeat, second]) {
       out.push({ index: out.length + 1, window: i + 1, targetSeat, startMs, endMs })
     }
@@ -108,15 +114,17 @@ export function parseReviewConfig(input: unknown): ReviewConfig {
   const num = (v: unknown, lo: number, hi: number, dflt: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : dflt
   return {
+    ...(c.task === 'continuous' ? { task: 'continuous' as const,
+      mediaPolicy: 'self-clean-partner-altered' as const } : {}),
     viewMode: (['gallery', 'single', 'active'] as const).includes(c.viewMode as ReviewViewMode)
       ? (c.viewMode as ReviewViewMode)
       : DEFAULT_REVIEW_CONFIG.viewMode,
     segmentSec: num(c.segmentSec, 10, 1800, DEFAULT_REVIEW_CONFIG.segmentSec),
     minTailSec: num(c.minTailSec, 0, 600, DEFAULT_REVIEW_CONFIG.minTailSec),
     firstSeat: c.firstSeat === 'P2' ? 'P2' : 'P1',
-    allowPause: c.allowPause === true,
-    advance: c.advance === 'auto' ? 'auto' : 'both-done',
-    showOriginal: c.showOriginal === true,
+    allowPause: c.task !== 'continuous' && c.allowPause === true,
+    advance: c.task !== 'continuous' && c.advance === 'auto' ? 'auto' : 'both-done',
+    showOriginal: c.task === 'continuous' ? true : c.showOriginal === true,
   }
 }
 
@@ -146,6 +154,8 @@ export function cleanText(input: unknown): string {
 export type ReviewSubmittedBy = 'participant' | 'researcher_forced' | 'auto' | 'review_ended'
 
 export interface ReviewResponseRecord {
+  elicitation?: number | null
+  task?: string
   segment: ReviewSegment
   writerSlot: PSlot
   writer: Identity
@@ -175,6 +185,8 @@ export interface ReviewHost {
     detail?: unknown
   }): void
   writeResponse(record: ReviewResponseRecord): void
+  writeSamples?(slot: PSlot, segment: ReviewSegment, samples: RatingSample[]): void
+  writeQuestionnaire?(slot: PSlot, responses: Record<string, number | null>): void
   identity(slot: PSlot): Identity
 }
 
@@ -219,6 +231,9 @@ function idleState(): ReviewState {
 }
 
 export class ReviewController {
+  private sampleSequence: Record<PSlot, number> = both(-1)
+  private sampleTime: Record<PSlot, number> = both(-1)
+  private elicitation: Record<PSlot, number | null> = both(null)
   private s: ReviewState = idleState()
   private drafts: Record<PSlot, Draft> = { P1: this.freshDraft(), P2: this.freshDraft() }
   private turn: TurnStats = this.freshTurn()
@@ -242,22 +257,60 @@ export class ReviewController {
   start(config: ReviewConfig, conversationMs: number, connected: Record<PSlot, boolean>): string | null {
     const segments = buildSegments(conversationMs, config)
     if (segments.length === 0) return 'The recording is too short to review.'
-    this.s = { ...idleState(), config, segments, connected: { ...connected } }
+    this.s = { ...idleState(), runId: String(this.host.now()), config, segments, connected: { ...connected } }
     this.host.log({
       event: 'review_started',
       param: 'turns',
       value: segments.length,
       detail: { config, conversationMs },
     })
-    this.beginTurn()
+    if (config.task === 'continuous') {
+      this.s = { ...this.s, status: 'questionnaire' }
+      this.publish()
+    } else this.beginTurn()
     return null
+  }
+
+  questionnaire(slot: PSlot, responses: unknown): boolean {
+    if (this.s.status !== 'questionnaire' || this.s.done[slot] || !validQuestionnaire(responses)) return false
+    this.host.writeQuestionnaire?.(slot, responses)
+    this.s = { ...this.s, done: { ...this.s.done, [slot]: true } }
+    if (SEATS.every(p => this.s.done[p])) this.beginTurn()
+    else this.publish()
+    return true
+  }
+
+  samples(slot: PSlot, turn: number, input: RatingSample[]): number {
+    if (this.s.config.task !== 'continuous' || turn !== this.turnNumber ||
+      !['playing', 'writing', 'loading', 'paused'].includes(this.s.status) ||
+      !Array.isArray(input) || input.length > 200) return -1
+    const segment = this.s.segments[this.s.current]
+    const limit = reviewPositionMs(this.s, this.host.now())
+    let sequence = this.sampleSequence[slot]
+    let time = this.sampleTime[slot]
+    const accepted: RatingSample[] = []
+    for (const sample of input) {
+      if (!sample || !Number.isSafeInteger(sample.sequence)) break
+      if (sample.sequence <= sequence) continue
+      if (sample.sequence !== sequence + 1 ||
+        !Number.isFinite(sample.videoMs) || sample.videoMs < segment.startMs || sample.videoMs >= segment.endMs ||
+        sample.videoMs > limit + 500 || sample.videoMs <= time ||
+        !Number.isFinite(sample.value) || sample.value < 0 || sample.value > 100 || typeof sample.touched !== 'boolean') break
+      accepted.push(sample)
+      sequence = sample.sequence
+      time = sample.videoMs
+    }
+    if (accepted.length) this.host.writeSamples?.(slot, segment, accepted)
+    this.sampleSequence[slot] = sequence
+    this.sampleTime[slot] = time
+    return sequence
   }
 
   /** Back to idle (the researcher ended the review, or the phase changed). */
   stop() {
     if (!this.active) return
     // Ended mid-turn: keep whatever each person had written, and the turn itself.
-    if (this.s.status !== 'done') this.closeTurn('review_ended')
+    if (this.s.status !== 'done' && this.s.status !== 'questionnaire') this.closeTurn('review_ended')
     this.host.log({
       event: 'review_ended',
       param: 'turn',
@@ -305,8 +358,11 @@ export class ReviewController {
     this.drafts[slot] = { text, stats, submitted: false }
   }
 
-  submit(slot: PSlot, turn: number, text: string, stats: ReviewViewingStats) {
+  submit(slot: PSlot, turn: number, text: string, stats: ReviewViewingStats, elicitation?: number | null) {
     if (this.s.status !== 'writing' || turn !== this.turnNumber || this.s.done[slot]) return
+    if (this.s.config.task === 'continuous' && elicitation !== null &&
+      !(typeof elicitation === 'number' && Number.isInteger(elicitation) && elicitation >= 1 && elicitation <= 9)) return
+    this.elicitation[slot] = elicitation ?? null
     this.drafts[slot] = { text, stats, submitted: true }
     this.saveResponse(slot, 'participant')
     this.s = { ...this.s, done: { ...this.s.done, [slot]: true } }
@@ -317,6 +373,9 @@ export class ReviewController {
   /** Returns an error message for a refused action, or null. */
   control(action: ReviewControlAction, by: 'researcher' | PSlot): string | null {
     if (!this.active) return 'No review is running.'
+    if (this.s.config.task === 'continuous' &&
+      (by !== 'researcher' || ['restart-turn', 'force-next', 'play-now'].includes(action)))
+      return 'Rating tasks cannot be replayed or skipped.'
     if (by !== 'researcher') {
       if (!this.s.config.allowPause || (action !== 'pause' && action !== 'resume')) {
         return 'Not allowed.'
@@ -397,6 +456,9 @@ export class ReviewController {
   }
 
   private beginTurn() {
+    this.sampleSequence = both(-1)
+    this.sampleTime = both(-1)
+    this.elicitation = both(null)
     const seg = this.s.segments[this.s.current]
     this.drafts = { P1: this.freshDraft(), P2: this.freshDraft() }
     this.turn = this.freshTurn()
@@ -504,6 +566,8 @@ export class ReviewController {
     const draft = this.drafts[slot]
     const now = this.host.now()
     this.host.writeResponse({
+      task: this.s.config.task,
+      elicitation: this.elicitation[slot],
       segment: seg,
       writerSlot: slot,
       writer: this.host.identity(slot),

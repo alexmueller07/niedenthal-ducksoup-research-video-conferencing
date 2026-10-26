@@ -99,8 +99,13 @@ try {
   admin.send({ type: 'review-start', config: {} })
   assert.match((await admin.take('review-error')).reason, /End the conversation/)
 
+  admin.send({ type: 'study-schedule-arm', presetId: 'smile-subtle', firstSeat: 'P2' })
+  assert.equal((await admin.take('study-schedule-state', m => m.state.status === 'armed')).state.firstSeat, 'P2')
   admin.send({ type: 'set-phase', phase: 'live' })
+  assert.equal((await admin.take('study-schedule-state', m => m.state.status === 'running')).state.block, 0)
   await p1.take('phase', (m) => m.phase === 'live')
+  admin.send({ type: 'apply-preset', slot: 'P1', presetId: 'smile-strong', effects: { alpha: 0.5, voiceSemitones: 0, voiceSmile: 0 } })
+  assert.match((await admin.take('study-schedule-error')).reason, /armed or active/)
   admin.send({ type: 'set-phase', phase: 'ended' })
   avail = await admin.take('review-availability', (m) => m.availability.canStart)
   assert.equal(avail.availability.conversationMs, 25_120)
@@ -209,8 +214,54 @@ try {
   admin.send({ type: 'set-phase', phase: 'ended' })
   await p2.take('phase', (m) => m.phase === 'ended')
 
+  // The pilot task locks the source pairing per viewer and saves questionnaire
+  // and continuous samples before accepting an acknowledgement.
+  admin.send({ type: 'review-start', config: { task: 'continuous', mediaPolicy: 'altered', segmentSec: 10 } })
+  const ratingP1 = (await p1.take('review-media', m => m.media?.P1.clean.length === 1)).media
+  const ratingP2 = (await p2.take('review-media', m => m.media !== null)).media
+  assert.equal(ratingP1.P1.clean.length, 1)
+  assert.equal(ratingP1.P1.altered.length, 0)
+  assert.equal(ratingP1.P2.altered.length, 1)
+  assert.equal(ratingP1.P2.clean.length, 0)
+  assert.equal(ratingP2.P2.clean.length, 1)
+  assert.equal(ratingP2.P1.altered.length, 1)
+  assert.notEqual(ratingP1.P1.clean[0].url.split('/')[2], ratingP2.P1.altered[0].url.split('/')[2])
+  const unlisted = ratingP1.P1.clean[0].url.replace(/\/\d+\.mp4$/, '/3.mp4')
+  assert.equal((await fetch(`http://127.0.0.1:${port}${unlisted}`)).status, 404)
+  state = (await p1.take('review-state', m => m.state.status === 'questionnaire')).state
+  assert.equal(state.config.mediaPolicy, 'self-clean-partner-altered')
+  p1.send({ type: 'review-control', action: 'restart-turn' })
+  assert.match((await p1.take('review-error')).reason, /cannot be replayed/)
+  admin.send({ type: 'review-control', action: 'force-next' })
+  assert.match((await admin.take('review-error')).reason, /cannot be replayed/)
+  const questionnaireAnswers = Object.fromEntries([
+    'influence_partner', 'influenced_by_partner', 'predict_partner', 'flow', 'enjoyment',
+    'fits_with_friends', 'friendship', 'comfort', 'self_focus', 'relative_talking',
+  ].map(id => [id, id === 'relative_talking' ? 0 : 5]))
+  p1.send({ type: 'rating-questionnaire', responses: questionnaireAnswers })
+  p2.send({ type: 'rating-questionnaire', responses: questionnaireAnswers })
+  state = (await p1.take('review-state', m => m.state.status === 'loading')).state
+  p1.send({ type: 'review-ready', loadSeq: state.loadSeq })
+  p2.send({ type: 'review-ready', loadSeq: state.loadSeq })
+  await p1.take('review-state', m => m.state.status === 'playing')
+  await sleep(900)
+  p1.send({ type: 'rating-samples', turn: 1, samples: [{ sequence: 0, videoMs: 100, value: 52, touched: true }] })
+  assert.equal((await p1.take('rating-ack')).sequence, 0)
+  p1.send({ type: 'rating-samples', turn: 1, samples: [{ sequence: 0, videoMs: 100, value: 52, touched: true }] })
+  assert.equal((await p1.take('rating-ack')).sequence, 0)
+  admin.send({ type: 'set-phase', phase: 'ended' })
+  await p1.take('phase', m => m.phase === 'ended')
+  admin.send({ type: 'review-start', config: { task: 'continuous' } })
+  assert.match((await admin.take('review-error')).reason, /already started/)
+
   await sleep(100)
   await server.stop()
+
+  const ratingDir = path.join(logger.dir, 'review_3')
+  const ratingAnswers = await readFile(path.join(ratingDir, 'questionnaire.csv'), 'utf-8')
+  const ratingSamples = await readFile(path.join(ratingDir, 'samples.csv'), 'utf-8')
+  assert.equal(ratingAnswers.trim().split('\n').length, 21)
+  assert.equal(ratingSamples.trim().split('\n').length, 2, 'retry does not duplicate saved samples')
 
   const csv = async (...parts: string[]) => {
     const lines = (await readFile(path.join(logger.dir, ...parts), 'utf-8')).trim().split('\n')

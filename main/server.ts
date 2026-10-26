@@ -46,6 +46,8 @@ import { RuleEngine, describeRule, validRules } from './rules'
 import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
 import { ReviewController, buildSegments, cleanText, parseReviewConfig, parseViewingStats } from './review'
+import { POST_CONVERSATION_ITEMS, RATING_TASK_VERSION } from './ratingTask'
+import { StudyTimeline, STUDY_BLOCK_MS, STUDY_FACE_PRESETS } from './studyTimeline'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -120,6 +122,7 @@ export class SessionServer {
   private readonly review: ReviewController
   /** What participants may stream, and the researcher's full set (adds the originals). */
   private reviewMedia: ReviewMedia | null = null
+  private reviewMediaBySeat: Record<PSlot, ReviewMedia> | null = null
   private reviewMediaAdmin: ReviewMedia | null = null
   private reviewTimer: ReturnType<typeof setInterval> | null = null
   /** Dev only (npm run server:dev): review these files instead of real recordings. */
@@ -141,15 +144,48 @@ export class SessionServer {
   /** Recorders still writing; a review cannot start until they have all closed. */
   private openRecordings = new Set<string>()
   private finishedRecordings: RecordingInfo[] = []
+  private continuousRatingStartedFor: string | null = null
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private ruleTimer: ReturnType<typeof setInterval> | null = null
   private readonly ruleEngine: RuleEngine
+  private readonly studyTimeline: StudyTimeline
   readonly port: number
   readonly logger: SessionLogger
 
   constructor(port: number, logger: SessionLogger) {
     this.port = port
     this.logger = logger
+    this.studyTimeline = new StudyTimeline({
+      skipped: (fromBlock, toBlock) => this.log({ event: 'study_blocks_skipped', actorRole: 'server',
+        detail: { fromBlock, toBlock, reason: 'timer_resumed_after_block_boundary' } }),
+      apply: (block, target, alpha) => {
+        for (const slot of ['P1', 'P2'] as const) {
+          const participant = this.bySlot(slot)
+          const effects = { ...NEUTRAL_EFFECTS, alpha: target === slot ? alpha : 0 }
+          if (participant) {
+            participant.effects = effects
+            this.send(participant.ws, { type: 'effect-command', effects, cause: 'study_schedule' })
+          }
+        }
+        const plannedAtMs = this.studyTimeline.state.startedAtMs === null ? null :
+          this.studyTimeline.state.startedAtMs + block * STUDY_BLOCK_MS
+        this.log({ event: 'study_block_applied', actorRole: 'server', target: target ?? 'both',
+          param: 'block', value: block + 1,
+          detail: { presetId: this.studyTimeline.state.presetId, alpha, plannedAtMs,
+            appliedAtMs: Date.now(), connected: { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') } } })
+        this.broadcastRoster()
+      },
+      publish: (state) => {
+        this.broadcast({ type: 'study-schedule-state', state })
+        try {
+          this.logger.studyProtocol({ version: 1, blockMs: STUDY_BLOCK_MS, blocks: [null, state.firstSeat, null,
+            state.firstSeat === 'P1' ? 'P2' : 'P1'], state,
+            participantIds: { P1: this.identityOf('P1').participantId, P2: this.identityOf('P2').participantId } })
+        } catch (error) {
+          this.log({ event: 'study_protocol_write_failed', detail: { error: String(error) } })
+        }
+      },
+    })
     this.ruleEngine = new RuleEngine({
       phase: () => this.phase,
       liveStartMs: () =>
@@ -194,6 +230,21 @@ export class SessionServer {
       publish: (state) => this.broadcast({ type: 'review-state', state }),
       log: (input) => this.log(input),
       writeResponse: (record) => this.logger.reviewAnswer(record),
+      writeSamples: (slot, segment, samples) => {
+        const identity = this.identityOf(slot)
+        this.logger.ratingRows('samples', samples.map(sample => ({
+          task_version: RATING_TASK_VERSION, dyad_id: identity.dyadId, participant_id: identity.participantId,
+          seat: slot, target_id: this.identityOf(segment.targetSeat).participantId, block: segment.index,
+          perspective: slot === segment.targetSeat ? 'self' : 'partner', ...sample,
+        })))
+      },
+      writeQuestionnaire: (slot, responses) => {
+        const identity = this.identityOf(slot)
+        this.logger.ratingRows('questionnaire', POST_CONVERSATION_ITEMS.map(([id, question], order) => ({
+          task_version: RATING_TASK_VERSION, dyad_id: identity.dyadId, participant_id: identity.participantId,
+          item: id, order: order + 1, question, response: responses[id], submitted_at_ms: Date.now(),
+        })))
+      },
       identity: (slot) => this.identityOf(slot),
     })
   }
@@ -213,7 +264,7 @@ export class SessionServer {
       })
       wss.on('connection', (ws, req) => this.onConnection(ws, req.socket.remoteAddress ?? ''))
       this.pingTimer = setInterval(() => this.heartbeat(), 5000)
-      this.ruleTimer = setInterval(() => this.ruleEngine.tick(Date.now()), 250)
+      this.ruleTimer = setInterval(() => { this.ruleEngine.tick(Date.now()); this.studyTimeline.tick(Date.now()) }, 250)
       this.reviewTimer = setInterval(() => this.review.tick(), 250)
     })
   }
@@ -313,16 +364,41 @@ export class SessionServer {
     const availability = this.reviewAvailability()
     if (!availability.canStart) return availability.reason
     const config = parseReviewConfig(rawConfig)
+    if (config.task === 'continuous' && this.continuousRatingStartedFor === this.sessionStartedAt)
+      return 'Ratings have already started for this conversation. Start a new conversation to run the task again.'
     const recs = this.reviewRecordings().sort((a, b) => a.startedAtMs - b.startedAtMs)
     const liveStart = Date.parse(this.sessionStartedAt as string)
+    if (config.task === 'continuous') {
+      for (const slot of ['P1', 'P2'] as const) for (const kind of ['clean', 'altered'] as const) {
+        const spans = recs.filter(r => r.slot === slot && r.kind === kind)
+          .map(r => [r.startedAtMs - liveStart, r.startedAtMs - liveStart + r.durationMs] as const)
+          .sort((a, b) => a[0] - b[0])
+        let coveredTo = 0
+        for (const [from, to] of spans) {
+          if (from > coveredTo + 2000) break
+          coveredTo = Math.max(coveredTo, to)
+        }
+        if (coveredTo < availability.conversationMs - 2000 || !spans.length)
+          return `Rating task cannot start: ${slot} ${kind} recording has a gap or is missing. Check Session Data.`
+      }
+    }
     // The researcher's preview gets everything. Participants get the original
     // recordings only when the settings allow it: the files are not even
     // reachable for them otherwise, not merely hidden on screen.
-    const forParticipants = config.showOriginal ? recs : recs.filter((r) => r.kind === 'altered')
     this.reviewMediaAdmin = this.openReviewMedia(recs, liveStart)
-    this.reviewMedia = this.openReviewMedia(forParticipants, liveStart)
+    if (config.task === 'continuous') {
+      this.reviewMedia = null
+      this.reviewMediaBySeat = {
+        P1: this.openReviewMedia(recs.filter(r => r.kind === (r.slot === 'P1' ? 'clean' : 'altered')), liveStart),
+        P2: this.openReviewMedia(recs.filter(r => r.kind === (r.slot === 'P2' ? 'clean' : 'altered')), liveStart),
+      }
+    } else {
+      const forParticipants = config.showOriginal ? recs : recs.filter(r => r.kind === 'altered')
+      this.reviewMedia = this.openReviewMedia(forParticipants, liveStart)
+      this.reviewMediaBySeat = null
+    }
     this.setPhase('review', adminName)
-    for (const c of this.clients.values()) this.sendReviewMedia(c)
+    for (const c of this.clients.values()) this.sendReviewMedia(c, config)
     const connected = { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') }
     const segments = buildSegments(availability.conversationMs, config)
     if (segments.length === 0) {
@@ -337,7 +413,9 @@ export class SessionServer {
       turns: segments.length,
       firstPerson: first ? `${first} (${config.firstSeat})` : config.firstSeat,
     })
-    return this.review.start(config, availability.conversationMs, connected)
+    const error = this.review.start(config, availability.conversationMs, connected)
+    if (!error && config.task === 'continuous') this.continuousRatingStartedFor = this.sessionStartedAt
+    return error
   }
 
   /** Serve these recordings under a fresh token and place them on the conversation timeline. */
@@ -358,8 +436,10 @@ export class SessionServer {
     return media
   }
 
-  private sendReviewMedia(ctx: ClientCtx) {
-    const media = ctx.role === 'admin' ? this.reviewMediaAdmin : this.reviewMedia
+  private sendReviewMedia(ctx: ClientCtx, config = this.review.state.config) {
+    let media = ctx.role === 'admin' ? this.reviewMediaAdmin : this.reviewMedia
+    if (config.task === 'continuous' && ctx.role !== 'admin' && ctx.slot !== 'ADMIN')
+      media = this.reviewMediaBySeat?.[ctx.slot] ?? null
     this.send(ctx.ws, { type: 'review-media', media })
   }
 
@@ -483,6 +563,7 @@ export class SessionServer {
     // edits survive an admin reconnect.
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
+      this.send(ws, { type: 'study-schedule-state', state: this.studyTimeline.state })
       this.send(ws, { type: 'voice-state', state: this.voiceSession.snapshot() })
       this.send(ws, { type: 'review-availability', availability: this.reviewAvailability() })
     }
@@ -548,6 +629,7 @@ export class SessionServer {
     if (!ctx) return
     this.clients.delete(ws)
     if (ctx.slot === 'P1' || ctx.slot === 'P2') {
+      if (this.studyTimeline.state.status === 'running') this.studyTimeline.interrupt()
       this.voiceSession.disconnect(ctx.slot)
       this.ruleEngine.onExpression(ctx.slot,null)
       this.review.connection(ctx.slot, false)
@@ -608,6 +690,7 @@ export class SessionServer {
       }
       case 'voice-condition': {
         if (!this.requireAdmin(ctx,msg.type)) return
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule owns face and voice settings. End the session to change them.'});return }
         const condition=parseVoiceCondition(msg.condition)
         const reason=!condition?'Invalid voice condition':this.phase==='ended'&&condition.mode!=='bypass'?'Session has ended':this.voiceSession.canApply(condition)
         if (reason || !condition) {this.send(ctx.ws,{type:'voice-error',reason:reason!});return}
@@ -618,6 +701,7 @@ export class SessionServer {
       }
       case 'voice-reset': {
         if (!this.requireAdmin(ctx,msg.type) || !['P1','P2'].includes(msg.slot)) return
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
         this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
         this.logger.voice.condition(this.voiceSession.condition)
         this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
@@ -804,6 +888,7 @@ export class SessionServer {
       }
       case 'set-effect': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
         if ((msg.param==='voiceSemitones'||msg.param==='voiceSmile') && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using legacy pitch controls'})
           return
@@ -832,6 +917,7 @@ export class SessionServer {
       }
       case 'apply-preset': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
         if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && (msg.effects.voiceSemitones!==0||msg.effects.voiceSmile!==0)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using a legacy voice preset'})
           return
@@ -949,6 +1035,11 @@ export class SessionServer {
       }
       case 'set-phase': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (msg.phase === 'live' && this.studyTimeline.state.status === 'armed' &&
+          (!this.bySlot('P1') || !this.bySlot('P2'))) {
+          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Both participants must be connected before starting the timed schedule.' })
+          return
+        }
         // The review starts only through review-start (it needs the recordings),
         // and is left only by ending it.
         if (msg.phase === 'review') return
@@ -973,6 +1064,20 @@ export class SessionServer {
         if (ctx.slot === 'P1' || ctx.slot === 'P2') this.review.ready(ctx.slot, msg.loadSeq)
         return
       }
+      case 'rating-questionnaire': {
+        if (ctx.slot === 'ADMIN') return
+        try { this.review.questionnaire(ctx.slot, msg.responses) }
+        catch { this.send(ctx.ws, { type: 'review-error', reason: 'Could not save answers. Please retry; the task has not advanced.' }) }
+        return
+      }
+      case 'rating-samples': {
+        if (ctx.slot === 'ADMIN') return
+        try {
+          const sequence = this.review.samples(ctx.slot, msg.turn, msg.samples)
+          this.send(ctx.ws, { type: 'rating-ack', turn: msg.turn, sequence })
+        } catch { this.send(ctx.ws, { type: 'review-error', reason: 'Could not save ratings. Keep this screen open and notify the researcher.' }) }
+        return
+      }
       case 'review-buffering': {
         if (ctx.slot === 'P1' || ctx.slot === 'P2') this.review.buffering(ctx.slot, msg.loadSeq)
         return
@@ -983,11 +1088,18 @@ export class SessionServer {
         const text = cleanText(msg.text)
         const stats = parseViewingStats(msg.stats)
         if (msg.type === 'review-draft') this.review.draft(ctx.slot, msg.turn, text, stats)
-        else this.review.submit(ctx.slot, msg.turn, text, stats)
+        else {
+          try { this.review.submit(ctx.slot, msg.turn, text, stats, msg.elicitation) }
+          catch { this.send(ctx.ws, { type: 'review-error', reason: 'Could not save the reflection. Please retry.' }) }
+        }
         return
       }
       case 'set-rules': {
         if (!this.requireAdmin(ctx, msg.type)) return
+        if (this.scheduleLocked() && msg.rules.some(rule => rule.enabled)) {
+          this.send(ctx.ws,{type:'study-schedule-error',reason:'Disable automation rules before using the timed study schedule.'})
+          return
+        }
         if (!validRules(msg.rules)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Invalid automation rule'})
           return
@@ -1003,6 +1115,41 @@ export class SessionServer {
           detail: msg.rules.map((r) => ({ id: r.id, enabled: r.enabled, rule: describeRule(r) })),
         })
         this.send(ctx.ws, { type: 'rules', rules: msg.rules })
+        return
+      }
+      case 'study-schedule-arm': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        if (this.phase !== 'waiting' || !this.bySlot('P1') || !this.bySlot('P2') ||
+          this.ruleEngine.currentRules.some(rule => rule.enabled) ||
+          this.voiceSession.condition.mode !== 'bypass' || this.voiceSession.condition.audibility) {
+          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Connect both participants, return to the waiting room, and disable other face/voice automation before arming.' })
+          return
+        }
+        if (!STUDY_FACE_PRESETS.some(p => p.id === msg.presetId) || !['P1', 'P2'].includes(msg.firstSeat)) {
+          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Choose a face-only preset and a valid participant order.' })
+          return
+        }
+        try {
+          this.logger.studyProtocol({ version: 1, blockMs: STUDY_BLOCK_MS,
+            blocks: [null, msg.firstSeat, null, msg.firstSeat === 'P1' ? 'P2' : 'P1'],
+            state: { status: 'armed', presetId: msg.presetId, firstSeat: msg.firstSeat },
+            participantIds: { P1: this.identityOf('P1').participantId, P2: this.identityOf('P2').participantId } })
+        } catch {
+          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Could not save the study schedule. Check session storage before starting.' })
+          return
+        }
+        if (!this.studyTimeline.arm(msg.presetId, msg.firstSeat)) {
+          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Choose a face-only preset and a valid participant order.' })
+          return
+        }
+        this.log({ event: 'study_schedule_armed', actorRole: 'admin', actorName: ctx.identity.name,
+          detail: { presetId: msg.presetId, firstSeat: msg.firstSeat, blockMs: STUDY_BLOCK_MS } })
+        return
+      }
+      case 'study-schedule-disarm': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        if (!this.studyTimeline.disarm()) this.send(ctx.ws, { type: 'study-schedule-error', reason: 'A running schedule can only be stopped by ending the session.' })
+        else this.log({ event: 'study_schedule_disarmed', actorRole: 'admin', actorName: ctx.identity.name })
         return
       }
       case 'admin-mic': {
@@ -1044,6 +1191,7 @@ export class SessionServer {
       this.review.stop()
       this.media.close()
       this.reviewMedia = null
+      this.reviewMediaBySeat = null
       this.reviewMediaAdmin = null
       this.broadcast({ type: 'review-media', media: null })
     }
@@ -1061,6 +1209,9 @@ export class SessionServer {
     if (phase === 'waiting') {
       this.sessionStartedAt = null
     }
+    if (phase === 'live' && this.studyTimeline.state.status === 'armed' && this.sessionStartedAt)
+      this.studyTimeline.start(Date.parse(this.sessionStartedAt))
+    else if (phase === 'ended' || phase === 'waiting') this.studyTimeline.interrupt()
     // Rules: going live re-arms the timers; ending or returning to the
     // waiting room releases anything a rule left applied.
     this.ruleEngine.onPhaseChange(phase)
@@ -1087,6 +1238,11 @@ export class SessionServer {
       value: what,
     })
     return false
+  }
+
+  private scheduleLocked(): boolean {
+    const status = this.studyTimeline.state.status
+    return status === 'armed' || status === 'running' || (status === 'complete' && this.phase === 'live')
   }
 
   // ---- Helpers ----

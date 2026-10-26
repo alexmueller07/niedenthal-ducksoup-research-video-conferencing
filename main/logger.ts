@@ -460,6 +460,23 @@ function decodeDataUrl(dataUrl: string): Buffer | null {
 }
 
 export class SessionLogger {
+  studyProtocol(record: Record<string, unknown>): void {
+    if (this.closed) throw new Error('Session output folder is closed.')
+    const destination = path.join(this.dir, 'study-protocol.json')
+    const temporary = destination + '.tmp'
+    fs.writeFileSync(temporary, JSON.stringify(record, null, 2) + '\n', 'utf8')
+    fs.renameSync(temporary, destination)
+  }
+  ratingRows(file: 'samples' | 'questionnaire' | 'reflections', rows: Record<string, unknown>[]): void {
+    if (!this.reviewDir || this.closed) throw new Error('Rating output folder is not open.')
+    if (!rows.length) return
+    const destination = path.join(this.reviewDir, `${file}.csv`)
+    const keys = Object.keys(rows[0])
+    const header = fs.existsSync(destination) ? '' : keys.join(',') + '\n'
+    fs.appendFileSync(destination, header + rows.map(row => keys.map(key =>
+      csvField(typeof row[key] === 'string' ? spreadsheetSafe(row[key] as string) : row[key] ?? '')
+    ).join(',')).join('\n') + '\n', 'utf8')
+  }
   readonly voice: VoiceLogger
   readonly dir: string
   readonly eventsPath: string
@@ -757,6 +774,12 @@ export class SessionLogger {
   /** One answer: one row of review/answers.csv. */
   reviewAnswer(r: ReviewResponseRecord): void {
     if (this.closed || !this.reviewDir) return
+    if (r.task === 'continuous') this.ratingRows('reflections', [{
+      task_version: 'continuous-dyad-1', dyad_id: r.writer.dyadId, participant_id: r.writer.participantId,
+      target_id: r.about.participantId, block: r.segment.index, from_ms: r.segment.startMs,
+      to_ms: r.segment.endMs, perspective: r.responseType, reflection: r.text,
+      elicitation: r.elicitation ?? null, submitted_by: r.submittedBy, submitted_at_ms: r.submittedAtMs,
+    }])
     if (!this.answers) {
       this.answers = fs.createWriteStream(path.join(this.reviewDir, 'answers.csv'), { flags: 'a' })
       this.answers.write(REVIEW_ANSWERS_HEADER)
