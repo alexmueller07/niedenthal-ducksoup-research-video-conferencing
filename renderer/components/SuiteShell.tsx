@@ -27,7 +27,7 @@ export const SUITE_SECTIONS = [
     detail: 'Recorded conversations and participant review',
     icon: ClipboardList,
     tone: 'violet',
-    badge: 'Preview',
+    badge: undefined,
   },
   {
     href: '/data',

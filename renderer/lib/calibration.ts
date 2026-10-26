@@ -40,12 +40,12 @@ const SUPPORTED_SCHEMA_VERSIONS = [1, 2]
 
 // ---- Timing ----
 
-export const CALIBRATION_PREP_MS = 1500
+export const CALIBRATION_PREP_MS = 4000
 export const CALIBRATION_NEUTRAL_MS = 3000
 export const CALIBRATION_EXPRESSION_MS = 4000
 export const CALIBRATION_SAMPLE_MS = 33
 export const CALIBRATION_PEAK_FRAMES = 5
-export const CALIBRATION_SETTLE_MS = 650
+export const CALIBRATION_SETTLE_MS = 1200
 
 export function phaseDurationMs(phase: CalibrationPhase): number {
   return phase === 'neutral' ? CALIBRATION_NEUTRAL_MS : CALIBRATION_EXPRESSION_MS
