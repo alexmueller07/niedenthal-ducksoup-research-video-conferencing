@@ -1,491 +1,210 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  Film,
-  Play,
-  Pause,
-  RotateCcw,
-  SkipBack,
-  SkipForward,
-  Upload,
-  Check,
-} from 'lucide-react'
+import { ArrowRight, Check, Circle, FolderOpen, Loader2, RefreshCw, Search, Video } from 'lucide-react'
 import { PageHeading } from '../components/SuiteShell'
+import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
+import { browserRatingLookup, completeRecording, inspectRatingVideo, normalizeDyad } from '../lib/ratingStation'
+import type { BrowserRatingCandidate } from '../lib/ratingStation'
+import { RatingStationTask } from '../components/review/RatingStationTask'
+import type { RatingStationRun } from '../components/review/RatingStationTask'
+import type { RatingCandidate, RatingRecording } from '../../main/ratingStation'
 
-type Seat = 'P1' | 'P2'
-type Version = 'altered' | 'clean'
-type ClipKey = `${Seat}_${Version}`
-type Clip = { url: string; name: string; duration: number }
-type View = 'gallery' | 'single' | 'active'
-const CLIP_KEYS: ClipKey[] = [
-  'P1_altered',
-  'P1_clean',
-  'P2_altered',
-  'P2_clean',
-]
-const timeLabel = (n: number) =>
-  `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`
+const colors: Record<string, string> = { Red: '#e45558', Blue: '#4c8ced', Purple: '#9e6cce', Black: '#4a5059', Orange: '#e49037', Green: '#46b66b' }
+const validId = (id: string) => /^[A-Za-z0-9_-]{1,60}$/.test(id)
+const message = (error: unknown) => error instanceof Error ? error.message : String(error)
+const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 export default function RatingStationPage() {
-  const [clips, setClips] = useState<Partial<Record<ClipKey, Clip>>>({})
-  const [mode, setMode] = useState<View>('active')
-  const [target, setTarget] = useState<Seat>('P1')
-  const [version, setVersion] = useState<Version>('altered')
-  const [perspective, setPerspective] = useState<'self' | 'partner'>('self')
-  const [playing, setPlaying] = useState(false)
-  const [position, setPosition] = useState(0)
-  const [segmentSec, setSegmentSec] = useState(150)
-  const [segment, setSegment] = useState(0)
-  const [responses, setResponses] = useState<Record<string, string>>({})
-  const [saved, setSaved] = useState('')
+  const [native, setNative] = useState(false)
+  const [root, setRoot] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const picker = useRef<HTMLInputElement>(null)
+  const [dyad, setDyad] = useState('')
+  const [round, setRound] = useState(1)
+  const [seat, setSeat] = useState<'P1' | 'P2'>('P1')
+  const [manualParticipant, setManualParticipant] = useState('')
+  const [manualPartner, setManualPartner] = useState('')
+  const [selfColor, setSelfColor] = useState('')
+  const [partnerColor, setPartnerColor] = useState('')
+  const [group, setGroup] = useState<'A' | 'B' | 'C'>('A')
+  const [initials, setInitials] = useState('')
+  const [ra, setRa] = useState('')
+  const [date, setDate] = useState(localDate)
+  const [time, setTime] = useState(() => new Date().toTimeString().slice(0, 5))
+  const [candidates, setCandidates] = useState<BrowserRatingCandidate[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const [refresh, setRefresh] = useState(0)
+  const [preparing, setPreparing] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const [error, setError] = useState('')
-  const players = useRef(new Map<ClipKey, HTMLVideoElement>())
-  const probes = useRef(new Map<ClipKey, HTMLVideoElement>())
-  const urls = useRef(new Set<string>())
-  const duration = Math.min(
-    ...Object.values(clips)
-      .filter((c) => c.duration > 0)
-      .map((c) => c.duration),
-    Infinity,
-  )
-  const total = Number.isFinite(duration) ? duration : 0
-  const start = segment * segmentSec
-  const end = Math.min(total, start + segmentSec)
-  const key = `${segment}:${target}:${version}:${perspective}`
-  const shownSeats: Seat[] =
-    mode === 'gallery'
-      ? ['P1', 'P2']
-      : [mode === 'single' ? (target === 'P1' ? 'P2' : 'P1') : target]
-  const shownKeys = shownSeats.map((seat) => `${seat}_${version}` as ClipKey)
-  const master = shownKeys.find((k) => !!clips[k])
+  const [run, setRun] = useState<RatingStationRun | null>(null)
+  const request = useRef(0)
+  const check = useRef<AbortController | null>(null)
+  const normalizedDyad = normalizeDyad(dyad)
+  const selected = candidates.find(c => c.id === selectedId)
+  const otherSeat = seat === 'P1' ? 'P2' : 'P1'
+  const participant = selected?.participantIds[seat] || manualParticipant.trim()
+  const partner = selected?.participantIds[otherSeat] || manualPartner.trim()
+  const idsValid = validId(participant) && validId(partner) && participant !== partner
+  const detailsValid = Boolean(ra.trim() && initials.trim() && date && time)
+  const canStart = completeRecording(selected) && idsValid && detailsValid && !searching
+  const nextStep = !root ? 'Choose a recordings folder.' : !normalizedDyad ? 'Enter the dyad ID.' : searching ? 'Searching for this dyad...' : !selected ? 'Select a conversation recording.' : !completeRecording(selected) ? 'This recording is incomplete.' : !idsValid ? 'Check both participant IDs.' : !detailsValid ? 'Complete the session details.' : 'Ready to check video files and begin.'
 
-  function pause() {
-    for (const video of players.current.values()) video.pause()
-    setPlaying(false)
-  }
-  function seek(next: number) {
-    const value = Math.max(start, Math.min(end, next))
-    for (const video of players.current.values()) video.currentTime = value
-    setPosition(value)
-  }
-  useEffect(
-    () => () => {
-      for (const video of probes.current.values()) {
-        video.onloadedmetadata = null
-        video.onerror = null
-        video.removeAttribute('src')
-        video.load()
-      }
-      urls.current.forEach((url) => URL.revokeObjectURL(url))
-    },
-    [],
-  )
   useEffect(() => {
-    pause()
-    for (const video of players.current.values())
-      if (video.readyState > 0) video.currentTime = start
-    setPosition(start)
-  }, [mode, version, target, segment, segmentSec])
+    setNative(hasIpc())
+    if (hasIpc()) void ipcInvoke<string>('rating:root').then(value => setRoot(value || '')).catch(e => setError(message(e)))
+    return () => check.current?.abort()
+  }, [])
 
-  function loadClip(clipKey: ClipKey, file: File | undefined) {
-    if (!file) return
-    pause()
-    setError('')
-    setSegment(0)
-    setPosition(0)
-    setResponses({})
-    setSaved('')
-    const previousProbe = probes.current.get(clipKey)
-    if (previousProbe) {
-      previousProbe.onloadedmetadata = null
-      previousProbe.onerror = null
-      previousProbe.removeAttribute('src')
-      previousProbe.load()
-    }
-    const previous = clips[clipKey]
-    if (previous) {
-      URL.revokeObjectURL(previous.url)
-      urls.current.delete(previous.url)
-    }
-    const url = URL.createObjectURL(file)
-    urls.current.add(url)
-    setClips((prev) => ({
-      ...prev,
-      [clipKey]: { url, name: file.name, duration: 0 },
-    }))
-    // Read metadata even when this seat/version is not visible.
-    const probe = document.createElement('video')
-    probes.current.set(clipKey, probe)
-    probe.preload = 'metadata'
-    probe.onloadedmetadata = () => {
-      const seconds = probe.duration
-      setClips((prev) =>
-        prev[clipKey]?.url === url
-          ? {
-              ...prev,
-              [clipKey]: {
-                ...prev[clipKey]!,
-                duration: Number.isFinite(seconds) ? seconds : 0,
-              },
-            }
-          : prev,
-      )
-      if (!Number.isFinite(seconds))
-        setError(
-          'This recording has no usable duration. Use a finalized recording.',
-        )
-      probe.removeAttribute('src')
-      probe.onloadedmetadata = null
-      probe.onerror = null
-      probe.load()
-      probes.current.delete(clipKey)
-    }
-    probe.onerror = () => {
-      setError(`Could not load ${file.name}. Choose a playable MP4 or WebM.`)
-      probe.onloadedmetadata = null
-      probe.onerror = null
-      probe.removeAttribute('src')
-      probe.load()
-      probes.current.delete(clipKey)
-    }
-    probe.src = url
-  }
-  async function togglePlayback() {
-    setError('')
-    if (playing) {
-      pause()
-      return
-    }
-    if (position >= end) seek(start)
+  useEffect(() => {
+    const ticket = ++request.current
+    setCandidates([]); setSelectedId(''); setSearchError(''); setError(''); setSearched(false)
+    const canSearch = Boolean(normalizedDyad && root && (native || files.length))
+    setSearching(canSearch)
+    if (!canSearch) return
+    const timer = setTimeout(async () => {
+      try {
+        const results = native ? await ipcInvoke<RatingCandidate[]>('rating:lookup', normalizedDyad) : await browserRatingLookup(files, normalizedDyad)
+        if (ticket !== request.current) return
+        setCandidates(results || [])
+        if (results?.length === 1) setSelectedId(results[0].id)
+      } catch (e) { if (ticket === request.current) setSearchError(message(e)) }
+      finally { if (ticket === request.current) { setSearching(false); setSearched(true) } }
+    }, 350)
+    return () => { clearTimeout(timer); ++request.current }
+  }, [normalizedDyad, root, native, files, refresh])
+
+  useEffect(() => {
+    setManualParticipant(''); setManualPartner(''); setInitials(''); setSelfColor(''); setPartnerColor('')
+  }, [normalizedDyad, root])
+
+  async function chooseRoot() {
+    if (!native) { picker.current?.click(); return }
     try {
-      await Promise.all([...players.current.values()].map((v) => v.play()))
-      setPlaying(true)
-    } catch {
-      pause()
-      setError('Playback could not start. Check the selected recording.')
+      const next = await ipcInvoke<string>('rating:choose-root')
+      if (next) { setRoot(next); setRefresh(value => value + 1) }
+    } catch (e) { setError(message(e)) }
+  }
+
+  async function release(runId: string, urls: string[]) {
+    urls.filter(url => url.startsWith('blob:')).forEach(url => URL.revokeObjectURL(url))
+    if (native) await ipcInvoke('rating:finish', runId)
+  }
+
+  async function start() {
+    if (!selected || !canStart || check.current) return
+    const controller = new AbortController()
+    check.current = controller
+    setPreparing(true); setError('')
+    const runId = crypto.randomUUID()
+    let urls: string[] = []
+    try {
+      let recordings: Pick<RatingRecording, 'seat' | 'kind'>[]
+      if (native) {
+        const prepared = await ipcInvoke<{ recordings: Pick<RatingRecording, 'seat' | 'kind'>[]; urls: string[] }>('rating:prepare', normalizedDyad, selected.id, runId, seat)
+        if (!prepared) throw new Error('Could not prepare the selected recording.')
+        urls = prepared.urls; recordings = prepared.recordings
+      } else {
+        recordings = selected.recordings.filter(r => r.kind === (r.seat === seat ? 'clean' : 'altered'))
+        for (const recording of recordings) {
+          const file = selected.files?.[`${recording.seat}:${recording.kind}`]
+          if (!file) throw new Error('A selected recording is missing. Choose the folder again.')
+          urls.push(URL.createObjectURL(file))
+        }
+      }
+      if (urls.length !== 2) throw new Error('Both participant videos are required.')
+      await Promise.all(urls.map((url, i) => inspectRatingVideo(url, controller.signal).catch(e => { throw new Error(`${recordings[i].seat}: ${message(e)}`) })))
+      if (controller.signal.aborted) throw new Error('Recording check cancelled.')
+      setRun({ runId, dyad: normalizedDyad, candidateId: selected.id, participantId: participant, partnerId: partner, seat, round, group, selfColor, partnerColor, initials: initials.trim(), researcher: ra.trim(), date, time, native, recordings: recordings.map((r, i) => ({ ...r, url: urls[i] })) })
+    } catch (e) {
+      if (!controller.signal.aborted) setError(message(e))
+      controller.abort()
+      await release(runId, urls).catch(() => {})
+    } finally {
+      check.current = null
+      setPreparing(false)
     }
   }
 
-  return (
-    <main className="suite-content">
-      <PageHeading
-        title="Rating Station"
-        eyebrow="Post-call review"
-        action={<span className="suite-badge preview">Temporary preview</span>}
-      >
-        <p>Conversation playback and participant responses.</p>
-      </PageHeading>
-      <p className="suite-notice">
-        Temporary preview. Questions are provisional; responses clear when you
-        leave this section.
-      </p>
-      {error && (
-        <p role="alert" className="suite-notice suite-error">
-          {error}
-        </p>
-      )}
-      <section
-        className="suite-section"
-        style={{ paddingTop: 0, borderTop: 0 }}
-      >
-        <div
-          className="suite-row"
-          style={{ justifyContent: 'space-between', marginBottom: 20 }}
-        >
-          <div
-            className="suite-tabs"
-            role="tablist"
-            aria-label="Review perspective"
-            style={{ margin: 0 }}
-          >
-            {(
-              [
-                { id: 'active', label: 'Speaker' },
-                { id: 'single', label: 'Individual' },
-                { id: 'gallery', label: 'Gallery' },
-              ] as const
-            ).map((v) => (
-              <button
-                key={v.id}
-                role="tab"
-                aria-selected={mode === v.id}
-                onClick={() => setMode(v.id)}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-          <div className="suite-row">
-            <label className="suite-field">
-              <span>Review turn</span>
-              <select
-                aria-label="Review turn"
-                className="suite-input"
-                value={target}
-                onChange={(e) => setTarget(e.target.value as Seat)}
-              >
-                <option value="P1">Participant 1</option>
-                <option value="P2">Participant 2</option>
-              </select>
-            </label>
-            <label className="suite-field">
-              <span>Recording version</span>
-              <select
-                aria-label="Recording version"
-                className="suite-input"
-                value={version}
-                onChange={(e) => setVersion(e.target.value as Version)}
-              >
-                <option value="altered">Altered</option>
-                <option value="clean">Unaltered</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div className="suite-review-layout">
-          <div style={{ minWidth: 0 }}>
-            <div
-              className="suite-player-grid"
-              style={{
-                gridTemplateColumns:
-                  mode === 'gallery' ? undefined : 'minmax(0, 1fr)',
-              }}
-            >
-              {shownSeats.map((seat) => {
-                const clipKey = `${seat}_${version}` as ClipKey
-                const clip = clips[clipKey]
-                return (
-                  <div className="suite-player" key={clipKey}>
-                    <header>
-                      <span>
-                        {seat === 'P1' ? 'Participant 1' : 'Participant 2'}
-                      </span>
-                      <span>
-                        {version === 'clean' ? 'Unaltered' : 'Altered'}
-                      </span>
-                    </header>
-                    {clip ? (
-                      <video
-                        ref={(el) => {
-                          if (el) players.current.set(clipKey, el)
-                          else players.current.delete(clipKey)
-                        }}
-                        src={clip.url}
-                        playsInline
-                        preload="metadata"
-                        muted={clipKey !== master}
-                        onLoadedMetadata={(e) => {
-                          e.currentTarget.currentTime = start
-                        }}
-                        onError={() => setError(`Cannot play ${clip.name}.`)}
-                        onTimeUpdate={(e) => {
-                          if (clipKey !== master) return
-                          const now = e.currentTarget.currentTime
-                          setPosition(now)
-                          for (const [id, video] of players.current)
-                            if (
-                              id !== master &&
-                              Math.abs(video.currentTime - now) > 0.15
-                            )
-                              video.currentTime = now
-                          if (now >= end && end > start) pause()
-                        }}
-                        onEnded={() => pause()}
-                      />
-                    ) : (
-                      <div
-                        className="suite-empty"
-                        style={{
-                          border: 0,
-                          borderRadius: 0,
-                          aspectRatio: '16/9',
-                          minHeight: 0,
-                        }}
-                      >
-                        <Film size={30} />
-                        <p>
-                          No {version === 'clean' ? 'unaltered' : 'altered'}{' '}
-                          recording loaded
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="suite-row" style={{ marginTop: 16 }}>
-              <button
-                className="suite-btn icon"
-                title="Replay segment"
-                aria-label="Replay segment"
-                disabled={!master || !total}
-                onClick={() => {
-                  pause()
-                  seek(start)
-                }}
-              >
-                <RotateCcw size={16} />
-              </button>
-              <button
-                className="suite-btn primary"
-                disabled={!master || !total}
-                onClick={() => void togglePlayback()}
-              >
-                {playing ? <Pause size={16} /> : <Play size={16} />}
-                {playing ? 'Pause' : 'Play'}
-              </button>
-              <input
-                aria-label="Playback position"
-                type="range"
-                min={start}
-                max={Math.max(start, end)}
-                step={0.1}
-                value={Math.min(
-                  Math.max(position, start),
-                  Math.max(start, end),
-                )}
-                disabled={!master || !total}
-                onChange={(e) => seek(Number(e.target.value))}
-                style={{ flex: 1, minWidth: 100, accentColor: '#22b4df' }}
-              />
-              <span
-                className="suite-muted"
-                style={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}
-              >
-                {timeLabel(position)} / {timeLabel(total)}
-              </span>
-            </div>
-            <div
-              className="suite-row"
-              style={{ justifyContent: 'space-between', marginTop: 20 }}
-            >
-              <div className="suite-row">
-                <button
-                  className="suite-btn icon"
-                  aria-label="Previous segment"
-                  title="Previous segment"
-                  disabled={segment === 0}
-                  onClick={() => setSegment((s) => s - 1)}
-                >
-                  <SkipBack size={16} />
-                </button>
-                <span className="suite-muted">
-                  Segment {segment + 1}
-                  {total > 0 ? ` of ${Math.ceil(total / segmentSec)}` : ''}
-                </span>
-                <button
-                  className="suite-btn icon"
-                  aria-label="Next segment"
-                  title="Next segment"
-                  disabled={!total || end >= total}
-                  onClick={() => setSegment((s) => s + 1)}
-                >
-                  <SkipForward size={16} />
-                </button>
-              </div>
-              <label className="suite-row suite-muted" style={{ fontSize: 12 }}>
-                Segment length
-                <select
-                  className="suite-input"
-                  style={{ width: 100 }}
-                  value={segmentSec}
-                  onChange={(e) => {
-                    setSegmentSec(Number(e.target.value))
-                    setSegment(0)
-                  }}
-                >
-                  <option value={30}>30 sec</option>
-                  <option value={60}>60 sec</option>
-                  <option value={150}>150 sec</option>
-                </select>
-              </label>
-            </div>
-          </div>
-          <aside>
-            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>
-              Participant response
-            </h2>
-            <div className="suite-tabs" aria-label="Response perspective">
-              {(['self', 'partner'] as const).map((p) => (
-                <button
-                  key={p}
-                  aria-pressed={perspective === p}
-                  onClick={() => setPerspective(p)}
-                >
-                  {p === 'self' ? 'Self-report' : 'Partner rating'}
-                </button>
-              ))}
-            </div>
-            <label className="suite-field">
-              <span>
-                {perspective === 'self'
-                  ? 'What were you feeling during this part?'
-                  : `What do you think Participant ${target === 'P1' ? '1' : '2'} was feeling?`}
-              </span>
-              <textarea
-                className="suite-input"
-                placeholder="Write a response..."
-                value={responses[key] || ''}
-                onChange={(e) => {
-                  setResponses((r) => ({ ...r, [key]: e.target.value }))
-                  setSaved('')
-                }}
-              />
-            </label>
-            <button
-              className="suite-btn primary"
-              style={{ marginTop: 14 }}
-              disabled={!responses[key]?.trim()}
-              onClick={() => setSaved(key)}
-            >
-              <Check size={15} />
-              Save preview response
-            </button>
-            {saved === key && (
-              <p
-                role="status"
-                className="suite-muted"
-                style={{ fontSize: 12, marginTop: 10 }}
-              >
-                Saved for this preview.
-              </p>
-            )}
-          </aside>
-        </div>
+  if (run) return <RatingStationTask run={run} onExit={() => {
+    void release(run.runId, run.recordings.map(r => r.url)).catch(e => setError(message(e)))
+    setRun(null); setInitials(''); setTime(new Date().toTimeString().slice(0, 5))
+  }} />
+
+  return <main className="suite-content rating-setup">
+    <PageHeading title="Set up this station" eyebrow="Rating Station" action={<span className="rating-mode-tag">Researcher setup</span>}>
+      <p>Select the conversation and participant before handing over this computer.</p>
+    </PageHeading>
+    <input ref={picker} type="file" hidden multiple {...{ webkitdirectory: '' }} onChange={e => {
+      const next = Array.from(e.target.files || [])
+      if (next.length) { setFiles(next); setRoot(next[0].webkitRelativePath.split('/')[0]) }
+      e.target.value = ''
+    }} />
+    <fieldset className="rating-setup-fields" disabled={preparing}>
+      <section className="rating-drive" aria-label="Research Drive">
+        <div className="rating-drive-label"><FolderOpen size={21} /><div><h2>Research Drive</h2><p>{root ? native ? 'Saved on this computer' : 'Folder selected for this visit' : 'Choose the folder containing recorded sessions'}</p></div></div>
+        <div className="rating-folder-row"><span className="rating-folder-path" title={root}>{root || 'No folder selected'}</span><button type="button" className="suite-btn" onClick={() => void chooseRoot()}>{root ? 'Change folder' : 'Browse'}</button></div>
       </section>
-      <section className="suite-section">
-        <h2>Review recordings</h2>
-        <div className="suite-form-grid">
-          {CLIP_KEYS.map((clipKey) => (
-            <label className="suite-field" key={clipKey}>
-              <span>
-                {clipKey.slice(0, 2)} ·{' '}
-                {clipKey.endsWith('clean') ? 'Unaltered' : 'Altered'}
-              </span>
-              <span
-                className="suite-btn"
-                style={{
-                  justifyContent: 'flex-start',
-                  whiteSpace: 'normal',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                <Upload size={15} style={{ flexShrink: 0 }} />
-                {clips[clipKey]?.name || 'Choose recording'}
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm"
-                  className="sr-only"
-                  onChange={(e) => {
-                    loadClip(clipKey, e.target.files?.[0])
-                    e.target.value = ''
-                  }}
-                  aria-label={`Load ${clipKey}`}
-                />
-              </span>
-            </label>
-          ))}
+      <div className="rating-workspace">
+        <div className="rating-setup-main">
+          <SetupSection number="01" title="Participant" detail="Enter a dyad ID, then choose the seat for this station.">
+            <div className="rating-setup-grid">
+              <Field label="Dyad ID" value={dyad} onChange={setDyad} placeholder="e.g. 014" />
+              <div className="suite-field"><span>Seat in recording</span><Segment choices={['P1', 'P2'] as const} value={seat} label={v => v} onChange={setSeat} ariaLabel="Seat in recording" /></div>
+              <Field label="Participant ID" value={participant} onChange={setManualParticipant} readOnly={Boolean(selected?.participantIds[seat])} />
+              <Field label="Partner ID" value={partner} onChange={setManualPartner} readOnly={Boolean(selected?.participantIds[otherSeat])} />
+            </div>
+            {participant && partner && !idsValid && <p className="rating-warning">Use two different IDs containing letters, numbers, dashes, or underscores.</p>}
+            <details className="rating-optional"><summary>Nametag colors <span>Optional</span></summary><div className="rating-setup-grid"><ColorField label="Participant" value={selfColor} onChange={setSelfColor} /><ColorField label="Partner" value={partnerColor} onChange={setPartnerColor} /></div></details>
+          </SetupSection>
+          <SetupSection number="02" title="Session details" detail="Saved with the participant's responses.">
+            <div className="rating-setup-grid">
+              <div className="suite-field"><span>Round</span><Segment choices={[1, 2, 3, 4, 5]} value={round} label={n => `R${n}`} onChange={setRound} ariaLabel="Round" /></div>
+              <div className="suite-field"><span>Group</span><Segment choices={['A', 'B', 'C'] as const} value={group} label={v => v} onChange={setGroup} ariaLabel="Group" /></div>
+              <Field label="Subject initials" value={initials} onChange={setInitials} placeholder="AB" />
+              <Field label="RA name" value={ra} onChange={setRa} placeholder="Researcher name" />
+              <label className="suite-field"><span>Session date</span><input className="suite-input" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+              <label className="suite-field"><span>Session time</span><input className="suite-input" type="time" value={time} onChange={e => setTime(e.target.value)} /></label>
+            </div>
+          </SetupSection>
         </div>
-      </section>
-    </main>
-  )
+        <aside className="rating-recording-panel" aria-label="Conversation recording">
+          <div className="rating-recording-heading"><h2>Conversation video</h2><button type="button" className="rating-icon-button" title="Search again" aria-label="Search again" disabled={!root || !normalizedDyad || searching} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button></div>
+          <div aria-live="polite" aria-busy={searching}>
+            {searchError ? <p className="rating-warning" role="alert">{searchError}</p> : searching ? <div className="rating-empty"><Loader2 className="rating-spin" size={23} /><strong>Searching dyad {normalizedDyad}</strong><p>Checking the selected folder.</p></div> : !candidates.length ? <div className="rating-empty"><Search size={23} /><strong>{!root ? 'Choose your Research Drive' : !normalizedDyad ? 'Find a conversation' : 'No recording found'}</strong><p>{!root ? 'Recordings will appear here.' : !normalizedDyad ? 'Enter the dyad ID to search.' : searched ? 'Check the dyad ID and folder, then search again after the recording finishes copying.' : 'Waiting for the selected folder.'}</p></div> : <div className="rating-candidates">{candidates.map(candidate => <button type="button" key={candidate.id} className={selectedId === candidate.id ? 'selected' : ''} aria-pressed={selectedId === candidate.id} onClick={() => { setSelectedId(candidate.id); setError('') }}><Video size={18} /><span><strong>{candidate.label}</strong><small>{new Date(candidate.modifiedAt).toLocaleString()}</small><small className={completeRecording(candidate) ? 'rating-ready-text' : ''}>{completeRecording(candidate) ? 'All 4 tracks found' : candidate.source === 'suite' ? 'Single-video recording' : 'Missing or duplicate tracks'}</small></span>{selectedId === candidate.id && <Check size={17} />}</button>)}</div>}
+          </div>
+          {selected && !completeRecording(selected) && <p className="rating-warning">This task needs one clean and one altered video per participant. Select a complete Session View recording.</p>}
+          <div className="rating-handoff-summary">
+            <h3>Before handoff</h3>
+            <Checklist done={completeRecording(selected)} label="Conversation selected" />
+            <Checklist done={idsValid && Boolean(selected)} label={idsValid && selected ? `${participant} reviewing ${partner}` : 'Participant and partner confirmed'} />
+            <Checklist done={detailsValid} label="Session details complete" />
+            <div className="rating-session-facts"><span>Round {round}</span><span>Group {group}</span><span>4 parts · 2:30 each</span></div>
+            {!native && <p className="rating-hint">Browser session: download responses when the task is finished.</p>}
+            {error && <p className="rating-warning" role="alert">{error}</p>}
+            <p className="rating-next-step" role="status">{preparing ? 'Checking that both videos can play...' : nextStep}</p>
+            <button type="button" className="suite-btn primary rating-start" disabled={!canStart || preparing} onClick={() => void start()}>{preparing ? <><Loader2 size={17} className="rating-spin" /> Checking recordings...</> : <>Start participant task <ArrowRight size={17} /></>}</button>
+          </div>
+        </aside>
+      </div>
+    </fieldset>
+    {preparing && <button className="suite-btn rating-cancel-check" onClick={() => check.current?.abort()}>Cancel video check</button>}
+  </main>
+}
+
+function SetupSection({ number, title, detail, children }: { number: string; title: string; detail: string; children: React.ReactNode }) {
+  return <section className="rating-setup-section"><div className="rating-section-heading"><span className="rating-step">{number}</span><div><h2>{title}</h2><p>{detail}</p></div></div>{children}</section>
+}
+function Field({ label, value, onChange, placeholder, readOnly }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; readOnly?: boolean }) {
+  return <label className="suite-field"><span>{label}{readOnly && <small>From recording</small>}</span><input className="suite-input" aria-label={label} value={value} readOnly={readOnly} placeholder={placeholder} onChange={e => onChange(e.target.value)} autoComplete="off" /></label>
+}
+function Segment<T extends string | number>({ choices, value, label, onChange, ariaLabel }: { choices: readonly T[]; value: T; label: (v: T) => string; onChange: (v: T) => void; ariaLabel: string }) {
+  return <div className="rating-setup-segments" role="group" aria-label={ariaLabel}>{choices.map(choice => <button type="button" key={choice} className={value === choice ? 'selected' : ''} aria-pressed={value === choice} onClick={() => onChange(choice)}>{label(choice)}</button>)}</div>
+}
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return <div className="suite-field"><span>{label}</span><div className="rating-color-options" role="group" aria-label={`${label} nametag`}>{Object.entries(colors).map(([name, hex]) => <button type="button" key={name} title={name} aria-label={name} className={value === name ? 'selected' : ''} aria-pressed={value === name} onClick={() => onChange(value === name ? '' : name)}><i style={{ background: hex }}>{value === name && <Check size={13} />}</i></button>)}</div></div>
+}
+function Checklist({ done, label }: { done: boolean; label: string }) {
+  return <div className={`rating-checklist-item ${done ? 'complete' : ''}`}>{done ? <Check size={16} /> : <Circle size={15} />}<span>{label}</span></div>
 }
