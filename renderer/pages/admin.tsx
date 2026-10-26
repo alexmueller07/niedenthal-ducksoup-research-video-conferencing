@@ -42,6 +42,7 @@ import type {
   ReviewAvailability,
   ReviewMedia,
   ReviewState,
+  StudyTimelineState,
   RosterState,
   RuleExpression,
   RuleRelease,
@@ -53,6 +54,7 @@ import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
 import { preferredConstraints } from '../lib/suitePreferences'
 import { VoicePanel } from '../components/VoiceControls'
 import { ReviewControls } from '../components/ReviewControls'
+import { StudyTimelineControls } from '../components/StudyTimelineControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
@@ -132,6 +134,8 @@ export default function AdminDashboard() {
   const [reviewState, setReviewState] = useState<ReviewState | null>(null)
   const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
   const [reviewError, setReviewError] = useState('')
+  const [studyTimeline, setStudyTimeline] = useState<StudyTimelineState | null>(null)
+  const [studyTimelineError, setStudyTimelineError] = useState('')
 
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<PSlot, PeerLink>>(new Map())
@@ -304,6 +308,13 @@ export default function AdminDashboard() {
               return
             case 'rule-status':
               setRuleActive(msg.active)
+              return
+            case 'study-schedule-state':
+              setStudyTimeline(msg.state)
+              setStudyTimelineError('')
+              return
+            case 'study-schedule-error':
+              setStudyTimelineError(msg.reason)
               return
             case 'stream-map':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
@@ -925,6 +936,13 @@ export default function AdminDashboard() {
 
         {/* --- Right rail --- */}
         <div className="col-span-12 flex flex-col gap-4 xl:col-span-4">
+          {(phase === 'waiting' || phase === 'live' || studyTimeline?.status === 'complete' || studyTimeline?.status === 'interrupted') &&
+            <StudyTimelineControls
+              state={studyTimeline} phase={phase} now={nowTick} error={studyTimelineError}
+              connected={{ P1: !!roster?.slots.P1, P2: !!roster?.slots.P2 }}
+              onArm={(presetId, firstSeat) => clientRef.current?.send({ type: 'study-schedule-arm', presetId, firstSeat })}
+              onDisarm={() => clientRef.current?.send({ type: 'study-schedule-disarm' })}
+            />}
           {/* Researcher voice */}
           <Card title="Researcher voice" subtitle="Participants hear you only while live">
             <div className="flex items-center gap-3">

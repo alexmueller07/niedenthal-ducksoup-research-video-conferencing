@@ -165,6 +165,15 @@ export interface Telemetry extends EffectState {
 
 export type PSlot = 'P1' | 'P2'
 
+export interface StudyTimelineState {
+  status: 'idle' | 'armed' | 'running' | 'complete' | 'interrupted'
+  presetId: string | null
+  firstSeat: PSlot
+  /** Zero-based active block, or 4 once the timed blocks are complete. */
+  block: number
+  startedAtMs: number | null
+}
+
 // ---- Calibration ----
 //
 // Each participant is calibrated before the conversation: a short guided
@@ -402,6 +411,8 @@ export type ReviewViewMode = 'gallery' | 'single' | 'active'
 export type VideoVersion = 'altered' | 'clean'
 
 export interface ReviewConfig {
+  task?: 'continuous' | 'legacy'
+  mediaPolicy?: 'altered' | 'clean' | 'self-clean-partner-altered' | 'audio'
   viewMode: ReviewViewMode
   /** Length of each turn, in seconds. */
   segmentSec: number
@@ -452,9 +463,17 @@ export interface ReviewSegment {
   endMs: number
 }
 
-export type ReviewStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'writing' | 'done'
+export type ReviewStatus = 'idle' | 'questionnaire' | 'loading' | 'playing' | 'paused' | 'writing' | 'done'
+
+export interface RatingSample {
+  sequence: number
+  videoMs: number
+  value: number
+  touched: boolean
+}
 
 export interface ReviewState {
+  runId?: string
   status: ReviewStatus
   config: ReviewConfig
   segments: ReviewSegment[]
@@ -576,14 +595,18 @@ export type ClientMessage =
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
   | { type: 'set-rules'; rules: AutomationRule[] }
+  | { type: 'study-schedule-arm'; presetId: string; firstSeat: PSlot }
+  | { type: 'study-schedule-disarm' }
   | { type: 'review-start'; config: ReviewConfig }
   /** Researcher; participants only for pause/resume when the config allows it. */
   | { type: 'review-control'; action: ReviewControlAction }
   // Review, participant → server (`turn` is the 1-based segment index):
   | { type: 'review-ready'; loadSeq: number }
+  | { type: 'rating-questionnaire'; responses: Record<string, number | null> }
+  | { type: 'rating-samples'; turn: number; samples: RatingSample[] }
   | { type: 'review-buffering'; loadSeq: number }
   | { type: 'review-draft'; turn: number; text: string; stats: ReviewViewingStats }
-  | { type: 'review-submit'; turn: number; text: string; stats: ReviewViewingStats }
+  | { type: 'review-submit'; turn: number; text: string; stats: ReviewViewingStats; elicitation?: number | null }
 
 
 // ---- Server → Client ----
@@ -636,6 +659,8 @@ export type ServerMessage =
   | { type: 'rules'; rules: AutomationRule[] }
   /** Which rules are currently holding/fired, for the dashboard indicator. */
   | { type: 'rule-status'; active: Record<string, boolean> }
+  | { type: 'study-schedule-state'; state: StudyTimelineState }
+  | { type: 'study-schedule-error'; reason: string }
   | { type: 'rejected'; reason: string }
   | { type: 'review-state'; state: ReviewState }
   | { type: 'review-media'; media: ReviewMedia | null }
@@ -643,6 +668,7 @@ export type ServerMessage =
   | { type: 'review-draft'; turn: number; text: string; submitted: boolean }
   | { type: 'review-availability'; availability: ReviewAvailability }
   | { type: 'review-error'; reason: string }
+  | { type: 'rating-ack'; turn: number; sequence: number }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   try {
