@@ -39,6 +39,11 @@ export class ReviewMediaRoute {
     this.grants.clear()
   }
 
+  revoke(url: string) {
+    const token = /^\/review\/([0-9a-f]+)\//.exec(url)?.[1]
+    if (token) this.grants.delete(token)
+  }
+
   /** Handles /review/… requests; returns false for anything else. */
   handle(req: IncomingMessage, res: ServerResponse): boolean {
     const url = new URL(req.url ?? '/', 'http://x')

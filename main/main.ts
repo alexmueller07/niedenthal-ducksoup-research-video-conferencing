@@ -11,6 +11,8 @@
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import http from 'http'
+import crypto from 'crypto'
 import { spawn } from 'child_process'
 import {
   app,
@@ -31,6 +33,8 @@ import { SessionLogger } from './logger'
 import { DEFAULT_PORT, APP_VERSION } from './protocol'
 import { patchMp4Duration } from './mp4duration'
 import { scanSessionRoot, resolveSessionFile } from './sessionCatalog'
+import { findRatingRecordings, normalizeRatingDyad } from './ratingStation'
+import { ReviewMediaRoute } from './mediaRoute'
 import { checkReleaseUpdate } from '../shared/releaseUpdate'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -337,6 +341,106 @@ function defaultOutputRoot(): string {
 
 let suiteReadRoot: string | null = null
 const outputRoot = () => (store.get('prefs.outputRoot', null) as string | null) || defaultOutputRoot()
+
+const ratingMedia = new ReviewMediaRoute()
+let ratingHttp: http.Server | null = null
+let ratingPort = 0
+const ratingSelections = new Map<string, { root: string; sessionId: string; dyad: string; mediaUrl: string }>()
+
+async function ratingMediaServer(): Promise<number> {
+  if (ratingHttp) return ratingPort
+  const server = http.createServer((req, res) => {
+    if (ratingMedia.handle(req, res)) return
+    res.writeHead(404).end()
+  })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve() })
+    })
+  } catch (error) { server.close(); throw error }
+  ratingHttp = server
+  ratingPort = (server.address() as { port: number }).port
+  return ratingPort
+}
+
+ipcMain.handle('rating:root', () => (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot())
+ipcMain.handle('rating:choose-root', async () => {
+  const picked = await dialog.showOpenDialog({ properties: ['openDirectory'], title: 'Research Drive recordings folder' })
+  if (picked.canceled) return null
+  const root = await fs.promises.realpath(picked.filePaths[0])
+  store.set('prefs.ratingDriveRoot', root)
+  return root
+})
+ipcMain.handle('rating:lookup', async (_e, rawDyad: string) => {
+  const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
+  if (!fs.existsSync(root)) return []
+  return findRatingRecordings(root, rawDyad)
+})
+ipcMain.handle('rating:prepare', async (_e, rawDyad: string, candidateId: string, runId: string, seat: string) => {
+  if (!/^[a-f0-9-]{36}$/.test(runId)) throw new Error('Invalid rating run.')
+  if (seat !== 'P1' && seat !== 'P2') throw new Error('Select a participant seat.')
+  const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
+  const candidate = (await findRatingRecordings(root, rawDyad)).find(c => c.id === candidateId && c.source === 'session')
+  if (!candidate) throw new Error('The selected Session View recording is no longer available.')
+  const versions = ['P1:clean', 'P1:altered', 'P2:clean', 'P2:altered']
+  if (candidate.recordings.length !== 4 || versions.some(key => candidate.recordings.filter(r => `${r.seat}:${r.kind}` === key).length !== 1))
+    throw new Error('This task needs one clean and one altered recording from each participant. Check the session recordings.')
+  const port = await ratingMediaServer()
+  const allowed = candidate.recordings.filter(r => r.kind === (r.seat === seat ? 'clean' : 'altered'))
+  const paths = ratingMedia.open(allowed.map(r => r.path))
+  const urls = paths.map(p => `http://127.0.0.1:${port}${p}`)
+  ratingSelections.set(runId, { root: await fs.promises.realpath(root), sessionId: candidate.id, dyad: normalizeRatingDyad(rawDyad), mediaUrl: paths[0] })
+  return { recordings: allowed.map(r => ({ seat: r.seat, kind: r.kind })), urls }
+})
+ipcMain.handle('rating:save', async (_e, payload: { dyad: string; sessionId: string; participantId: string; runId: string; content: unknown }) => {
+  const chosen = ratingSelections.get(payload.runId)
+  if (!chosen || chosen.dyad !== normalizeRatingDyad(payload.dyad) || chosen.sessionId !== payload.sessionId)
+    throw new Error('The selected recording changed. Ask the researcher to set up this station again.')
+  if (!/^[A-Za-z0-9_-]{1,60}$/.test(payload.participantId) || !/^[a-f0-9-]{36}$/.test(payload.runId))
+    throw new Error('Invalid rating identifiers.')
+  const dir = path.resolve(chosen.root, chosen.sessionId, 'rating-station')
+  await fs.promises.mkdir(dir, { recursive: true })
+  const file = path.join(dir, `${payload.participantId}-${payload.runId}.json`)
+  const temp = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`
+  await fs.promises.writeFile(temp, JSON.stringify(payload.content, null, 2), 'utf8')
+  await fs.promises.rename(temp, file)
+  const content = payload.content as {
+    status?: string
+    setup?: { dyad?: string; round?: number; group?: string }
+    questionnaire?: Record<string, number | null>
+    samples?: { block: number; videoMs: number; value: number; touched: boolean }[]
+    reflections?: { block: number; target: string; text: string; elicitation: number | null }[]
+  }
+  if (content.status === 'done') {
+    const safeCell = (value: unknown): string => {
+      const string = String(value ?? '')
+      const neutralized = typeof value === 'string' && /^[\s]*[=+\-@]/.test(string) ? `'${string}` : string
+      return `"${neutralized.replaceAll('"', '""')}"`
+    }
+    const csv = (header: string[], rows: unknown[][]) => [header, ...rows].map(row => row.map(safeCell).join(',')).join('\r\n') + '\r\n'
+    const prefix = `${payload.participantId}-${payload.runId}`
+    const base = [payload.dyad, payload.participantId, content.setup?.round, content.setup?.group]
+    const files: [string, string][] = [
+      [`${prefix}-questionnaire.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'question_id', 'answer'], Object.entries(content.questionnaire || {}).map(([id, answer]) => [...base, id, answer]))],
+      [`${prefix}-samples.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'video_ms', 'rating', 'slider_touched'], (content.samples || []).map(sample => [...base, sample.block, sample.videoMs, sample.value, sample.touched]))],
+      [`${prefix}-reflections.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'target', 'response', 'elicitation'], (content.reflections || []).map(item => [...base, item.block, item.target, item.text, item.elicitation]))],
+    ]
+    for (const [name, data] of files) {
+      const final = path.join(dir, name)
+      const partial = `${final}.${crypto.randomBytes(4).toString('hex')}.tmp`
+      await fs.promises.writeFile(partial, data, 'utf8')
+      await fs.promises.rename(partial, final)
+    }
+  }
+  return file
+})
+ipcMain.handle('rating:finish', (_e, runId: string) => {
+  const selected = ratingSelections.get(runId)
+  if (selected) ratingMedia.revoke(selected.mediaUrl)
+  ratingSelections.delete(runId)
+  return true
+})
 
 ipcMain.handle('suite:catalog', async () => {
   const root = suiteReadRoot || outputRoot()

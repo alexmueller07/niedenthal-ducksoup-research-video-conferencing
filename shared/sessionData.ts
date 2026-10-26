@@ -26,7 +26,7 @@ export function dataCategory(relativePath: string): DataCategory {
   if (/\.(mp4|webm|m4a|wav|mp3|ogg)$/.test(p)) return 'recordings'
   if (/(^|\/)calibration(\/|\.)/.test(p)) return 'calibration'
   if (
-    /(^|\/)(review(_\d+)?|ratings?)(\/|\.)/.test(p) ||
+    /(^|\/)(review(_\d+)?|ratings?|rating-station)(\/|\.)/.test(p) ||
     /answers\.csv$/.test(p)
   )
     return 'ratings'
