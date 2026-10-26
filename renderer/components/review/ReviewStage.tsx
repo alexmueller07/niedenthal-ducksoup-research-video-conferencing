@@ -25,7 +25,7 @@ import type {
 } from '../../lib/protocol'
 
 const SEATS: PSlot[] = ['P1', 'P2']
-const SYNC_INTERVAL_MS = 200
+const SYNC_INTERVAL_MS = 100
 
 export const VERSION_LABEL: Record<VideoVersion, string> = {
   altered: 'Changed',
@@ -39,6 +39,9 @@ interface Tile {
 }
 
 export interface ReviewStageProps {
+  onPlaybackTime?: (ms: number) => void
+  versionsBySeat?: Record<PSlot, VideoVersion>
+  audioOnly?: boolean
   state: ReviewState
   media: ReviewMedia
   baseUrl: string
@@ -69,9 +72,12 @@ export function ReviewStage({
   muted = false,
   onReady,
   onBuffering,
+  onPlaybackTime,
+  versionsBySeat,
+  audioOnly,
 }: ReviewStageProps) {
   const tiles: Tile[] = SEATS.flatMap((person) =>
-    versions.map((v) => ({ key: `${person}:${v}`, person, version: v })),
+    (versionsBySeat ? [versionsBySeat[person]] : versions).map((v) => ({ key: `${person}:${v}`, person, version: v })),
   )
   const tilesKey = tiles.map((t) => t.key).join('|')
   const target = state.segments[state.current]?.targetSeat ?? 'P1'
@@ -81,14 +87,14 @@ export function ReviewStage({
   const tracksRef = useRef(new Map<string, ReviewTrack>())
   const stateRef = useRef(state)
   stateRef.current = state
-  const callbacksRef = useRef({ onReady, onBuffering, serverNow })
-  callbacksRef.current = { onReady, onBuffering, serverNow }
+  const callbacksRef = useRef({ onReady, onBuffering, serverNow, onPlaybackTime })
+  callbacksRef.current = { onReady, onBuffering, serverNow, onPlaybackTime }
   const [gaps, setGaps] = useState<Record<string, boolean>>({})
   const [broken, setBroken] = useState<Record<string, boolean>>({})
 
   const isVisible = (t: Tile) =>
-    mode === 'gallery' || (t.person === shownPerson && t.version === version)
-  const isAudible = (t: Tile) => !muted && (mode === 'gallery' ? t.version === 'altered' : t.version === version)
+    !audioOnly && (mode === 'gallery' || (t.person === shownPerson && (!!versionsBySeat || t.version === version)))
+  const isAudible = (t: Tile) => !muted && (versionsBySeat ? true : mode === 'gallery' ? t.version === 'altered' : t.version === version)
   const watchedRef = useRef<(t: Tile) => boolean>(() => true)
   watchedRef.current = (t) => isVisible(t) || isAudible(t)
 
@@ -126,11 +132,17 @@ export function ReviewStage({
     if (state.status !== 'loading') return
     const seq = state.loadSeq
     const at = state.anchorPosMs
-    void Promise.all([...tracksRef.current.values()].map((t) => t.prepare(at).catch(() => {}))).then(() => {
-      if (stateRef.current.status === 'loading' && stateRef.current.loadSeq === seq) {
-        callbacksRef.current.onReady?.(seq)
-      }
-    })
+    let cancelled = false
+    let retry: ReturnType<typeof setTimeout> | null = null
+    const prepare = async () => {
+      await Promise.all([...tracksRef.current.values()].map(t => t.prepare(at).catch(() => {})))
+      if (cancelled || stateRef.current.status !== 'loading' || stateRef.current.loadSeq !== seq) return
+      const ready = tracksRef.current.size === tiles.length && [...tracksRef.current.values()].every(t => t.readyAt(at))
+      if (stateRef.current.config.task !== 'continuous' || ready) callbacksRef.current.onReady?.(seq)
+      else retry = setTimeout(() => void prepare(), 2000)
+    }
+    void prepare()
+    return () => { cancelled = true; if (retry) clearTimeout(retry) }
   }, [state.status, state.loadSeq, state.anchorPosMs, tilesKey])
 
   // Follow the shared clock.
@@ -141,9 +153,17 @@ export function ReviewStage({
       const playing = s.status === 'playing' && now >= s.anchorServerMs
       const pos = reviewPositionMs(s, now)
       for (const track of tracksRef.current.values()) track.sync(pos, playing)
+      if (playing) {
+        const active = [...tracksRef.current.entries()].filter(([key]) => {
+          const tile = tiles.find(t => t.key === key)
+          return tile && watchedRef.current(tile)
+        })
+        const times = active.map(([, t]) => t.playbackTimeMs())
+        if (times.length && times.every((t): t is number => t !== null)) callbacksRef.current.onPlaybackTime?.(Math.min(...times))
+      }
     }, SYNC_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [tilesKey])
 
   // Mute everything that should not be heard.
   useEffect(() => {
@@ -153,7 +173,7 @@ export function ReviewStage({
     }
   })
 
-  const rows = versions.length
+  const rows = versionsBySeat ? 1 : versions.length
   const containerClass =
     mode === 'gallery'
       ? `grid h-full w-full gap-3 ${rows === 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-2 grid-rows-1'}`
@@ -161,6 +181,7 @@ export function ReviewStage({
 
   return (
     <div className={containerClass}>
+      {audioOnly && <div className="absolute inset-0 flex items-center justify-center text-gray-300">Conversation audio</div>}
       {tiles.map((tile) => {
         const visible = isVisible(tile)
         const placement =

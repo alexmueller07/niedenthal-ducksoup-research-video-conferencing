@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { reviewPositionMs } from '../../../main/review'
 import { ReviewStage, VERSION_LABEL } from './ReviewStage'
 import { ResponseBox } from './ResponseBox'
+import { ContinuousRating } from './ContinuousRating'
 import type {
   ClientMessage,
   PSlot,
@@ -28,6 +29,7 @@ export interface RestoredDraft {
 }
 
 export interface ReviewScreenProps {
+  ratingAck?: { turn: number; sequence: number } | null
   state: ReviewState
   media: ReviewMedia
   mySlot: PSlot
@@ -49,7 +51,12 @@ interface TurnStats {
 
 const freshStats = (): TurnStats => ({ msAltered: 0, msClean: 0, toggles: 0, edits: 0, firstTypedAtMs: null })
 
-export function ReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, send, restored }: ReviewScreenProps) {
+export function ReviewScreen(props: ReviewScreenProps) {
+  if (props.state.config.task === 'continuous') return <ContinuousRating {...props} />
+  return <LegacyReviewScreen {...props} />
+}
+
+function LegacyReviewScreen({ state, media, mySlot, names, baseUrl, serverNow, send, restored }: ReviewScreenProps) {
   const segment = state.segments[state.current]
   const turn = segment?.index ?? 0
   const partner: PSlot = mySlot === 'P1' ? 'P2' : 'P1'

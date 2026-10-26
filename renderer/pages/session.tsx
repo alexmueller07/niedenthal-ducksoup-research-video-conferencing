@@ -77,6 +77,8 @@ export default function ParticipantSession() {
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
   const [setupCheck, setSetupCheck] = useState<CalibrationProgress | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState | null>(null)
+  const [ratingAck, setRatingAck] = useState<{ turn: number; sequence: number } | null>(null)
+  const [ratingError, setRatingError] = useState('')
   const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
   const [reviewDraft, setReviewDraft] = useState<RestoredDraft | null>(null)
   const [mySlot, setMySlot] = useState<PSlot | null>(null)
@@ -371,8 +373,14 @@ export default function ParticipantSession() {
         case 'review-state':
           setReviewState(msg.state)
           return
+        case 'rating-ack':
+          setRatingAck({ turn: msg.turn, sequence: msg.sequence })
+          setRatingError('')
+          return
         case 'review-media':
           setReviewMedia(msg.media)
+          setRatingAck(null)
+          setRatingError('')
           // A new (or ended) review: an answer kept from an earlier one does not belong to it.
           setReviewDraft(null)
           return
@@ -380,6 +388,7 @@ export default function ParticipantSession() {
           setReviewDraft({ turn: msg.turn, text: msg.text, submitted: msg.submitted })
           return
         case 'review-error':
+          setRatingError(msg.reason)
           console.warn('[review]', msg.reason)
           return
         case 'rejected':
@@ -671,6 +680,7 @@ export default function ParticipantSession() {
       )}
 
       {/* ---- Live call ---- */}
+      {phase === 'review' && ratingError && <div role="alert" className="fixed top-0 left-0 right-0 z-50 bg-red-950 p-3 text-center text-red-100">{ratingError}</div>}
       {phase === 'live' && (
         <div className="absolute inset-0 bg-black">
           <video
@@ -736,6 +746,7 @@ export default function ParticipantSession() {
       {reviewing && (
         reviewState && reviewState.status !== 'idle' && reviewMedia && mySlot ? (
           <ReviewScreen
+            ratingAck={ratingAck}
             state={reviewState}
             media={reviewMedia}
             mySlot={mySlot}

@@ -34,6 +34,16 @@ export interface ReviewTrackOptions {
 }
 
 export class ReviewTrack {
+  readyAt(timelineMs: number): boolean {
+    const hit = resolveMediaAt(this.opts.parts, timelineMs)
+    return !!hit && !this.busy && !this.broken && !this.gap &&
+      this.url === hit.part.url && !this.video.seeking && this.video.readyState >= 3
+  }
+  playbackTimeMs(): number | null {
+    if (this.busy || this.broken || this.gap || this.video.paused || this.video.seeking || this.video.readyState < 3) return null
+    const part = this.opts.parts.find(p => p.url === this.url)
+    return part ? part.offsetMs + this.video.currentTime * 1000 : null
+  }
   private url = ''
   private busy = false
   /** Bumped by each prepare(), so an older one that is still waiting steps aside. */
