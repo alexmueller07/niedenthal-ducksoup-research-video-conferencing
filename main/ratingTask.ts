@@ -18,7 +18,7 @@ export const RATING_INSTRUCTIONS = [
   "Before we begin: please check that the computer's volume is at a comfortable level. You will hear the audio from your conversation. Ask your researcher if you would like help adjusting it.",
   'In this part of the study, you will watch the video recording of the conversation you just had.',
   'We are interested in two things: how YOU were feeling during the conversation, and how YOUR PARTNER was feeling during the conversation.',
-  'The video is split into parts. Before each part, the screen will tell you whether to focus on YOUR OWN feelings or YOUR PARTNER’S feelings, and a reminder stays on the screen while you watch.',
+  "The video is split into parts. Before each part, the screen will tell you whether to focus on YOUR OWN feelings or YOUR PARTNER'S feelings, and a reminder stays in the corner of the screen while you watch.",
   'As the video plays, continuously move the slider to indicate how positive or negative YOU or YOUR PARTNER felt at that moment during the conversation.',
   'At certain points, you will be asked to write a short response and make ratings about how you or your partner felt during the part of the conversation you just watched.',
 ]
