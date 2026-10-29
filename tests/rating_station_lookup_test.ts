@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { findRatingRecordings, normalizeRatingDyad } from '../main/ratingStation'
+import { findRatingRecordings, findRatingRecordingsByParticipant, normalizeRatingDyad } from '../main/ratingStation'
 
 assert.equal(normalizeRatingDyad('dyad-014-room2'), '014')
 assert.equal(normalizeRatingDyad('14'), '014')
@@ -37,6 +37,11 @@ try {
   assert.equal(found.filter(c => c.source === 'session').length, 2)
   assert.ok(found.filter(c => c.source === 'session').every(c => c.recordings.length === 4 && c.participantIds.P1 === 'P101'))
   assert.equal(found.filter(c => c.source === 'suite').length, 1)
+  const byParticipant = await findRatingRecordingsByParticipant(root, 'p101')
+  assert.equal(byParticipant.length, 2)
+  assert.ok(byParticipant.every(candidate => candidate.dyadId === '014' && candidate.participantIds.P1 === 'P101'))
+  assert.deepEqual(await findRatingRecordingsByParticipant(root, 'P10'), [])
+  assert.deepEqual(await findRatingRecordingsByParticipant(root, '../P101'), [])
   assert.deepEqual(await findRatingRecordings(root, '015'), [{ id: 'other', label: 'other', modifiedAt: (await fs.stat(path.join(unrelated, 'session_summary.json'))).mtime.toISOString(), recordings: [], participantIds: { P1: '' }, source: 'session' }])
   const outside = path.join(temp, 'outside.mp4')
   await fs.writeFile(outside, 'outside')

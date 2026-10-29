@@ -19,6 +19,7 @@ export default function RatingStationPage() {
   const [files, setFiles] = useState<File[]>([])
   const picker = useRef<HTMLInputElement>(null)
   const [dyad, setDyad] = useState('')
+  const [lookupParticipant, setLookupParticipant] = useState('')
   const [round, setRound] = useState(1)
   const [seat, setSeat] = useState<'P1' | 'P2'>('P1')
   const [manualParticipant, setManualParticipant] = useState('')
@@ -43,13 +44,14 @@ export default function RatingStationPage() {
   const check = useRef<AbortController | null>(null)
   const normalizedDyad = normalizeDyad(dyad)
   const selected = candidates.find(c => c.id === selectedId)
+  const effectiveDyad = lookupParticipant.trim() ? selected?.dyadId || '' : normalizedDyad
   const otherSeat = seat === 'P1' ? 'P2' : 'P1'
   const participant = selected?.participantIds[seat] || manualParticipant.trim()
   const partner = selected?.participantIds[otherSeat] || manualPartner.trim()
   const idsValid = validId(participant) && validId(partner) && participant !== partner
   const detailsValid = Boolean(ra.trim() && initials.trim() && date && time)
-  const canStart = completeRecording(selected) && idsValid && detailsValid && !searching
-  const nextStep = !root ? 'Choose a recordings folder.' : !normalizedDyad ? 'Enter the dyad ID.' : searching ? 'Searching for this dyad...' : !selected ? 'Select a conversation recording.' : !completeRecording(selected) ? 'This recording is incomplete.' : !idsValid ? 'Check both participant IDs.' : !detailsValid ? 'Complete the session details.' : 'Ready to check video files and begin.'
+  const canStart = Boolean(effectiveDyad && completeRecording(selected) && idsValid && detailsValid && !searching)
+  const nextStep = !root ? 'Choose a recordings folder.' : !lookupParticipant.trim() && !normalizedDyad ? 'Enter a participant or dyad ID.' : searching ? 'Searching for the recording...' : !selected ? 'Select a conversation recording.' : !effectiveDyad ? 'The recording has no dyad ID.' : !completeRecording(selected) ? 'This recording is incomplete.' : !idsValid ? 'Check both participant IDs.' : !detailsValid ? 'Complete the session details.' : 'Ready to check video files and begin.'
 
   useEffect(() => {
     setNative(hasIpc())
@@ -60,20 +62,28 @@ export default function RatingStationPage() {
   useEffect(() => {
     const ticket = ++request.current
     setCandidates([]); setSelectedId(''); setSearchError(''); setError(''); setSearched(false)
-    const canSearch = Boolean(normalizedDyad && root && (native || files.length))
+    const canSearch = Boolean((lookupParticipant.trim() || normalizedDyad) && root && (native || files.length))
     setSearching(canSearch)
     if (!canSearch) return
     const timer = setTimeout(async () => {
       try {
-        const results = native ? await ipcInvoke<RatingCandidate[]>('rating:lookup', normalizedDyad) : await browserRatingLookup(files, normalizedDyad)
+        const results = lookupParticipant.trim()
+          ? native ? await ipcInvoke<RatingCandidate[]>('rating:lookup-participant', lookupParticipant.trim()) : await browserRatingLookup(files, '', lookupParticipant.trim())
+          : native ? await ipcInvoke<RatingCandidate[]>('rating:lookup', normalizedDyad) : await browserRatingLookup(files, normalizedDyad)
         if (ticket !== request.current) return
         setCandidates(results || [])
-        if (results?.length === 1) setSelectedId(results[0].id)
+        if (results?.length === 1) {
+          setSelectedId(results[0].id)
+          if (lookupParticipant.trim()) {
+            const matchedSeat = (['P1', 'P2'] as const).find(slot => results[0].participantIds[slot]?.toLowerCase() === lookupParticipant.trim().toLowerCase())
+            if (matchedSeat) setSeat(matchedSeat)
+          }
+        }
       } catch (e) { if (ticket === request.current) setSearchError(message(e)) }
       finally { if (ticket === request.current) { setSearching(false); setSearched(true) } }
     }, 350)
     return () => { clearTimeout(timer); ++request.current }
-  }, [normalizedDyad, root, native, files, refresh])
+  }, [normalizedDyad, lookupParticipant, root, native, files, refresh])
 
   useEffect(() => {
     setManualParticipant(''); setManualPartner(''); setInitials(''); setSelfColor(''); setPartnerColor('')
@@ -102,7 +112,7 @@ export default function RatingStationPage() {
     try {
       let recordings: Pick<RatingRecording, 'seat' | 'kind'>[]
       if (native) {
-        const prepared = await ipcInvoke<{ recordings: Pick<RatingRecording, 'seat' | 'kind'>[]; urls: string[] }>('rating:prepare', normalizedDyad, selected.id, runId, seat)
+        const prepared = await ipcInvoke<{ recordings: Pick<RatingRecording, 'seat' | 'kind'>[]; urls: string[] }>('rating:prepare', effectiveDyad, selected.id, runId, seat)
         if (!prepared) throw new Error('Could not prepare the selected recording.')
         urls = prepared.urls; recordings = prepared.recordings
       } else {
@@ -116,7 +126,7 @@ export default function RatingStationPage() {
       if (urls.length !== 2) throw new Error('Both participant videos are required.')
       await Promise.all(urls.map((url, i) => inspectRatingVideo(url, controller.signal).catch(e => { throw new Error(`${recordings[i].seat}: ${message(e)}`) })))
       if (controller.signal.aborted) throw new Error('Recording check cancelled.')
-      setRun({ runId, dyad: normalizedDyad, candidateId: selected.id, participantId: participant, partnerId: partner, seat, round, group, selfColor, partnerColor, initials: initials.trim(), researcher: ra.trim(), date, time, native, recordings: recordings.map((r, i) => ({ ...r, url: urls[i] })) })
+      setRun({ runId, dyad: effectiveDyad, candidateId: selected.id, participantId: participant, partnerId: partner, seat, round, group, selfColor, partnerColor, initials: initials.trim(), researcher: ra.trim(), date, time, native, recordings: recordings.map((r, i) => ({ ...r, url: urls[i] })) })
     } catch (e) {
       if (!controller.signal.aborted) setError(message(e))
       controller.abort()
@@ -148,9 +158,10 @@ export default function RatingStationPage() {
       </section>
       <div className="rating-workspace">
         <div className="rating-setup-main">
-          <SetupSection number="01" title="Participant" detail="Enter a dyad ID, then choose the seat for this station.">
+          <SetupSection number="01" title="Participant" detail="Enter a participant ID to find their recording, or search by dyad ID.">
             <div className="rating-setup-grid">
-              <Field label="Dyad ID" value={dyad} onChange={setDyad} placeholder="e.g. 014" />
+              <Field label="Find by participant ID" value={lookupParticipant} onChange={setLookupParticipant} placeholder="e.g. P101" />
+              <Field label="Dyad ID (optional)" value={dyad} onChange={setDyad} placeholder="e.g. 014" />
               <div className="suite-field"><span>Seat in recording</span><Segment choices={['P1', 'P2'] as const} value={seat} label={v => v} onChange={setSeat} ariaLabel="Seat in recording" /></div>
               <Field label="Participant ID" value={participant} onChange={setManualParticipant} readOnly={Boolean(selected?.participantIds[seat])} />
               <Field label="Partner ID" value={partner} onChange={setManualPartner} readOnly={Boolean(selected?.participantIds[otherSeat])} />
@@ -170,9 +181,9 @@ export default function RatingStationPage() {
           </SetupSection>
         </div>
         <aside className="rating-recording-panel" aria-label="Conversation recording">
-          <div className="rating-recording-heading"><h2>Conversation video</h2><button type="button" className="rating-icon-button" title="Search again" aria-label="Search again" disabled={!root || !normalizedDyad || searching} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button></div>
+          <div className="rating-recording-heading"><h2>Conversation video</h2><button type="button" className="rating-icon-button" title="Search again" aria-label="Search again" disabled={!root || (!lookupParticipant.trim() && !normalizedDyad) || searching} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button></div>
           <div aria-live="polite" aria-busy={searching}>
-            {searchError ? <p className="rating-warning" role="alert">{searchError}</p> : searching ? <div className="rating-empty"><Loader2 className="rating-spin" size={23} /><strong>Searching dyad {normalizedDyad}</strong><p>Checking the selected folder.</p></div> : !candidates.length ? <div className="rating-empty"><Search size={23} /><strong>{!root ? 'Choose your Research Drive' : !normalizedDyad ? 'Find a conversation' : 'No recording found'}</strong><p>{!root ? 'Recordings will appear here.' : !normalizedDyad ? 'Enter the dyad ID to search.' : searched ? 'Check the dyad ID and folder, then search again after the recording finishes copying.' : 'Waiting for the selected folder.'}</p></div> : <div className="rating-candidates">{candidates.map(candidate => <button type="button" key={candidate.id} className={selectedId === candidate.id ? 'selected' : ''} aria-pressed={selectedId === candidate.id} onClick={() => { setSelectedId(candidate.id); setError('') }}><Video size={18} /><span><strong>{candidate.label}</strong><small>{new Date(candidate.modifiedAt).toLocaleString()}</small><small className={completeRecording(candidate) ? 'rating-ready-text' : ''}>{completeRecording(candidate) ? 'All 4 tracks found' : candidate.source === 'suite' ? 'Single-video recording' : 'Missing or duplicate tracks'}</small></span>{selectedId === candidate.id && <Check size={17} />}</button>)}</div>}
+            {searchError ? <p className="rating-warning" role="alert">{searchError}</p> : searching ? <div className="rating-empty"><Loader2 className="rating-spin" size={23} /><strong>Searching recordings</strong><p>Checking the selected folder.</p></div> : !candidates.length ? <div className="rating-empty"><Search size={23} /><strong>{!root ? 'Choose your Research Drive' : !lookupParticipant.trim() && !normalizedDyad ? 'Find a conversation' : 'No recording found'}</strong><p>{!root ? 'Recordings will appear here.' : !lookupParticipant.trim() && !normalizedDyad ? 'Enter a participant or dyad ID to search.' : searched ? 'Check the ID and folder, then search again after the recording finishes copying.' : 'Waiting for the selected folder.'}</p></div> : <div className="rating-candidates">{candidates.map(candidate => <button type="button" key={candidate.id} className={selectedId === candidate.id ? 'selected' : ''} aria-pressed={selectedId === candidate.id} onClick={() => { setSelectedId(candidate.id); setError(''); if (lookupParticipant.trim()) { const matchedSeat = (['P1', 'P2'] as const).find(slot => candidate.participantIds[slot]?.toLowerCase() === lookupParticipant.trim().toLowerCase()); if (matchedSeat) setSeat(matchedSeat) } }}><Video size={18} /><span><strong>{candidate.label}</strong><small>{new Date(candidate.modifiedAt).toLocaleString()}</small><small className={completeRecording(candidate) ? 'rating-ready-text' : ''}>{completeRecording(candidate) ? 'All 4 tracks found' : candidate.source === 'suite' ? 'Single-video recording' : 'Missing or duplicate tracks'}</small></span>{selectedId === candidate.id && <Check size={17} />}</button>)}</div>}
           </div>
           {selected && !completeRecording(selected) && <p className="rating-warning">This task needs one clean and one altered video per participant. Select a complete Session View recording.</p>}
           <div className="rating-handoff-summary">

@@ -33,7 +33,7 @@ import { SessionLogger } from './logger'
 import { DEFAULT_PORT, APP_VERSION } from './protocol'
 import { patchMp4Duration } from './mp4duration'
 import { scanSessionRoot, resolveSessionFile } from './sessionCatalog'
-import { findRatingRecordings, normalizeRatingDyad } from './ratingStation'
+import { findRatingRecordings, findRatingRecordingsByParticipant, normalizeRatingDyad } from './ratingStation'
 import { ReviewMediaRoute } from './mediaRoute'
 import { checkReleaseUpdate } from '../shared/releaseUpdate'
 
@@ -376,6 +376,11 @@ ipcMain.handle('rating:lookup', async (_e, rawDyad: string) => {
   const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
   if (!fs.existsSync(root)) return []
   return findRatingRecordings(root, rawDyad)
+})
+ipcMain.handle('rating:lookup-participant', async (_e, participantId: string) => {
+  const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
+  if (!fs.existsSync(root)) return []
+  return findRatingRecordingsByParticipant(root, participantId)
 })
 ipcMain.handle('rating:prepare', async (_e, rawDyad: string, candidateId: string, runId: string, seat: string) => {
   if (!/^[a-f0-9-]{36}$/.test(runId)) throw new Error('Invalid rating run.')

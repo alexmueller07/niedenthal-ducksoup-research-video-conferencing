@@ -16,7 +16,7 @@ export function completeRecording(candidate?: RatingCandidate): boolean {
     RATING_TRACK_KEYS.every(key => candidate.recordings.filter(r => `${r.seat}:${r.kind}` === key).length === 1)
 }
 
-export async function browserRatingLookup(files: File[], dyad: string): Promise<BrowserRatingCandidate[]> {
+export async function browserRatingLookup(files: File[], dyad: string, participantId = ''): Promise<BrowserRatingCandidate[]> {
   const byPath = new Map(files.map(file => [file.webkitRelativePath, file]))
   const found: BrowserRatingCandidate[] = []
   for (const manifestFile of files.filter(file => file.name === 'session_summary.json')) {
@@ -25,7 +25,10 @@ export async function browserRatingLookup(files: File[], dyad: string): Promise<
     let manifest: { participants?: { slot?: string; identity?: { dyadId?: string; participantId?: string } }[] }
     try { manifest = JSON.parse(await manifestFile.text()) } catch { continue }
     const people = Array.isArray(manifest?.participants) ? manifest.participants : []
-    if (!people.some(p => normalizeDyad(String(p?.identity?.dyadId || '')) === dyad)) continue
+    const matched = participantId
+      ? people.find(p => String(p?.identity?.participantId || '').trim().toLowerCase() === participantId.trim().toLowerCase())
+      : people.find(p => normalizeDyad(String(p?.identity?.dyadId || '')) === dyad)
+    if (!matched) continue
     const participantIds: RatingCandidate['participantIds'] = {}
     for (const person of people) {
       if (person.slot === 'P1' || person.slot === 'P2') participantIds[person.slot] = String(person.identity?.participantId || '')
@@ -49,7 +52,8 @@ export async function browserRatingLookup(files: File[], dyad: string): Promise<
         }
       } catch { /* Keep incomplete takes visible so the researcher can identify them. */ }
     }
-    found.push({ id, label: id === '.' ? folder.split('/')[0] : id, source: 'session', modifiedAt: new Date(manifestFile.lastModified).toISOString(), recordings, participantIds, files: selected })
+    found.push({ id, label: id === '.' ? folder.split('/')[0] : id, source: 'session', modifiedAt: new Date(manifestFile.lastModified).toISOString(), recordings, participantIds,
+      ...(participantId ? { dyadId: normalizeDyad(String(matched.identity?.dyadId || '')) } : {}), files: selected })
   }
   return found.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
 }

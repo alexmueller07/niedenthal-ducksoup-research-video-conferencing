@@ -9,6 +9,7 @@ export type RatingCandidate = {
   modifiedAt: string
   recordings: RatingRecording[]
   participantIds: Partial<Record<'P1' | 'P2', string>>
+  dyadId?: string
   source: 'session' | 'suite'
 }
 
@@ -26,12 +27,15 @@ async function inside(root: string, file: string): Promise<boolean> {
   } catch { return false }
 }
 
-async function sessionCandidate(root: string, dir: string, id: string, dyad: string): Promise<RatingCandidate | null> {
+async function sessionCandidate(root: string, dir: string, id: string, dyad: string, participantId?: string): Promise<RatingCandidate | null> {
   const summaryPath = path.join(dir, 'session_summary.json')
   let summary: any
   try { summary = JSON.parse(await fs.readFile(summaryPath, 'utf8')) } catch { return null }
   const people = Array.isArray(summary?.participants) ? summary.participants : []
-  if (!people.some((p: any) => normalizeRatingDyad(String(p?.identity?.dyadId ?? '')) === dyad)) return null
+  const matched = participantId
+    ? people.find((p: any) => String(p?.identity?.participantId ?? '').trim().toLowerCase() === participantId.trim().toLowerCase())
+    : people.find((p: any) => normalizeRatingDyad(String(p?.identity?.dyadId ?? '')) === dyad)
+  if (!matched) return null
   const participantIds: RatingCandidate['participantIds'] = {}
   for (const p of people) {
     if (p?.slot === 'P1') participantIds.P1 = String(p.identity?.participantId ?? '')
@@ -56,17 +60,17 @@ async function sessionCandidate(root: string, dir: string, id: string, dyad: str
       }
     }
   } catch { /* A matching session with missing recordings is still shown as incomplete. */ }
-  return { id, label: id, modifiedAt: (await fs.stat(summaryPath)).mtime.toISOString(), recordings, participantIds, source: 'session' }
+  return { id, label: id, modifiedAt: (await fs.stat(summaryPath)).mtime.toISOString(), recordings, participantIds,
+    ...(participantId ? { dyadId: normalizeRatingDyad(String(matched.identity?.dyadId ?? '')) } : {}), source: 'session' }
 }
 
-export async function findRatingRecordings(rootPath: string, rawDyad: string): Promise<RatingCandidate[]> {
-  const dyad = normalizeRatingDyad(rawDyad)
-  if (!dyad) return []
+async function findRatingCandidates(rootPath: string, dyad: string, participantId?: string): Promise<RatingCandidate[]> {
+  if (!dyad && !participantId) return []
   const root = await fs.realpath(rootPath)
   const candidates: RatingCandidate[] = []
   const scan = async (dir: string, depth: number) => {
     const id = path.relative(root, dir) || '.'
-    const found = await sessionCandidate(root, dir, id, dyad)
+    const found = await sessionCandidate(root, dir, id, dyad, participantId)
     if (found) candidates.push(found)
     if (depth >= 3) return
     const entries = await fs.readdir(dir, { withFileTypes: true })
@@ -76,6 +80,7 @@ export async function findRatingRecordings(rootPath: string, rawDyad: string): P
     }
   }
   await scan(root, 0)
+  if (participantId) return candidates.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
   const folder = `dyad-${dyad}`
   for (const dir of [root, path.join(root, folder)]) {
     let files: string[]
@@ -89,4 +94,14 @@ export async function findRatingRecordings(rootPath: string, rawDyad: string): P
     }
   }
   return candidates.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
+}
+
+export function findRatingRecordings(rootPath: string, rawDyad: string): Promise<RatingCandidate[]> {
+  return findRatingCandidates(rootPath, normalizeRatingDyad(rawDyad))
+}
+
+export function findRatingRecordingsByParticipant(rootPath: string, participantId: string): Promise<RatingCandidate[]> {
+  const id = participantId.trim()
+  if (!/^[A-Za-z0-9_-]{1,60}$/.test(id)) return Promise.resolve([])
+  return findRatingCandidates(rootPath, '', id)
 }
