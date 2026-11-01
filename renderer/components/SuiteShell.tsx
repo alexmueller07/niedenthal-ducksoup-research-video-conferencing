@@ -3,13 +3,13 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 import type { ReactNode } from 'react'
 import {
+  ArrowLeft,
   ArrowUpRight,
   Video,
   ClipboardList,
   FolderOpen,
   FlaskConical,
   Settings,
-  LayoutGrid,
 } from 'lucide-react'
 import { APP_VERSION } from '../lib/protocol'
 
@@ -66,57 +66,28 @@ export function SuiteShell({ children }: { children: ReactNode }) {
           {current ? `${current.title} | Session View` : 'Session View'}
         </title>
       </Head>
-      <aside className="suite-sidebar">
-        <Link href="/" className="suite-brand">
-          <span className="suite-brand-mark">
-            <Video size={21} />
-          </span>
-          <span>
-            Session View<small>Research suite</small>
-          </span>
-        </Link>
-        <nav aria-label="Suite navigation">
-          <Link
-            href="/"
-            className={`suite-nav ${pathname === '/' ? 'selected' : ''}`}
-            aria-current={pathname === '/' ? 'page' : undefined}
-          >
-            <LayoutGrid size={18} />
-            Overview
-          </Link>
-          <span className="suite-nav-label">Workspace</span>
-          {SUITE_SECTIONS.map((s) => (
-            <Link
-              href={s.href}
-              key={s.href}
-              className={`suite-nav ${current?.href === s.href ? 'selected' : ''}`}
-              aria-current={current?.href === s.href ? 'page' : undefined}
-            >
-              <s.icon size={18} />
-              <span>{s.title}</span>
-              {s.badge && <small>Preview</small>}
-            </Link>
-          ))}
-        </nav>
-        <footer>
-          <span className="suite-status-dot" />
-          Local workspace<span>v{APP_VERSION}</span>
-        </footer>
-      </aside>
       <div className="suite-main">
-        <header className="suite-topbar">
-          <span>
-            Workspace <span className="suite-muted">/</span>{' '}
-            <strong>{current?.title || 'Overview'}</strong>
-          </span>
-          <Link
-            href="/settings"
-            title="Settings and updates"
-            aria-label="Settings and updates"
-          >
-            <Settings size={18} />
-          </Link>
-        </header>
+        {/* The Testing Station has its own header with a safe Back button (it stops a running test first). */}
+        {pathname !== '/testing' && <header className="suite-topbar">
+          {pathname === '/' ? (
+            <span className="suite-topbar-brand">
+              <span className="suite-brand-mark">
+                <Video size={18} />
+              </span>
+              <strong>Session View</strong>
+              <span className="suite-muted">Research suite</span>
+            </span>
+          ) : (
+            <span className="suite-topbar-back">
+              <Link href="/" className="suite-btn" aria-label="Back to the dashboard">
+                <ArrowLeft size={16} />
+                Dashboard
+              </Link>
+              <strong>{current?.title}</strong>
+            </span>
+          )}
+          <span className="suite-muted">v{APP_VERSION}</span>
+        </header>}
         {children}
       </div>
     </div>

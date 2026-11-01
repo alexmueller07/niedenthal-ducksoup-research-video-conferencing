@@ -839,7 +839,7 @@ export default function AdminDashboard() {
             className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800"
           >
             <span aria-hidden="true">‹</span>
-            Back
+            Dashboard
           </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 ring-1 ring-violet-500/40">

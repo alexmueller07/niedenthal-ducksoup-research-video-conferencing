@@ -305,11 +305,11 @@ export default function DashboardPage() {
               type="button"
               onClick={() => void backHome()}
               disabled={recording === 'saving'}
-              aria-label="Back to main screen"
+              aria-label="Back to the dashboard"
               className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:opacity-50"
             >
               <span aria-hidden="true">‹</span>
-              {recording === 'saving' ? 'Saving…' : 'Back'}
+              {recording === 'saving' ? 'Saving…' : 'Dashboard'}
             </button>
             <h1 className="text-sm font-semibold">1-Person Test Station</h1>
             <span
