@@ -54,8 +54,8 @@ export const PRESETS: ModificationPreset[] = [
   {
     id: 'smile-subtle',
     label: 'Smile (subtle)',
-    description: 'Adds a fifth of their own maximum smile. Often below conscious detection.',
-    alpha: 0.2,
+    description: 'Adds about a third of their own maximum smile. Noticeable only on a close look.',
+    alpha: 0.35,
     voiceSemitones: 0,
     voiceSmile: 0,
   },

@@ -128,7 +128,7 @@ export const MIN_YAW_SYMMETRY = 0.55
 export const MAX_CLOSED_SMILE_OPEN_RATIO = 0.12
 
 /** How far the morph fades at a wide-open mouth (1 − this = the floor). */
-export const OPEN_MOUTH_FADE = 0.6
+export const OPEN_MOUTH_FADE = 0.4
 
 /**
  * Caps on how far the rest of the face is allowed to move, in mouth-widths.
@@ -138,7 +138,16 @@ export const OPEN_MOUTH_FADE = 0.6
  * a way a slightly stiff cheek never does — so a mis-measurement here is much
  * more costly than under-moving.
  */
-export const MAX_CHEEK_RISE = 0.12
+export const MAX_CHEEK_RISE = 0.15
+/**
+ * Even a small smile should lift the cheeks and squeeze the lower lids, as a
+ * real one does (a mouth that widens alone reads as a pasted-on smile). When a
+ * participant's calibration measured less than this, or nothing, the smile
+ * uses these shares of its own mouth-corner travel instead. Both are capped.
+ */
+export const SMILE_CHEEK_FLOOR = 0.4
+export const SMILE_EYE_SQUEEZE = 0.2
+export const MAX_EYE_SQUEEZE = 0.04
 export const MAX_BROW_RISE = 0.08
 export const MAX_BROW_FURROW = 0.06
 /** Below this the measurement is noise, and moving by it would only add jitter. */
@@ -552,6 +561,8 @@ export interface MorphDirection {
   cornerAngleRad: number
   poutDrop: number
   cheekRise: number
+  /** Lower lids lift a little toward the cheek (the eye-narrowing part of a real smile). */
+  eyeSqueeze: number
   browRise: number
   browFurrow: number
 }
@@ -567,9 +578,14 @@ export function morphDirectionFor(
       cornerTravel: d.cornerTravel,
       cornerAngleRad: d.cornerAngleRad,
       poutDrop: 0,
-      // Absent on an uncalibrated participant and on files written before the
-      // cheeks and brows were measured — both fall back to a mouth-only morph.
-      cheekRise: d.cheekRise ?? 0,
+      // Whatever calibration measured for the cheeks, but never less than a
+      // share of the mouth travel, so cheeks come up even for an uncalibrated
+      // participant or a file written before the cheeks were measured.
+      cheekRise: Math.max(
+        d.cheekRise ?? 0,
+        Math.min(MAX_CHEEK_RISE, d.cornerTravel * SMILE_CHEEK_FLOOR),
+      ),
+      eyeSqueeze: Math.min(MAX_EYE_SQUEEZE, d.cornerTravel * SMILE_EYE_SQUEEZE),
       browRise: d.browRise ?? 0,
       browFurrow: 0,
     }
@@ -580,6 +596,7 @@ export function morphDirectionFor(
     cornerAngleRad: d.cornerAngleRad,
     poutDrop: d.poutDrop,
     cheekRise: d.cheekRise ?? 0,
+    eyeSqueeze: 0,
     browRise: d.browRise ?? 0,
     browFurrow: d.browFurrow ?? 0,
   }

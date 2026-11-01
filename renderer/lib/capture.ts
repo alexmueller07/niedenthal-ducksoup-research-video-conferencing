@@ -129,6 +129,97 @@ export class CaptureStation {
     this.alpha = alpha
     this.face.setAlpha(alpha)
   }
+  /**
+   * One picture for the AU report: the untouched camera frame on the left, the
+   * morphed frame on the right, both marked with the action-unit landmarks, and
+   * the amount the morph moved each region along the bottom.
+   */
+  auStill(): { dataUrl: string; markdown: string } | null {
+    const { marks, size, morph } = this.face.auMarkup
+    const w = this.alteredCanvas.width
+    const h = this.alteredCanvas.height
+    if (!marks.length || !size.w || !w || !h) return null
+    const band = 74
+    const canvas = document.createElement('canvas')
+    canvas.width = w * 2
+    canvas.height = h + band
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.fillStyle = '#0b0f14'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(this.hiddenVideo, 0, 0, w, h)
+    ctx.drawImage(this.alteredCanvas, w, 0, w, h)
+    const colors: Record<string, string> = {
+      'AU12/15': '#ffd23f', AU6: '#3ddc97', 'AU6/7': '#4cc9f0', 'AU1/2': '#c77dff', AU4: '#ff8fab', AU17: '#ff9f1c',
+    }
+    ctx.font = '13px system-ui, sans-serif'
+    for (const [dx, title] of [[0, 'ORIGINAL'], [w, 'MORPHED']] as const) {
+      for (const m of marks) {
+        const x = dx + (m.x / size.w) * w
+        const y = (m.y / size.h) * h
+        ctx.fillStyle = colors[m.au] ?? '#fff'
+        ctx.beginPath()
+        ctx.arc(x, y, 4, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'
+        ctx.fillRect(x + 7, y - 11, ctx.measureText(m.au).width + 6, 16)
+        ctx.fillStyle = colors[m.au] ?? '#fff'
+        ctx.fillText(m.au, x + 10, y + 1)
+      }
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 15px system-ui, sans-serif'
+      ctx.fillText(title, dx + 12, 22)
+      ctx.font = '13px system-ui, sans-serif'
+    }
+    const pct = (n: number) => `${(n * 100).toFixed(1)}%`
+    const rows: [string, string, number][] = [
+      ['AU12/AU15 lip corners', 'lip corners (+ out and up, - down)', morph.lipCorner],
+      ['AU6 cheek raiser', 'cheeks lifted', morph.cheekRaise],
+      ['AU6/AU7 lower lid', 'lower lids lifted', morph.eyeSqueeze],
+      ['AU1/AU2 brow raise', 'brows (+ up, - down)', morph.browRaise],
+      ['AU4 brow lowerer', 'inner brows together', morph.browFurrow],
+      ['AU17 chin/lower lip', 'lower lip pout', morph.lipPout],
+    ]
+    ctx.fillStyle = '#e5e7eb'
+    ctx.font = '13px system-ui, sans-serif'
+    ctx.fillText(
+      `alpha ${this.alpha.toFixed(2)}   ` + rows.map(([au, , v]) => `${au.split(' ')[0]} ${pct(v)}`).join('   ') +
+        `   (amounts are % of mouth width; head-turn fade ${morph.yawFade}, open-mouth fade ${morph.openFade})`,
+      12, h + 24,
+    )
+    ctx.fillStyle = '#9ca3af'
+    ctx.fillText('Not modified by the app: AU13, AU45 (blink), AU66.', 12, h + 48)
+    const markdown =
+      `| Action unit | Region | Moved by the morph (% of mouth width) |\n|---|---|---|\n` +
+      rows.map(([au, region, v]) => `| ${au} | ${region} | ${pct(v)} |`).join('\n') +
+      `\n\nFades: head turn ${morph.yawFade}, open mouth ${morph.openFade}.\n`
+    return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), markdown }
+  }
+
+  /**
+   * Save an AU report picture and its numbers. Inside the app they go into the
+   * session folder's au_report/ (one picture per press, all listed in
+   * AU_report.md); in a plain browser the picture is downloaded.
+   */
+  async saveAuStill(): Promise<string | null> {
+    const still = this.auStill()
+    if (!still) {
+      this.log('No face to mark yet. Start the camera and face the screen.', 'warn')
+      return null
+    }
+    const name = `au_${new Date().toISOString().replace(/[:.]/g, '-')}_alpha${this.alpha.toFixed(2)}`
+    const dir = await this.ensureSessionDir()
+    if (hasIpc() && dir) {
+      const ipc = (window as unknown as { ipc: { invoke: <T>(c: string, a?: unknown) => Promise<T> } }).ipc
+      return ipc.invoke<string>('au:save', {
+        dir, name, dataUrl: still.dataUrl, alpha: this.alpha, markdown: still.markdown,
+      })
+    }
+    const blob = await (await fetch(still.dataUrl)).blob()
+    this.download(blob, `${name}.jpg`)
+    return `${name}.jpg`
+  }
+
   setOverlay(on: boolean) {
     this.overlay = on
   }

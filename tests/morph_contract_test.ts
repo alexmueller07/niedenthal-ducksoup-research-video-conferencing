@@ -14,6 +14,8 @@ import {
   MORPH_TRAVEL_MAX,
   MORPH_TRAVEL_MIN,
   OPEN_MOUTH_FADE,
+  SMILE_CHEEK_FLOOR,
+  MAX_EYE_SQUEEZE,
   TalkingDetector,
   cappedAlpha,
   geometricLevel,
@@ -140,18 +142,27 @@ assert.ok(
   'someone whose brows drop when they smile gets dropping brows',
 )
 
-// A calibration with no cheek/brow data - uncalibrated, or a file written
-// before these were measured - must behave exactly as the mouth-only morph did.
+// A calibration with no cheek data - uncalibrated, or a file written before
+// these were measured - still lifts the cheeks and narrows the eyes a little
+// (a share of the mouth travel), because a mouth that widens alone looks pasted on.
 const mouthOnly = JSON.parse(JSON.stringify(profile)) as CalibrationProfile
 delete (mouthOnly.derived.smile as { cheekRise?: number }).cheekRise
 delete (mouthOnly.derived.smile as { browRise?: number }).browRise
 const legacy = morphDirectionFor(mouthOnly, 1)
-assert.equal(legacy.cheekRise, 0, 'a file without cheek data moves nothing but the mouth')
+assert.ok(
+  Math.abs(legacy.cheekRise - profile.derived.smile.cornerTravel * SMILE_CHEEK_FLOOR) < 1e-9,
+  'a file without cheek data still gets a floor of cheek lift',
+)
+assert.ok(legacy.eyeSqueeze > 0 && legacy.eyeSqueeze <= MAX_EYE_SQUEEZE, 'and a small, capped eye squeeze')
+assert.equal(morphDirectionFor(profile, -0.5).eyeSqueeze, 0, 'a frown does not squeeze the eyes')
 assert.equal(legacy.browRise, 0, 'same for brows')
 assert.equal(legacy.cornerTravel, profile.derived.smile.cornerTravel, 'the mouth is untouched by this')
 
 const uncalibrated = morphDirectionFor(null, 1)
-assert.equal(uncalibrated.cheekRise, 0, 'an uncalibrated participant gets a mouth-only morph')
+assert.ok(uncalibrated.cheekRise > 0, 'an uncalibrated participant still gets cheeks that rise')
+assert.ok(uncalibrated.cheekRise <= MAX_CHEEK_RISE)
+// A measured cheek rise above the floor is kept as measured.
+assert.equal(morphDirectionFor(profile, 1).cheekRise, 0.05)
 assert.equal(uncalibrated.browRise, 0)
 assert.equal(uncalibrated.browFurrow, 0)
 

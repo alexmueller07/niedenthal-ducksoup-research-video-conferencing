@@ -43,6 +43,7 @@ import {
 } from './calibration'
 import type {
   CalibrationProfile,
+  AppliedMorph,
   CalibrationRuntimeState,
   ExpressionLabel,
   ExpressionState,
@@ -194,6 +195,40 @@ interface FaceAnchors {
   rightBrow: Pt
 }
 
+/** A labelled point on the face, in the pixels of the frame it was found in. */
+export interface AuMark {
+  au: string
+  name: string
+  x: number
+  y: number
+}
+
+/** [landmark, action unit, what it is]: the points the morph moves, for the AU report picture. */
+const AU_MARKS: [number, string, string][] = [
+  [LEFT_CORNER, 'AU12/15', 'lip corner'],
+  [RIGHT_CORNER, 'AU12/15', 'lip corner'],
+  [LEFT_CHEEK, 'AU6', 'cheek'],
+  [RIGHT_CHEEK, 'AU6', 'cheek'],
+  [LEFT_LOWER_LID, 'AU6/7', 'lower lid'],
+  [RIGHT_LOWER_LID, 'AU6/7', 'lower lid'],
+  [LEFT_BROW_MID, 'AU1/2', 'brow'],
+  [RIGHT_BROW_MID, 'AU1/2', 'brow'],
+  [LEFT_BROW_INNER, 'AU4', 'inner brow'],
+  [RIGHT_BROW_INNER, 'AU4', 'inner brow'],
+  [LOWER_LIP_CENTER, 'AU17', 'lower lip'],
+]
+
+const NO_MORPH: AppliedMorph = {
+  yawFade: 1,
+  openFade: 1,
+  lipCorner: 0,
+  cheekRaise: 0,
+  eyeSqueeze: 0,
+  browRaise: 0,
+  browFurrow: 0,
+  lipPout: 0,
+}
+
 export class FaceMorphProcessor {
   private landmarker: FaceLandmarker | null = null
   private src: HTMLCanvasElement // holds the raw frame for sampling
@@ -232,6 +267,9 @@ export class FaceMorphProcessor {
   private liveLevel = 0
   private headroom = 1
   private appliedAlpha = 0
+  private appliedMorph: AppliedMorph = { ...NO_MORPH }
+  private marks: AuMark[] = []
+  private markSize = { w: 0, h: 0 }
 
   constructor() {
     this.src = document.createElement('canvas')
@@ -343,6 +381,11 @@ export class FaceMorphProcessor {
     return this.lastExpression
   }
 
+  /** Where the action-unit landmarks were on the last frame, and what the morph moved. */
+  get auMarkup(): { marks: AuMark[]; size: { w: number; h: number }; morph: AppliedMorph } {
+    return { marks: this.marks, size: this.markSize, morph: this.appliedMorph }
+  }
+
   get calibration(): CalibrationRuntimeState {
     return {
       calibrated: this.calibrationProfile !== null,
@@ -351,6 +394,7 @@ export class FaceMorphProcessor {
       liveLevel: round2(this.liveLevel),
       headroom: round2(this.headroom),
       appliedAlpha: round2(this.appliedAlpha),
+      morph: this.appliedMorph,
       talking: this.talkingDetector.talking,
     }
   }
@@ -412,6 +456,8 @@ export class FaceMorphProcessor {
     const toPx = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height })
     const geometry = this.computeGeometry(toPx)
     this.lastGeometry = geometry
+    this.marks = AU_MARKS.map(([index, au, name]) => ({ au, name, ...toPx(index) }))
+    this.markSize = { w: width, h: height }
 
     this.updateExpressionFromRaw(
       tsMs,
@@ -425,6 +471,7 @@ export class FaceMorphProcessor {
     this.liveLevel = geometricLevel(this.calibrationProfile, geometry, direction)
     this.headroom = Math.max(0, 1 - this.liveLevel)
 
+    this.appliedMorph = { ...NO_MORPH }
     if (Math.abs(this.alphaCurrent) < 0.02) {
       this.appliedAlpha = 0
       return false
@@ -459,12 +506,25 @@ export class FaceMorphProcessor {
     const openScale = openMouthScale(this.calibrationProfile, geometry.mouthOpenRatio)
     const strength = capped * yawScale * openScale
     const direction_ = this.morphDirection(strength)
+    const share = Math.abs(strength)
+    const third = (n: number) => Math.round(n * 1000) / 1000
+    this.appliedMorph = {
+      yawFade: third(yawScale),
+      openFade: third(openScale),
+      lipCorner: third(Math.sign(strength) * share * direction_.cornerTravel),
+      cheekRaise: third(share * direction_.cheekRise),
+      eyeSqueeze: third(share * direction_.eyeSqueeze),
+      browRaise: third(share * direction_.browRise),
+      browFurrow: third(share * direction_.browFurrow),
+      lipPout: third(share * direction_.poutDrop),
+    }
     // Does anything beyond the mouth actually move for this person? If not
     // (uncalibrated, or a calibration recorded before cheeks and brows were
     // measured) keep the original tight mouth box and mesh, so the morph is
     // byte-for-byte what it was and no extra area gets rendered for nothing.
     const couples =
       Math.abs(direction_.cheekRise) > 0 ||
+      Math.abs(direction_.eyeSqueeze) > 0 ||
       Math.abs(direction_.browRise) > 0 ||
       Math.abs(direction_.browFurrow) > 0
 
@@ -897,6 +957,7 @@ export class FaceMorphProcessor {
     return {
       ...d,
       cheekRise: d.cheekRise * k,
+      eyeSqueeze: d.eyeSqueeze * k,
       browRise: d.browRise * k,
       browFurrow: d.browFurrow * k,
     }
@@ -928,7 +989,7 @@ export class FaceMorphProcessor {
     const mag = Math.abs(strength) * mouthWidth
     // Corner travel and direction come from this participant's calibration, so
     // the same alpha moves a small mouth and a wide one by their own amounts.
-    const { cornerTravel, cornerAngleRad, poutDrop, cheekRise, browRise, browFurrow } =
+    const { cornerTravel, cornerAngleRad, poutDrop, cheekRise, eyeSqueeze, browRise, browFurrow } =
       this.morphDirection(strength)
     const travelX = Math.cos(cornerAngleRad)
     const travelY = -Math.sin(cornerAngleRad)
@@ -988,6 +1049,17 @@ export class FaceMorphProcessor {
           gauss2(sx - a.leftCheek.x, sy - a.leftCheek.y, cheekSigma, cheekSigma) +
           gauss2(sx - a.rightCheek.x, sy - a.rightCheek.y, cheekSigma, cheekSigma)
         dy -= mag * cheekRise * Math.min(1, w) * coupled
+      }
+
+      // Lower lids lift a little: the eye-narrowing of a real smile. Small and
+      // capped on purpose, and only a lid-sized patch just under each eye, so
+      // the lashes and the white of the eye are left alone.
+      if (eyeSqueeze !== 0) {
+        const lidDrop = a.eyeHeight * 0.9
+        const w =
+          gauss2(sx - a.leftEye.x, sy - (a.leftEye.y + lidDrop), a.eyeWidth * 0.45, a.eyeHeight * 0.9) +
+          gauss2(sx - a.rightEye.x, sy - (a.rightEye.y + lidDrop), a.eyeWidth * 0.45, a.eyeHeight * 0.9)
+        dy -= mag * eyeSqueeze * Math.min(1, w) * win
       }
 
       // Brows rise or drop, whichever this person actually does, and pull

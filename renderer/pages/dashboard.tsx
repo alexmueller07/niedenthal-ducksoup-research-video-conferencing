@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [calibrationProgress, setCalibrationProgress] = useState<CalibrationProgress | null>(null)
   const [calibration, setCalibration] = useState<CalibrationUiState>(emptyCalibrationUiState)
   const [lastSaved, setLastSaved] = useState<SessionManifest | null>(null)
+  const [auNote, setAuNote] = useState('')
   // Determined after mount so the first client render matches the server-rendered
   // HTML (window.ipc only exists in Electron). Avoids a hydration mismatch.
   const [inElectron, setInElectron] = useState(false)
@@ -443,6 +444,21 @@ export default function DashboardPage() {
                 active={config.presetId}
                 onPick={applyPreset}
               />
+              <button
+                type="button"
+                title="Save a marked-up picture of the original and morphed face, with the action units the morph moved"
+                onClick={() => {
+                  setAuNote('Saving…')
+                  void stationRef.current
+                    ?.saveAuStill()
+                    .then((where) => setAuNote(where ? `Saved: ${where}` : 'No face to mark yet.'))
+                    .catch((e) => setAuNote(String(e)))
+                }}
+                className="mt-3 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800"
+              >
+                Save AU picture
+              </button>
+              {auNote && <p className="mt-1.5 break-all text-[10.5px] text-gray-500">{auNote}</p>}
 
               <div
                 className={`mt-3 flex items-center justify-between gap-3 rounded-xl border p-3 ${
