@@ -882,7 +882,10 @@
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 /* ---- Rating station setup: the lab suite's layout in this app's colours ---- */
-.rs { max-width: 900px; margin-left: 0; }
+.rs { max-width: none; }
+.rs-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; align-items: start; }
+.rs-col { min-width: 0; }
+@media (max-width: 1100px) { .rs-grid { grid-template-columns: minmax(0, 1fr); } }
 .rs h1 { font-size: 26px; font-weight: 650; color: #edf2f7; }
 .rs h2 { font-size: 16px; font-weight: 600; color: #edf2f7; margin-bottom: 4px; }
 .rs label { display: block; font-size: 12px; color: #aab7c7; margin-bottom: 8px; }
@@ -893,7 +896,7 @@
 .rs-choice { flex: 1; min-width: 0; min-height: 42px; padding: 9px 12px; border: 1px solid #3a4654; background: #1a222d; color: #b8c3d1; border-radius: 5px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
 .rs-choice:hover { border-color: #85a4ae; }
 .rs-choice.on { background: #d7e9eb; color: #173139; border-color: #d7e9eb; }
-.rs-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #3a4654; background: #1a222d; color: #d3dce7; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.rs-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #3a4654; background: #1a222d; color: #d3dce7; border-radius: 6px; font-size: 13px; cursor: pointer; }
 .rs-pill:hover { border-color: #85a4ae; }
 .rs-pill.on { border-color: #72c4cb; background: #1d3138; color: #fff; }
 .rs-start { width: 100%; min-height: 52px; font-size: 16px; }

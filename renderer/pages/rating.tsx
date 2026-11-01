@@ -207,25 +207,15 @@ export default function RatingStationPage() {
       if (next.length) { setFiles(next); setRoot(next[0].webkitRelativePath.split('/')[0]) }
       e.target.value = ''
     }} />
-    <fieldset style={{ border: 0, margin: 0, padding: 0, minWidth: 0, maxWidth: 820 }}>
+    <fieldset style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       <div>
         <div className="mb-8">
           <h1 className="text-white text-4xl font-bold">Set up this station</h1>
           <p className="text-gray-400 text-base mt-2">Researcher only. Hand the computer over once this is done.</p>
         </div>
 
-        <section className="rs-card">
-          <h2 className="text-white text-xl font-bold mb-1">Research Drive</h2>
-          <p className="text-gray-400 text-sm mb-4">Where the recording rooms file their conversations. This station finds the participant's recording here on its own, so nobody browses for a file mid-session. Set it once on this computer and it is remembered.</p>
-          <div className="flex items-center gap-3 flex-wrap">
-            {root ? <span className="text-green-400 text-sm font-mono break-all">{root}</span> : <span className="text-yellow-400 text-sm">Not set yet.</span>}
-            <button type="button" onClick={() => void chooseRoot()} className="suite-btn">{root ? 'Change' : 'Browse'}</button>
-          </div>
-          {native && driveChoices.filter(c => c !== root).length > 0 && <div className="flex flex-wrap items-center gap-2 mt-3">
-            <span className="text-gray-400 text-sm">Found on this computer:</span>
-            {driveChoices.filter(c => c !== root).map(c => <button type="button" key={c} title={c} onClick={() => void ipcInvoke('rating:set-root', c).then(() => { setRoot(c); setRefresh(v => v + 1) }).catch(e => setError(message(e)))} className="suite-btn">{c}</button>)}
-          </div>}
-        </section>
+        <div className="rs-grid">
+          <div className="rs-col">
 
         <section className="rs-card">
           <h2 className="text-white text-xl font-bold mb-1">Which round is this?</h2>
@@ -255,6 +245,33 @@ export default function RatingStationPage() {
           </div>
         </section>
 
+
+        <section className="rs-card space-y-4">
+          <h2 className="text-white text-xl font-bold">This session</h2>
+          <div><label className="block text-white text-lg mb-2">Group</label>
+            <div className="flex space-x-3">{(['A', 'B', 'C'] as const).map(g => <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(g)} className={choice(group === g)}>{g}</button>)}</div>
+            <p className="text-gray-500 text-xs mt-2">Recorded with the responses. It does not change what this participant sees.</p></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-white text-lg mb-2">Subject initials</label><input aria-label="Subject initials" autoComplete="off" className="suite-input" value={initials} onChange={e => setInitials(e.target.value)} placeholder="AB" /></div>
+            <div><label className="block text-white text-lg mb-2">RA name</label><input aria-label="RA name" autoComplete="off" className="suite-input" value={ra} onChange={e => setRa(e.target.value)} placeholder="Your name" /></div>
+            <div><label className="block text-white text-lg mb-2">Session date</label><input aria-label="Session date" type="date" className="suite-input" value={date} onChange={e => setDate(e.target.value)} /></div>
+            <div><label className="block text-white text-lg mb-2">Session time</label><input aria-label="Session time" type="time" className="suite-input" value={time} onChange={e => setTime(e.target.value)} /></div>
+          </div>
+        </section>
+          </div>
+          <div className="rs-col">
+        <section className="rs-card">
+          <h2 className="text-white text-xl font-bold mb-1">Research Drive</h2>
+          <p className="text-gray-400 text-sm mb-4">Where the recording rooms file their conversations. This station finds the participant's recording here on its own, so nobody browses for a file mid-session. Set it once on this computer and it is remembered.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {root ? <span className="text-green-400 text-sm font-mono break-all">{root}</span> : <span className="text-yellow-400 text-sm">Not set yet.</span>}
+            <button type="button" onClick={() => void chooseRoot()} className="suite-btn">{root ? 'Change' : 'Browse'}</button>
+          </div>
+          {native && driveChoices.filter(c => c !== root).length > 0 && <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="text-gray-400 text-sm">Found on this computer:</span>
+            {driveChoices.filter(c => c !== root).map(c => <button type="button" key={c} title={c} onClick={() => void ipcInvoke('rating:set-root', c).then(() => { setRoot(c); setRefresh(v => v + 1) }).catch(e => setError(message(e)))} className="suite-btn">{c}</button>)}
+          </div>}
+        </section>
         <section className="rs-card">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
@@ -288,7 +305,7 @@ export default function RatingStationPage() {
 
         <section className="rs-card space-y-4">
           <h2 className="text-white text-xl font-bold">What to show</h2>
-          <p className="text-gray-400 text-sm -mt-2">What the participant sees and hears. Saved with their responses.</p>
+          <p className="text-gray-400 text-sm">What the participant sees and hears. Saved with their responses.</p>
           <div><label className="block text-white text-lg mb-2">Presentation</label>
             <div className="flex space-x-3">{([['video', 'Video and audio'], ['audio', 'Audio only']] as const).map(([k, l]) => <button key={k} type="button" aria-pressed={(k === 'audio') === audioOnly} onClick={() => setAudioOnly(k === 'audio')} className={choice((k === 'audio') === audioOnly)}>{l}</button>)}</div></div>
           <div className="grid grid-cols-2 gap-4">
@@ -301,24 +318,13 @@ export default function RatingStationPage() {
             <div className="flex space-x-3">{[0, 1, 2, 3].map(b => <button key={b} type="button" aria-pressed={blocks.includes(b)} onClick={() => setBlocks(cur => cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b])} className={choice(blocks.includes(b))}>Part {b + 1}</button>)}</div></div>
         </section>
 
-        <section className="rs-card space-y-4">
-          <h2 className="text-white text-xl font-bold">This session</h2>
-          <div><label className="block text-white text-lg mb-2">Group</label>
-            <div className="flex space-x-3">{(['A', 'B', 'C'] as const).map(g => <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(g)} className={choice(group === g)}>{g}</button>)}</div>
-            <p className="text-gray-500 text-xs mt-2">Recorded with the responses. It does not change what this participant sees.</p></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-white text-lg mb-2">Subject initials</label><input aria-label="Subject initials" autoComplete="off" className="suite-input" value={initials} onChange={e => setInitials(e.target.value)} placeholder="AB" /></div>
-            <div><label className="block text-white text-lg mb-2">RA name</label><input aria-label="RA name" autoComplete="off" className="suite-input" value={ra} onChange={e => setRa(e.target.value)} placeholder="Your name" /></div>
-            <div><label className="block text-white text-lg mb-2">Session date</label><input aria-label="Session date" type="date" className="suite-input" value={date} onChange={e => setDate(e.target.value)} /></div>
-            <div><label className="block text-white text-lg mb-2">Session time</label><input aria-label="Session time" type="time" className="suite-input" value={time} onChange={e => setTime(e.target.value)} /></div>
-          </div>
-        </section>
-
         {attempted && missing.length > 0 && <p className="text-red-400 text-sm mb-4" role="alert">Still needed: {missing.join(', ')}.</p>}
         {error && <p className="text-red-400 text-sm mb-4" role="alert">{error}</p>}
         <button type="button" disabled={preparing} onClick={() => { setAttempted(true); if (missing.length === 0 && canStart) void start() }} className="suite-btn primary rs-start">{preparing ? 'Checking that both videos can play…' : 'Start — hand the computer to the participant'}</button>
         <p className="text-gray-500 text-xs text-center mt-3">The next screen is the participant's first set of questions. Nothing above is shown to them.</p>
         {preparing && <div className="text-center mt-3"><button type="button" className="text-gray-400 text-sm underline hover:text-white" onClick={() => check.current?.abort()}>Cancel video check</button></div>}
+          </div>
+        </div>
       </div>
     </fieldset>
   </main>
