@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Headphones, ClipboardList } from 'lucide-react'
 import { POST_CONVERSATION_ITEMS, RATING_INSTRUCTIONS } from '../../../main/ratingTask'
 import type { RatingSample, VideoVersion } from '../../lib/protocol'
 import type { ReviewScreenProps } from './ReviewScreen'
 import { ReviewStage } from './ReviewStage'
-import { MouseSlider } from './MouseSlider'
-import { NumberScale } from './NumberScale'
+import PostConversation from '../rating/PostConversation'
+import Instructions from '../rating/Instructions'
+import TransitionScreen from '../rating/TransitionScreen'
+import RatingOverlay from '../rating/RatingOverlay'
+import Slider from '../rating/Slider'
+import { useAdvance } from '../rating/useAdvance'
 
 const stats = { msAltered: 0, msClean: 0, toggles: 0, edits: 0, versionNow: 'altered' as const, firstTypedAtMs: null }
 
@@ -20,7 +23,6 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
   const [answers, setAnswers] = useState<Record<string, number | null>>({})
   const [instruction, setInstruction] = useState(state.current === 0 ? 0 : RATING_INSTRUCTIONS.length)
   const [announced, setAnnounced] = useState(state.status === 'writing')
-  const [dwell, setDwell] = useState(false)
   const [text, setText] = useState('')
   const [elicitation, setElicitation] = useState<number | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
@@ -30,9 +32,9 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
   const nextSequence = useRef(0)
   const lastTime = useRef(-1)
   const rating = useRef({ value: 50, touched: false })
+  const resetCall = useRef(true)
   const preparedSeq = useRef(-1)
   const self = segment?.targetSeat === mySlot
-  const target = self ? 'YOUR OWN FEELINGS' : "YOUR PARTNER'S FEELINGS"
   const policy = state.config.mediaPolicy ?? 'altered'
   useEffect(() => { if (state.status === 'writing') setAnnounced(true) }, [state.status])
   const versionsBySeat = {
@@ -76,11 +78,6 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
   }, [key, text, elicitation, answers])
 
   useEffect(() => {
-    const id = setTimeout(() => setDwell(true), 3000)
-    return () => clearTimeout(id)
-  }, [instruction])
-
-  useEffect(() => {
     const hide = () => {
       if (document.hidden && state.status === 'playing') send({ type: 'review-buffering', loadSeq: state.loadSeq })
       if (!document.hidden && state.status === 'loading' && preparedSeq.current === state.loadSeq && samples.current.length < 200)
@@ -116,76 +113,69 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
     if (!document.hidden && samples.current.length < 200) send({ type: 'review-ready', loadSeq })
   }, [send])
   const buffering = useCallback((loadSeq: number) => send({ type: 'review-buffering', loadSeq }), [send])
-  const next = () => {
-    if (!dwell) return
-    if (instruction < RATING_INSTRUCTIONS.length) { setInstruction(i => i + 1); setDwell(false) }
-    else setAnnounced(true)
+  function advanceInstructions() {
+    setInstruction(i => Math.min(i + 1, RATING_INSTRUCTIONS.length))
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (state.status === 'questionnaire' || announced || e.repeat || !['Enter', ' '].includes(e.key)) return
-      e.preventDefault()
-      next()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [state.status, announced, instruction, dwell])
+  useAdvance(advanceInstructions, state.status !== 'questionnaire' && !announced && instruction < RATING_INSTRUCTIONS.length)
 
-  function submit() {
+  // Same rule as the lab suite: a rating alone lets the participant through; with no
+  // rating the dialog lists what is missing, and "Continue anyway" saves it blank.
+  const [attempted, setAttempted] = useState(false)
+  function doSubmit() {
     if (pendingCount) return
-    if ((!text.trim() || elicitation === null) && !window.confirm('Continue with an unanswered item? It will be saved as missing.')) return
     setSubmitting(true)
     send({ type: 'review-submit', turn, text, stats, elicitation })
   }
+  function handleSubmit() {
+    if (elicitation === null) setAttempted(true)
+    else doSubmit()
+  }
+  useEffect(() => {
+    if (state.status !== 'writing') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      e.preventDefault()
+      handleSubmit()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
   useEffect(() => {
     if (!submitting || state.done[mySlot] || state.status !== 'writing') return
     const id = setInterval(() => send({ type: 'review-submit', turn, text, stats, elicitation }), 1500)
     return () => clearInterval(id)
   }, [submitting, state.done, state.status, mySlot, send, turn, text, elicitation])
 
-  if (state.status === 'done') return <TaskFrame><Check size={32} /><h1>You have finished. Thank you.</h1><p>Please let your researcher know.</p></TaskFrame>
-  if (state.status === 'questionnaire') return <TaskFrame wide>
-    <ClipboardList size={26} /><h1>Your conversation</h1>
-    {state.done[mySlot] ? <p>Your answers are saved. Waiting for your partner.</p> : <>
-      {POST_CONVERSATION_ITEMS.map(([id, label], index) => {
-        const talking = id === 'relative_talking'
-        return <fieldset className="rating-question" key={id}><legend><span>{index + 1}.</span> {label}</legend>
-          <NumberScale label={label} min={talking ? -5 : 0} max={talking ? 5 : 10} leftLabel={talking ? 'My partner talked much more' : 'Not at all'} rightLabel={talking ? 'I talked much more' : 'Very much'} centerLabel={talking ? 'We talked about the same' : undefined} value={answers[id]} onChange={n => setAnswers(a => ({ ...a, [id]: n }))} />
-        </fieldset>
-      })}
-      <button className="rating-primary" onClick={() => {
-        const missing = POST_CONVERSATION_ITEMS.filter(([id]) => answers[id] === undefined)
-        if (missing.length && !window.confirm(`${missing.length} unanswered items. Continue and save these as missing?`)) return
-        send({ type: 'rating-questionnaire', responses: Object.fromEntries(POST_CONVERSATION_ITEMS.map(([id]) => [id, answers[id] ?? null])) })
-      }}>Continue <ArrowRight size={17} /></button>
-    </>}
-  </TaskFrame>
-  if (!announced) return <TaskFrame>
-    <Headphones size={28} />
-    <span className="rating-eyebrow">{instruction < RATING_INSTRUCTIONS.length ? 'Before you begin' : `Part ${turn} of ${state.segments.length}`}</span>
-    <h1>{instruction < RATING_INSTRUCTIONS.length ? RATING_INSTRUCTIONS[instruction] : `Focus on ${target.toLowerCase()}`}</h1>
-    <button className="rating-primary" disabled={!dwell} onClick={next}>Continue <ArrowRight size={17} /></button>
-  </TaskFrame>
-  if (state.status === 'writing') return <TaskFrame>
-    <span className="rating-eyebrow">Part {turn} of {state.segments.length}</span>
-    <h1>Please use the box below to write about how {self ? 'YOU were' : 'YOUR PARTNER was'} feeling during the part of the conversation you just watched.</h1>
-    <textarea aria-label="Description of feelings" value={text} disabled={state.done[mySlot] || submitting} maxLength={20000} onChange={e => setText(e.target.value)} />
-    <p>To what extent do you feel that {self ? 'YOUR PARTNER' : 'YOU'} elicited these feelings in {self ? 'YOU' : 'YOUR PARTNER'}?</p>
-    <NumberScale label="How much this person elicited these feelings" min={1} max={9} leftLabel="Not at all" rightLabel="Very" value={elicitation} onChange={setElicitation} disabled={state.done[mySlot] || submitting} />
-    <button className="rating-primary" disabled={!!pendingCount || submitting || state.done[mySlot]} onClick={submit}>{state.done[mySlot] ? 'Saved. Waiting for your partner' : pendingCount ? 'Saving ratings...' : submitting ? 'Saving response...' : 'Continue'} <ArrowRight size={17} /></button>
-    {notice && <p role="alert">{notice}</p>}
-  </TaskFrame>
-  return <div className="rating-player">
-    <header><span>Part {turn} of {state.segments.length}</span><strong>{target}</strong></header>
-    <div className="rating-video"><ReviewStage state={state} media={media} viewer={mySlot} names={names} baseUrl={baseUrl} serverNow={serverNow} mode={state.config.viewMode} versions={['altered']} versionsBySeat={versionsBySeat} version="altered" audioOnly={policy === 'audio'} onReady={ready} onBuffering={buffering} onPlaybackTime={sample} /></div>
-    {state.status !== 'playing' && <p className="rating-hold" role="status">{state.status === 'paused' ? 'Paused by the researcher' : 'Preparing the conversation. Please wait.'}</p>}
-    <footer><h2>How positive or negative did {self ? 'YOU' : 'YOUR PARTNER'} feel during this moment in the conversation?</h2>
-      <MouseSlider resetKey={key} onChange={v => { rating.current = { value: v, touched: true } }} />
-      {notice && <p role="alert">{notice}</p>}
-    </footer>
-  </div>
-}
-
-function TaskFrame({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
-  return <div className="rating-task"><main className={wide ? 'rating-form wide' : 'rating-form'}>{children}</main></div>
+  const wrap = (node: React.ReactNode) => <div id="rating-root">{node}</div>
+  if (state.status === 'done') return wrap(<div className="h-screen w-screen flex flex-col items-center justify-center bg-black text-center px-8"><h1 className="text-white text-3xl mb-4">You have finished. Thank you.</h1><p className="text-gray-400 text-xl">Please let your researcher know.</p></div>)
+  if (state.status === 'questionnaire') {
+    if (state.done[mySlot]) return wrap(<div className="h-screen w-screen flex items-center justify-center bg-black px-8"><p className="text-white text-3xl">Your answers are saved. Waiting for your partner.</p></div>)
+    return wrap(<PostConversation responses={answers as Record<string, number>} onChange={(k, v) => setAnswers(a => ({ ...a, [k]: v }))}
+      onContinue={() => send({ type: 'rating-questionnaire', responses: Object.fromEntries(POST_CONVERSATION_ITEMS.map(([id]) => [id, answers[id] ?? null])) })} />)
+  }
+  if (!announced) return wrap(instruction < RATING_INSTRUCTIONS.length
+    ? <div className="h-screen w-screen"><Instructions instructionIndex={instruction} onBack={() => setInstruction(i => Math.max(0, i - 1))} onContinue={advanceInstructions} groupSize={RATING_INSTRUCTIONS.length} instructions={RATING_INSTRUCTIONS} /></div>
+    : <div className="relative h-screen w-screen"><TransitionScreen ratingTarget={self ? 'self' : 'partner'} onContinue={() => setAnnounced(true)} /></div>)
+  if (state.status === 'writing') return wrap(<div className="h-screen w-screen">
+    <RatingOverlay currentRatingTarget={self ? 'self' : 'partner'} textInput={text} setTextInput={setText} numberScale={elicitation ?? undefined} setNumberScale={v => setElicitation(v ?? null)}
+      attemptedSubmit={attempted} isFinal={turn === state.segments.length} onSubmit={handleSubmit} onConfirmIncomplete={() => { setAttempted(false); doSubmit() }} onDismissIncomplete={() => setAttempted(false)} />
+    {(pendingCount > 0 || submitting || state.done[mySlot]) && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-white px-5 py-2 text-white">{state.done[mySlot] ? 'Saved. Waiting for your partner' : pendingCount ? 'Saving ratings…' : 'Saving response…'}</div>}
+    {notice && <p role="alert" className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 text-red-300">{notice}</p>}
+  </div>)
+  return wrap(<div className={`h-screen w-screen overflow-hidden bg-black relative flex flex-col ${state.status === 'playing' ? 'cursor-none' : 'cursor-auto'}`}>
+    <div className="absolute top-6 right-8 z-20 border-2 border-white bg-black px-5 py-2.5 text-center">
+      <span className="block text-gray-400 text-xs uppercase tracking-widest">You are rating</span>
+      <span className="block text-white text-xl font-bold">{self ? 'YOUR OWN FEELINGS' : "YOUR PARTNER'S FEELINGS"}</span>
+    </div>
+    <p className="text-center text-white mt-20 mb-7 text-2xl">How positive or negative did <span className="font-bold underline">{self ? 'YOU' : 'YOUR PARTNER'}</span> feel during this moment in the conversation?</p>
+    <div className="relative flex-1 min-h-0 w-full px-10 pb-40"><ReviewStage state={state} media={media} viewer={mySlot} names={names} baseUrl={baseUrl} serverNow={serverNow} mode={state.config.viewMode} versions={['altered']} versionsBySeat={versionsBySeat} version="altered" audioOnly={policy === 'audio'} onReady={ready} onBuffering={buffering} onPlaybackTime={sample} /></div>
+    <div className="absolute bottom-0 left-0 w-full cursor-none border-t border-white bg-black px-10 pt-6 pb-8">
+      <Slider resetTrigger={0} onSample={v => {
+        if (resetCall.current) { resetCall.current = false; rating.current = { value: v, touched: false }; return }
+        rating.current = { value: v, touched: true }
+      }} />
+    </div>
+    {state.status !== 'playing' && <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/85"><p role="status" className="max-w-xl border border-white bg-black p-8 text-center text-white text-2xl">{state.status === 'paused' ? 'Paused by the researcher' : 'Preparing the conversation. Please wait.'}</p></div>}
+    {notice && <p role="alert" className="absolute bottom-28 left-1/2 -translate-x-1/2 z-40 text-red-300">{notice}</p>}
+  </div>)
 }

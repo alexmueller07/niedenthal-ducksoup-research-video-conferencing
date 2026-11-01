@@ -869,25 +869,6 @@
 .rating-hold { color: #f5c76d; text-align: center; }
 @media(max-width:600px) { .rating-form { padding: 28px 16px 48px; } .rating-form h1 { font-size:20px; } .rating-numbers { gap: 3px; } .rating-numbers button { font-size: 12px; } .rating-player { padding: 12px; } }
 
-/* ---- Rating scales (ported from the lab suite) ---- */
-.mouse-slider { width: 100%; user-select: none; }
-.mouse-slider-labels { position: relative; display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 20px; color: #edf2f7; }
-.mouse-slider-track { position: relative; height: 12px; width: 100%; border-radius: 999px; background: #edf2f7; cursor: none; }
-.mouse-slider-handle { position: absolute; top: 50%; width: 24px; height: 36px; border-radius: 999px; border: 2px solid #05070b; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px #47b8c5; }
-.mouse-slider.disabled { opacity: .45; }
-.num-scale { display: grid; width: 100%; row-gap: 8px; column-gap: 4px; }
-.num-scale-point { grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0; background: none; border: 0; color: #edf2f7; font-size: 14px; cursor: pointer; }
-.num-scale-point i { width: 32px; height: 32px; max-width: 100%; border-radius: 50%; border: 2px solid #edf2f7; background: transparent; transition: background .12s; }
-.num-scale-point:hover i { background: #3a4757; }
-.num-scale-point.selected i { background: #fff; border-color: #fff; }
-.num-scale-point:focus-visible i { outline: 2px solid #7dd3fc; outline-offset: 3px; }
-.num-scale-anchor { grid-row: 2; position: relative; min-height: 40px; }
-.num-scale-anchor > span { position: absolute; left: 50%; top: 0; width: 150px; transform: translateX(-50%); text-align: center; font-size: 13px; line-height: 1.25; color: #a3afc0; }
-.rating-task-media.audio-only video { visibility: hidden; height: 0; aspect-ratio: auto; }
-.rating-task-media.audio-only figcaption::after { content: " · audio only"; }
-.rating-drive-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--suite-dim); }
-.rating-drive-chips .suite-btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* ---- Participant rating screens, ported from the lab suite ----
    #rating-root plays the part of the lab suite's #root: a full-window black
    page that scrolls inside itself with no visible scrollbar. */
