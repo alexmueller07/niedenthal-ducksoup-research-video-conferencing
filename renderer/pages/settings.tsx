@@ -376,43 +376,6 @@ export default function SettingsPage() {
               <option value="gallery">Gallery</option>
             </select>
           </label>
-          <label className="suite-field">
-            <span>Review segment length (seconds)</span>
-            <input
-              className="suite-input"
-              type="number"
-              min={10}
-              max={1800}
-              value={review.segmentSec}
-              onChange={(e) => {
-                setReview((r) => ({
-                  ...r,
-                  segmentSec: Math.min(
-                    1800,
-                    Math.max(10, Number(e.target.value) || 150),
-                  ),
-                }))
-                setNote('')
-              }}
-            />
-          </label>
-          <label className="suite-field">
-            <span>Advance review</span>
-            <select
-              className="suite-input"
-              value={review.advance}
-              onChange={(e) => {
-                setReview((r) => ({
-                  ...r,
-                  advance: e.target.value as ReviewConfig['advance'],
-                }))
-                setNote('')
-              }}
-            >
-              <option value="both-done">When both participants finish</option>
-              <option value="auto">Automatically after the clip</option>
-            </select>
-          </label>
         </div>
       </section>
       <section className="suite-section">
