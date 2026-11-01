@@ -885,3 +885,5 @@
 .num-scale-anchor > span { position: absolute; left: 50%; top: 0; width: 150px; transform: translateX(-50%); text-align: center; font-size: 13px; line-height: 1.25; color: #a3afc0; }
 .rating-task-media.audio-only video { visibility: hidden; height: 0; aspect-ratio: auto; }
 .rating-task-media.audio-only figcaption::after { content: " · audio only"; }
+.rating-drive-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--suite-dim); }
+.rating-drive-chips .suite-btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -16,6 +16,7 @@ const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${Str
 export default function RatingStationPage() {
   const [native, setNative] = useState(false)
   const [root, setRoot] = useState('')
+  const [driveChoices, setDriveChoices] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
   const picker = useRef<HTMLInputElement>(null)
   const [dyad, setDyad] = useState('')
@@ -60,7 +61,10 @@ export default function RatingStationPage() {
 
   useEffect(() => {
     setNative(hasIpc())
-    if (hasIpc()) void ipcInvoke<string>('rating:root').then(value => setRoot(value || '')).catch(e => setError(message(e)))
+    if (hasIpc()) {
+      void ipcInvoke<string>('rating:root').then(value => setRoot(value || '')).catch(e => setError(message(e)))
+      void ipcInvoke<string[]>('rating:detect-roots').then(found => setDriveChoices(found || [])).catch(() => {})
+    }
     return () => check.current?.abort()
   }, [])
 
@@ -160,6 +164,7 @@ export default function RatingStationPage() {
       <section className="rating-drive" aria-label="Research Drive">
         <div className="rating-drive-label"><FolderOpen size={21} /><div><h2>Research Drive</h2><p>{root ? native ? 'Saved on this computer' : 'Folder selected for this visit' : 'Choose the folder containing recorded sessions'}</p></div></div>
         <div className="rating-folder-row"><span className="rating-folder-path" title={root}>{root || 'No folder selected'}</span><button type="button" className="suite-btn" onClick={() => void chooseRoot()}>{root ? 'Change folder' : 'Browse'}</button></div>
+        {native && driveChoices.filter(choice => choice !== root).length > 0 && <div className="rating-drive-chips" aria-label="Research Drive found on this computer"><span>Found on this computer:</span>{driveChoices.filter(choice => choice !== root).map(choice => <button type="button" key={choice} className="suite-btn" title={choice} onClick={() => void ipcInvoke('rating:set-root', choice).then(() => { setRoot(choice); setRefresh(value => value + 1) }).catch(e => setError(message(e)))}>{choice}</button>)}</div>}
       </section>
       <div className="rating-workspace">
         <div className="rating-setup-main">

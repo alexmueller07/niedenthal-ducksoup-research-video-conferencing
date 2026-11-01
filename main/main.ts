@@ -372,10 +372,39 @@ async function ratingMediaServer(): Promise<number> {
 }
 
 ipcMain.handle('rating:root', () => (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot())
+// Likely Research Drive locations, so the researcher can pick one with a click.
+ipcMain.handle('rating:detect-roots', async () => {
+  const candidates: string[] = []
+  if (process.platform === 'win32') {
+    for (let code = 68; code <= 90; code++) {
+      const letter = String.fromCharCode(code)
+      candidates.push(`${letter}:\\niedenthal\\recordings`, `${letter}:\\recordings`, `${letter}:\\niedenthal`)
+    }
+    candidates.push('\\\\research.drive.wisc.edu\\niedenthal\\recordings')
+  } else {
+    candidates.push('/Volumes/niedenthal/recordings', '/Volumes/niedenthal', '/Volumes/Research Drive/niedenthal/recordings')
+    try {
+      for (const volume of await fs.promises.readdir('/Volumes')) candidates.push(`/Volumes/${volume}/niedenthal/recordings`, `/Volumes/${volume}/recordings`)
+    } catch { /* no volumes folder */ }
+  }
+  const found: string[] = []
+  for (const candidate of candidates) {
+    try {
+      if ((await fs.promises.stat(candidate)).isDirectory() && !found.includes(candidate)) found.push(candidate)
+    } catch { /* not there */ }
+  }
+  return found
+})
 ipcMain.handle('rating:choose-root', async () => {
   const picked = await dialog.showOpenDialog({ properties: ['openDirectory'], title: 'Research Drive recordings folder' })
   if (picked.canceled) return null
   const root = await fs.promises.realpath(picked.filePaths[0])
+  store.set('prefs.ratingDriveRoot', root)
+  return root
+})
+ipcMain.handle('rating:set-root', async (_e, chosen: string) => {
+  const root = await fs.promises.realpath(String(chosen))
+  if (!(await fs.promises.stat(root)).isDirectory()) throw new Error('That is not a folder.')
   store.set('prefs.ratingDriveRoot', root)
   return root
 })
