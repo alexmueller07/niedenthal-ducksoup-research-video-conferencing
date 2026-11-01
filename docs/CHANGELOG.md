@@ -19,6 +19,21 @@
 
 ## Update History
 
+* **Date:** 01-11-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Recording fixes, dyad folders, timed messages, stronger smile, AU report, rating station updates
+
+* **Previous behavior:**
+Recordings could freeze when a participant's stream was replaced mid-call. Session folders were named `session_<time>` only. There was no way to schedule messages such as "five minutes remaining". "Smile (subtle)" was 0.20 and a small smile moved only the mouth corners; the cheeks and eyes did not move. The face file did not say which regions were moved. The rating screens needed clicks on the slider, and the 0 in the -5 to 5 scale did not line up with its label.
+
+* **New behavior:**
+Recordings restart on the new stream if it is replaced, notice a frozen source (`recording_source_stalled` in `events.csv`), wait for a slow disk, and keep running when the window is covered. A finished session folder is renamed `dyad_<id>_<time>` (kept as `session_<time>` if there is no dyad ID). A "Timed messages" card on the researcher dashboard shows messages once at set times, with "+ 5 min left" shortcuts from the conversation length. "Smile (subtle)" is 0.35; the open-mouth fade is softer; every smile lifts the cheeks a little and narrows the lower lids a little. The face file gets eight new columns at the end showing what each region moved, named by action unit (AU12/15, AU6, AU6/7, AU1/2, AU4, AU17). The Testing Station has a "Save AU picture" button that writes marked-up before/after pictures and `AU_report.md`. In the rating screens the slider follows the mouse with no clicking, and number scales line up under their labels. The Rating Station setup lets the researcher choose video or audio only, original or changed video for each person, and which of the four 2:30 parts to run, and offers Research Drive folders found on the computer. The researcher dashboard has a script box and a floating + button.
+
+* **Why this matters:**
+Fewer lost recordings, folders that match the lab's dyad naming, hands-free time warnings, a smile change that looks like a real smile, and a record of exactly which action units were moved. The rating changes follow the lab suite's flow. Note that "Smile (strong)" is still 0.50, so it is now close to subtle.
+
+---
+
 * **Date:** 18-10-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Organized session folders and simpler review files

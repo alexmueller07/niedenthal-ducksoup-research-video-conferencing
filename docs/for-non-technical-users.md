@@ -146,6 +146,14 @@ If someone was calibrated before the cheek and eyebrow update, calibrate them ag
 
 The app still works. It falls back to the old single fixed amount for everyone, and the panel under their video keeps saying **Not calibrated** so it's obvious from the dashboard which participants were and weren't done.
 
+## Timed messages
+
+The **Timed messages** card shows a message to both participants once, at a time you choose. Type the conversation length, then press a shortcut such as **+ 5 min left**, or **+ Custom** to write your own. Each message can be edited or deleted. A message shows once per conversation, at the time on its row.
+
+## Script and quick actions
+
+The **RA script** card is a notes box only you can see. It is saved on your computer. The round **+** button at the bottom right opens a small menu: add a time-stamped note to the script, jump to the script, or send "Five minutes remaining." or "Please begin wrapping up."
+
 ## Automation rules (optional)
 
 Instead of pressing sliders by hand, you can set up simple rules in plain language, for example:
