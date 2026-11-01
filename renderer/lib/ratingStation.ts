@@ -100,3 +100,15 @@ export function inspectRatingVideo(url: string, signal: AbortSignal): Promise<nu
     else video.src = url
   })
 }
+
+/**
+ * Whose feelings a participant rates first, as in the lab suite: a numeric
+ * participant ID decides it by odd/even (odd starts with their own), otherwise
+ * the seat does (P1 = left = own first, P2 = right = partner first).
+ */
+export function startingTarget(participantId: string, seat: 'P1' | 'P2'): { target: 'self' | 'partner'; basis: string } {
+  const numeric = Number(String(participantId).trim())
+  if (Number.isInteger(numeric) && numeric > 0)
+    return { target: numeric % 2 === 1 ? 'self' : 'partner', basis: `participant_id_parity(${numeric})` }
+  return { target: seat === 'P1' ? 'self' : 'partner', basis: `seat(${seat})` }
+}

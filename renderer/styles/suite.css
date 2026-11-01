@@ -887,3 +887,16 @@
 .rating-task-media.audio-only figcaption::after { content: " · audio only"; }
 .rating-drive-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--suite-dim); }
 .rating-drive-chips .suite-btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Participant rating screens, ported from the lab suite ----
+   #rating-root plays the part of the lab suite's #root: a full-window black
+   page that scrolls inside itself with no visible scrollbar. */
+#rating-root {
+  position: fixed; inset: 0; z-index: 200; background: #000; color: #fff;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none;
+  -webkit-user-select: none; user-select: none;
+}
+#rating-root::-webkit-scrollbar { display: none; }
+#rating-root input, #rating-root textarea { -webkit-user-select: text; user-select: text; }
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
