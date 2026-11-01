@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Circle, FolderOpen, Loader2, RefreshCw, Search, Video } from 'lucide-react'
-import { PageHeading } from '../components/SuiteShell'
 import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
 import { browserRatingLookup, completeRecording, inspectRatingVideo, normalizeDyad } from '../lib/ratingStation'
 import type { BrowserRatingCandidate } from '../lib/ratingStation'
 import { RatingStationTask } from '../components/review/RatingStationTask'
 import type { RatingStationRun } from '../components/review/RatingStationTask'
 import type { RatingCandidate, RatingRecording } from '../../main/ratingStation'
+import RetryCountdown, { retriesExhausted } from '../components/rating/RetryCountdown'
+import type { RetryState } from '../components/rating/RetryCountdown'
 
-const colors: Record<string, string> = { Red: '#e45558', Blue: '#4c8ced', Purple: '#9e6cce', Black: '#4a5059', Orange: '#e49037', Green: '#46b66b' }
+const colors: Record<string, string> = { Red: '#d64545', Blue: '#3b76d6', Purple: '#8c56c4', Black: '#242424', Orange: '#e0812b', Green: '#3faa5a' }
+const RETRY_MAX = 4
+const RETRY_EVERY_MS = 10_000
+const input = 'w-full p-3 text-white bg-gray-800 border border-white rounded-lg focus:outline-none focus:border-blue-400'
+const choice = (on: boolean) => `flex-1 px-4 py-3 border border-white rounded-lg transition-colors ${on ? 'bg-white text-black' : 'bg-gray-800 hover:bg-gray-700 text-white'}`
 const validId = (id: string) => /^[A-Za-z0-9_-]{1,60}$/.test(id)
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
 const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -47,6 +51,9 @@ export default function RatingStationPage() {
   const [error, setError] = useState('')
   const [run, setRun] = useState<RatingStationRun | null>(null)
   const request = useRef(0)
+  const [retry, setRetry] = useState<RetryState>({ attempt: 0, nextAt: null, max: RETRY_MAX })
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [attempted, setAttempted] = useState(false)
   const check = useRef<AbortController | null>(null)
   const normalizedDyad = normalizeDyad(dyad)
   const selected = candidates.find(c => c.id === selectedId)
@@ -57,7 +64,6 @@ export default function RatingStationPage() {
   const idsValid = validId(participant) && validId(partner) && participant !== partner
   const detailsValid = Boolean(ra.trim() && initials.trim() && date && time && blocks.length)
   const canStart = Boolean(effectiveDyad && completeRecording(selected) && idsValid && detailsValid && !searching)
-  const nextStep = !root ? 'Choose a recordings folder.' : !lookupParticipant.trim() && !normalizedDyad ? 'Enter a participant or dyad ID.' : searching ? 'Searching for the recording...' : !selected ? 'Select a conversation recording.' : !effectiveDyad ? 'The recording has no dyad ID.' : !completeRecording(selected) ? 'This recording is incomplete.' : !idsValid ? 'Check both participant IDs.' : !detailsValid ? 'Complete the session details.' : 'Ready to check video files and begin.'
 
   useEffect(() => {
     setNative(hasIpc())
@@ -97,6 +103,41 @@ export default function RatingStationPage() {
   useEffect(() => {
     setManualParticipant(''); setManualPartner(''); setInitials(''); setSelfColor(''); setPartnerColor('')
   }, [normalizedDyad, root])
+
+  // The recording room may still be copying: look again by itself a few times, and say so.
+  useEffect(() => { setRetry({ attempt: 0, nextAt: null, max: RETRY_MAX }) }, [normalizedDyad, lookupParticipant, root])
+  useEffect(() => {
+    const canSearch = Boolean((lookupParticipant.trim() || normalizedDyad) && root && (native || files.length))
+    if (!canSearch || !searched || searching || candidates.length || searchError || retry.nextAt !== null || retry.attempt >= retry.max) return
+    setRetry(r => ({ ...r, nextAt: Date.now() + RETRY_EVERY_MS }))
+  }, [searched, searching, candidates.length, searchError, retry.attempt, retry.nextAt])
+  useEffect(() => {
+    if (retry.nextAt === null) return
+    const timer = setTimeout(() => { setRetry(r => ({ ...r, attempt: r.attempt + 1, nextAt: null })); setRefresh(value => value + 1) }, Math.max(0, retry.nextAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [retry.nextAt])
+
+  // A frame from the chosen recording, so a wrong one is caught before the participant sits down.
+  useEffect(() => {
+    setPreviewUrl('')
+    if (!selected) return
+    let live = true
+    let blob = ''
+    if (native) void ipcInvoke<string | null>('rating:preview', effectiveDyad || normalizedDyad, selected.id).then(url => { if (live && url) setPreviewUrl(url) }).catch(() => {})
+    else {
+      const file = selected.files?.['P1:clean'] || Object.values(selected.files || {})[0]
+      if (file) { blob = URL.createObjectURL(file); setPreviewUrl(blob) }
+    }
+    return () => { live = false; if (blob) URL.revokeObjectURL(blob) }
+  }, [selectedId, native])
+
+  async function browseSession() {
+    try {
+      if (!native) { picker.current?.click(); return }
+      const picked = await ipcInvoke<{ root: string; participantId: string } | null>('rating:browse-session')
+      if (picked) { setRoot(picked.root); setDyad(''); setLookupParticipant(picked.participantId); setRefresh(value => value + 1) }
+    } catch (e) { setError(message(e)) }
+  }
 
   async function chooseRoot() {
     if (!native) { picker.current?.click(); return }
@@ -151,92 +192,135 @@ export default function RatingStationPage() {
     setRun(null); setInitials(''); setTime(new Date().toTimeString().slice(0, 5))
   }} />
 
-  return <main className="suite-content rating-setup">
-    <PageHeading title="Set up this station" eyebrow="Rating Station" action={<span className="rating-mode-tag">Researcher setup</span>}>
-      <p>Select the conversation and participant before handing over this computer.</p>
-    </PageHeading>
+  const missing: string[] = []
+  if (!root) missing.push('recordings folder')
+  if (!selected || !completeRecording(selected)) missing.push('a complete conversation recording')
+  if (!validId(participant)) missing.push('participant ID')
+  if (!validId(partner) || partner === participant) missing.push('partner ID')
+  if (!initials.trim()) missing.push('initials')
+  if (!ra.trim()) missing.push('RA name')
+  if (!blocks.length) missing.push('at least one part')
+  const searchable = Boolean((lookupParticipant.trim() || normalizedDyad) && root)
+
+  return <div className="w-full flex flex-col items-center bg-black cursor-auto min-h-screen overflow-y-auto py-10">
     <input ref={picker} type="file" hidden multiple {...{ webkitdirectory: '' }} onChange={e => {
       const next = Array.from(e.target.files || [])
       if (next.length) { setFiles(next); setRoot(next[0].webkitRelativePath.split('/')[0]) }
       e.target.value = ''
     }} />
-    <fieldset className="rating-setup-fields" disabled={preparing}>
-      <section className="rating-drive" aria-label="Research Drive">
-        <div className="rating-drive-label"><FolderOpen size={21} /><div><h2>Research Drive</h2><p>{root ? native ? 'Saved on this computer' : 'Folder selected for this visit' : 'Choose the folder containing recorded sessions'}</p></div></div>
-        <div className="rating-folder-row"><span className="rating-folder-path" title={root}>{root || 'No folder selected'}</span><button type="button" className="suite-btn" onClick={() => void chooseRoot()}>{root ? 'Change folder' : 'Browse'}</button></div>
-        {native && driveChoices.filter(choice => choice !== root).length > 0 && <div className="rating-drive-chips" aria-label="Research Drive found on this computer"><span>Found on this computer:</span>{driveChoices.filter(choice => choice !== root).map(choice => <button type="button" key={choice} className="suite-btn" title={choice} onClick={() => void ipcInvoke('rating:set-root', choice).then(() => { setRoot(choice); setRefresh(value => value + 1) }).catch(e => setError(message(e)))}>{choice}</button>)}</div>}
-      </section>
-      <div className="rating-workspace">
-        <div className="rating-setup-main">
-          <SetupSection number="01" title="Participant" detail="Enter a participant ID to find their recording, or search by dyad ID.">
-            <div className="rating-setup-grid">
-              <Field label="Find by participant ID" value={lookupParticipant} onChange={setLookupParticipant} placeholder="e.g. P101" />
-              <Field label="Dyad ID (optional)" value={dyad} onChange={setDyad} placeholder="e.g. 014" />
-              <div className="suite-field"><span>Seat in recording</span><Segment choices={['P1', 'P2'] as const} value={seat} label={v => v} onChange={setSeat} ariaLabel="Seat in recording" /></div>
-              <Field label="Participant ID" value={participant} onChange={setManualParticipant} readOnly={Boolean(selected?.participantIds[seat])} />
-              <Field label="Partner ID" value={partner} onChange={setManualPartner} readOnly={Boolean(selected?.participantIds[otherSeat])} />
-            </div>
-            {participant && partner && !idsValid && <p className="rating-warning">Use two different IDs containing letters, numbers, dashes, or underscores.</p>}
-            <details className="rating-optional"><summary>Nametag colors <span>Optional</span></summary><div className="rating-setup-grid"><ColorField label="Participant" value={selfColor} onChange={setSelfColor} /><ColorField label="Partner" value={partnerColor} onChange={setPartnerColor} /></div></details>
-          </SetupSection>
-          <SetupSection number="02" title="What to show" detail="Choose what the participant sees and hears. Saved with their responses.">
-            <div className="rating-setup-grid">
-              <div className="suite-field"><span>Presentation</span><Segment choices={['video', 'audio'] as const} value={audioOnly ? 'audio' : 'video'} label={v => v === 'video' ? 'Video and audio' : 'Audio only'} onChange={v => setAudioOnly(v === 'audio')} ariaLabel="Presentation" /></div>
-              <div className="suite-field"><span>Participant's own recording</span><Segment choices={['clean', 'altered'] as const} value={ownVersion} label={v => v === 'clean' ? 'Original' : 'Changed'} onChange={setOwnVersion} ariaLabel="Own recording version" /></div>
-              <div className="suite-field"><span>Partner's recording</span><Segment choices={['clean', 'altered'] as const} value={partnerVersion} label={v => v === 'clean' ? 'Original' : 'Changed'} onChange={setPartnerVersion} ariaLabel="Partner recording version" /></div>
-              <div className="suite-field"><span>Parts to run (2:30 each)</span>
-                <div className="rating-setup-segments" role="group" aria-label="Parts to run">{[0, 1, 2, 3].map(b => <button type="button" key={b} className={blocks.includes(b) ? 'selected' : ''} aria-pressed={blocks.includes(b)} onClick={() => setBlocks(cur => cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b])}>Part {b + 1}</button>)}</div>
-                {!blocks.length && <small className="rating-warning">Choose at least one part.</small>}
-              </div>
-            </div>
-          </SetupSection>
-          <SetupSection number="03" title="Session details" detail="Saved with the participant's responses.">
-            <div className="rating-setup-grid">
-              <div className="suite-field"><span>Round</span><Segment choices={[1, 2, 3, 4, 5]} value={round} label={n => `R${n}`} onChange={setRound} ariaLabel="Round" /></div>
-              <div className="suite-field"><span>Group</span><Segment choices={['A', 'B', 'C'] as const} value={group} label={v => v} onChange={setGroup} ariaLabel="Group" /></div>
-              <Field label="Subject initials" value={initials} onChange={setInitials} placeholder="AB" />
-              <Field label="RA name" value={ra} onChange={setRa} placeholder="Researcher name" />
-              <label className="suite-field"><span>Session date</span><input className="suite-input" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-              <label className="suite-field"><span>Session time</span><input className="suite-input" type="time" value={time} onChange={e => setTime(e.target.value)} /></label>
-            </div>
-          </SetupSection>
+    <fieldset className="w-full max-w-3xl px-8 border-0 m-0 p-0 min-w-0">
+      <div className="px-8">
+        <div className="mb-8">
+          <h1 className="text-white text-4xl font-bold">Set up this station</h1>
+          <p className="text-gray-400 text-base mt-2">Researcher only. Hand the computer over once this is done.</p>
         </div>
-        <aside className="rating-recording-panel" aria-label="Conversation recording">
-          <div className="rating-recording-heading"><h2>Conversation video</h2><button type="button" className="rating-icon-button" title="Search again" aria-label="Search again" disabled={!root || (!lookupParticipant.trim() && !normalizedDyad) || searching} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button></div>
-          <div aria-live="polite" aria-busy={searching}>
-            {searchError ? <p className="rating-warning" role="alert">{searchError}</p> : searching ? <div className="rating-empty"><Loader2 className="rating-spin" size={23} /><strong>Searching recordings</strong><p>Checking the selected folder.</p></div> : !candidates.length ? <div className="rating-empty"><Search size={23} /><strong>{!root ? 'Choose your Research Drive' : !lookupParticipant.trim() && !normalizedDyad ? 'Find a conversation' : 'No recording found'}</strong><p>{!root ? 'Recordings will appear here.' : !lookupParticipant.trim() && !normalizedDyad ? 'Enter a participant or dyad ID to search.' : searched ? 'Check the ID and folder, then search again after the recording finishes copying.' : 'Waiting for the selected folder.'}</p></div> : <div className="rating-candidates">{candidates.map(candidate => <button type="button" key={candidate.id} className={selectedId === candidate.id ? 'selected' : ''} aria-pressed={selectedId === candidate.id} onClick={() => { setSelectedId(candidate.id); setError(''); if (lookupParticipant.trim()) { const matchedSeat = (['P1', 'P2'] as const).find(slot => candidate.participantIds[slot]?.toLowerCase() === lookupParticipant.trim().toLowerCase()); if (matchedSeat) setSeat(matchedSeat) } }}><Video size={18} /><span><strong>{candidate.label}</strong><small>{new Date(candidate.modifiedAt).toLocaleString()}</small><small className={completeRecording(candidate) ? 'rating-ready-text' : ''}>{completeRecording(candidate) ? 'All 4 tracks found' : candidate.source === 'suite' ? 'Single-video recording' : 'Missing or duplicate tracks'}</small></span>{selectedId === candidate.id && <Check size={17} />}</button>)}</div>}
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6">
+          <h2 className="text-white text-xl font-bold mb-1">Research Drive</h2>
+          <p className="text-gray-400 text-sm mb-4">Where the recording rooms file their conversations. This station finds the participant's recording here on its own, so nobody browses for a file mid-session. Set it once on this computer and it is remembered.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {root ? <span className="text-green-400 text-sm font-mono break-all">{root}</span> : <span className="text-yellow-400 text-sm">Not set yet.</span>}
+            <button type="button" onClick={() => void chooseRoot()} className="shrink-0 px-4 py-2 text-white text-sm border border-white rounded-lg hover:bg-gray-800 transition-colors">{root ? 'Change' : 'Browse'}</button>
           </div>
-          {selected && !completeRecording(selected) && <p className="rating-warning">This task needs one clean and one altered video per participant. Select a complete Session View recording.</p>}
-          <div className="rating-handoff-summary">
-            <h3>Before handoff</h3>
-            <Checklist done={completeRecording(selected)} label="Conversation selected" />
-            <Checklist done={idsValid && Boolean(selected)} label={idsValid && selected ? `${participant} reviewing ${partner}` : 'Participant and partner confirmed'} />
-            <Checklist done={detailsValid} label="Session details complete" />
-            <div className="rating-session-facts"><span>Round {round}</span><span>Group {group}</span><span>{blocks.length} part{blocks.length === 1 ? '' : 's'} · 2:30 each</span><span>{audioOnly ? 'Audio only' : 'Video'}</span></div>
-            {!native && <p className="rating-hint">Browser session: download responses when the task is finished.</p>}
-            {error && <p className="rating-warning" role="alert">{error}</p>}
-            <p className="rating-next-step" role="status">{preparing ? 'Checking that both videos can play...' : nextStep}</p>
-            <button type="button" className="suite-btn primary rating-start" disabled={!canStart || preparing} onClick={() => void start()}>{preparing ? <><Loader2 size={17} className="rating-spin" /> Checking recordings...</> : <>Start participant task <ArrowRight size={17} /></>}</button>
+          {native && driveChoices.filter(c => c !== root).length > 0 && <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="text-gray-400 text-sm">Found on this computer:</span>
+            {driveChoices.filter(c => c !== root).map(c => <button type="button" key={c} title={c} onClick={() => void ipcInvoke('rating:set-root', c).then(() => { setRoot(c); setRefresh(v => v + 1) }).catch(e => setError(message(e)))} className="px-3 py-1.5 text-gray-300 text-xs font-mono border border-gray-600 rounded hover:border-white hover:text-white transition-colors">{c}</button>)}
+          </div>}
+        </section>
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6">
+          <h2 className="text-white text-xl font-bold mb-1">Which round is this?</h2>
+          <p className="text-gray-400 text-sm mb-4">Saved with the participant's responses, so the rounds can be told apart afterwards.</p>
+          <div className="flex items-center gap-3">
+            {[1, 2, 3, 4, 5].map(r => <button key={r} type="button" onClick={() => setRound(r)} className={`flex-1 px-4 py-3 border rounded-lg text-lg font-semibold transition-colors ${round === r ? 'bg-white text-black border-white' : 'bg-gray-800 hover:bg-gray-700 text-white border-white'}`}>R{r}</button>)}
           </div>
-        </aside>
+        </section>
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6">
+          <h2 className="text-white text-xl font-bold mb-1">Who is sitting here</h2>
+          <p className="text-gray-400 text-sm mb-4">Type the participant's ID and their conversation is found automatically, with both IDs filled in from it. Or search by dyad ID.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-white text-lg mb-2">Find by participant ID</label><input aria-label="Find by participant ID" autoComplete="off" className={input} value={lookupParticipant} onChange={e => setLookupParticipant(e.target.value)} placeholder="e.g. P101" /></div>
+            <div><label className="block text-white text-lg mb-2">Dyad ID (optional)</label><input aria-label="Dyad ID" autoComplete="off" className={input} value={dyad} onChange={e => setDyad(e.target.value)} placeholder="e.g. 014" /></div>
+            <div><label className="block text-white text-lg mb-2">Participant ID{selected?.participantIds[seat] && <span className="text-gray-500 text-sm ml-2">from the recording</span>}</label><input aria-label="Participant ID" autoComplete="off" className={input} value={participant} readOnly={Boolean(selected?.participantIds[seat])} onChange={e => setManualParticipant(e.target.value)} /></div>
+            <div><label className="block text-white text-lg mb-2">Partner ID{selected?.participantIds[otherSeat] && <span className="text-gray-500 text-sm ml-2">from the recording</span>}</label><input aria-label="Partner ID" autoComplete="off" className={input} value={partner} readOnly={Boolean(selected?.participantIds[otherSeat])} onChange={e => setManualPartner(e.target.value)} /></div>
+            <div className="col-span-2"><label className="block text-white text-lg mb-2">Seat in the recording</label>
+              <div className="flex space-x-3">{(['P1', 'P2'] as const).map(side => <button key={side} type="button" onClick={() => setSeat(side)} className={choice(seat === side)}>{side}</button>)}</div></div>
+          </div>
+          {participant && partner && !idsValid && attempted && <p className="text-red-400 text-xs mt-2">Use two different IDs containing letters, numbers, dashes, or underscores.</p>}
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            {([['This participant\'s nametag', selfColor, setSelfColor], ['Partner\'s nametag', partnerColor, setPartnerColor]] as const).map(([label, value, setValue]) => <div key={label}>
+              <label className="block text-white text-lg mb-2">{label}</label>
+              <div className="flex flex-wrap gap-2">{Object.entries(colors).map(([name, hex]) => { const active = value === name; return <button key={name} type="button" title={name} aria-pressed={active} onClick={() => setValue(active ? '' : name)} className={`flex items-center gap-2 px-3 py-2 border rounded-lg transition-colors ${active ? 'border-white bg-gray-800' : 'border-gray-600 hover:border-gray-300'}`}><span aria-hidden className="w-4 h-4 rounded-full border border-white/40 shrink-0" style={{ backgroundColor: hex }} /><span className="text-white text-sm">{name}</span></button> })}</div>
+            </div>)}
+          </div>
+        </section>
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-white text-xl font-bold mb-1">Conversation video</h2>
+              <p className="text-gray-400 text-sm">{selected ? `Found for ${lookupParticipant.trim() ? `participant ${lookupParticipant.trim()}` : `dyad ${normalizedDyad}`}. Nothing to enter.` : 'Enter a participant ID above and their recording is found automatically.'}</p>
+            </div>
+            {searchable && <button type="button" onClick={() => { setRetry({ attempt: 0, nextAt: null, max: RETRY_MAX }); setRefresh(v => v + 1) }} disabled={searching} className="shrink-0 px-4 py-2 text-white text-sm border border-gray-600 rounded-lg hover:border-white transition-colors disabled:opacity-40">{searching ? 'Looking…' : 'Look again'}</button>}
+          </div>
+          <div className="space-y-4" aria-live="polite">
+            {searching && <p className="text-gray-400 text-sm">Looking on the Research Drive for {lookupParticipant.trim() ? `participant ${lookupParticipant.trim()}` : `dyad ${normalizedDyad}`}…</p>}
+            {searchError && <p className="text-red-400 text-sm" role="alert">{searchError}</p>}
+            {!searching && candidates.length > 0 && <>
+              <p className="text-gray-400 text-sm">{candidates.length === 1 ? '1 recording found.' : `${candidates.length} recordings found. The newest is first.`}</p>
+              <div className="flex flex-wrap gap-2">{candidates.map((c, i) => <button type="button" key={c.id} aria-pressed={selectedId === c.id} onClick={() => { setSelectedId(c.id); setError(''); if (lookupParticipant.trim()) { const m = (['P1', 'P2'] as const).find(slot => c.participantIds[slot]?.toLowerCase() === lookupParticipant.trim().toLowerCase()); if (m) setSeat(m) } }} className={`px-3 py-2 border rounded-lg text-sm transition-colors ${selectedId === c.id ? 'border-white bg-gray-800 text-white' : 'border-gray-600 text-gray-300 hover:border-gray-300'}`}>{c.label} · {new Date(c.modifiedAt).toLocaleString()}{i === 0 && <span className="ml-2 text-gray-500 text-xs">newest</span>}{!completeRecording(c) && <span className="ml-2 text-yellow-400 text-xs">incomplete</span>}</button>)}</div>
+            </>}
+            {selected && <div className="flex gap-4 items-start">
+              <div className="w-60 shrink-0 aspect-video border border-gray-700 rounded bg-gray-900 flex items-center justify-center overflow-hidden">
+                {previewUrl ? <video src={previewUrl} muted preload="metadata" onLoadedMetadata={e => { e.currentTarget.currentTime = 1 }} className="w-full h-full object-cover" /> : <span className="text-gray-500 text-xs">Reading a frame…</span>}
+              </div>
+              <div className="min-w-0"><p className="text-white text-base break-words">{selected.label}</p><p className={`text-sm mt-1 ${completeRecording(selected) ? 'text-green-400' : 'text-yellow-400'}`}>{completeRecording(selected) ? 'All 4 recordings found. The task will open them without asking.' : 'Missing or duplicate recordings. This task needs one original and one changed video from each person.'}</p></div>
+            </div>}
+            {!searching && !candidates.length && !searchError && searched && <div className="border border-yellow-600 rounded-lg p-4">
+              <p className="text-yellow-400 text-sm font-semibold">No recording found for {lookupParticipant.trim() ? `participant ${lookupParticipant.trim()}` : `dyad ${normalizedDyad}`}.</p>
+              <p className="text-gray-300 text-sm mt-1">The recording may still be copying, or filed in a different folder. Check the ID, then look again, or point at the folder yourself.</p>
+              <div className="mt-3">{!retriesExhausted(retry) ? <RetryCountdown retry={retry} /> : <button type="button" onClick={() => { setRetry({ attempt: 0, nextAt: null, max: RETRY_MAX }); setRefresh(v => v + 1) }} className="px-4 py-2 border border-white text-white hover:bg-gray-800 rounded-lg">Try again</button>}</div>
+            </div>}
+            {!root && <p className="text-gray-500 text-sm">Choose the Research Drive folder above first.</p>}
+            <button type="button" onClick={() => void browseSession()} className="text-gray-400 text-sm underline hover:text-white">Browse for the folder instead</button>
+          </div>
+        </section>
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6 space-y-4">
+          <h2 className="text-white text-xl font-bold">What to show</h2>
+          <p className="text-gray-400 text-sm -mt-2">What the participant sees and hears. Saved with their responses.</p>
+          <div><label className="block text-white text-lg mb-2">Presentation</label>
+            <div className="flex space-x-3">{([['video', 'Video and audio'], ['audio', 'Audio only']] as const).map(([k, l]) => <button key={k} type="button" aria-pressed={(k === 'audio') === audioOnly} onClick={() => setAudioOnly(k === 'audio')} className={choice((k === 'audio') === audioOnly)}>{l}</button>)}</div></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-white text-lg mb-2">Participant's own recording</label>
+              <div className="flex space-x-3">{(['clean', 'altered'] as const).map(v => <button key={v} type="button" aria-pressed={ownVersion === v} onClick={() => setOwnVersion(v)} className={choice(ownVersion === v)}>{v === 'clean' ? 'Original' : 'Changed'}</button>)}</div></div>
+            <div><label className="block text-white text-lg mb-2">Partner's recording</label>
+              <div className="flex space-x-3">{(['clean', 'altered'] as const).map(v => <button key={v} type="button" aria-pressed={partnerVersion === v} onClick={() => setPartnerVersion(v)} className={choice(partnerVersion === v)}>{v === 'clean' ? 'Original' : 'Changed'}</button>)}</div></div>
+          </div>
+          <div><label className="block text-white text-lg mb-2">Parts to run (2:30 each)</label>
+            <div className="flex space-x-3">{[0, 1, 2, 3].map(b => <button key={b} type="button" aria-pressed={blocks.includes(b)} onClick={() => setBlocks(cur => cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b])} className={choice(blocks.includes(b))}>Part {b + 1}</button>)}</div></div>
+        </section>
+
+        <section className="border border-gray-700 rounded-lg p-5 mb-6 space-y-4">
+          <h2 className="text-white text-xl font-bold">This session</h2>
+          <div><label className="block text-white text-lg mb-2">Group</label>
+            <div className="flex space-x-3">{(['A', 'B', 'C'] as const).map(g => <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(g)} className={choice(group === g)}>{g}</button>)}</div>
+            <p className="text-gray-500 text-xs mt-2">Recorded with the responses. It does not change what this participant sees.</p></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-white text-lg mb-2">Subject initials</label><input aria-label="Subject initials" autoComplete="off" className={input} value={initials} onChange={e => setInitials(e.target.value)} placeholder="AB" /></div>
+            <div><label className="block text-white text-lg mb-2">RA name</label><input aria-label="RA name" autoComplete="off" className={input} value={ra} onChange={e => setRa(e.target.value)} placeholder="Your name" /></div>
+            <div><label className="block text-white text-lg mb-2">Session date</label><input aria-label="Session date" type="date" className={input} value={date} onChange={e => setDate(e.target.value)} /></div>
+            <div><label className="block text-white text-lg mb-2">Session time</label><input aria-label="Session time" type="time" className={input} value={time} onChange={e => setTime(e.target.value)} /></div>
+          </div>
+        </section>
+
+        {attempted && missing.length > 0 && <p className="text-red-400 text-sm mb-4" role="alert">Still needed: {missing.join(', ')}.</p>}
+        {error && <p className="text-red-400 text-sm mb-4" role="alert">{error}</p>}
+        <button type="button" disabled={preparing} onClick={() => { setAttempted(true); if (missing.length === 0 && canStart) void start() }} className="w-full px-8 py-4 text-white text-xl border border-white bg-black hover:bg-gray-800 transition-colors disabled:opacity-50">{preparing ? 'Checking that both videos can play…' : 'Start — hand the computer to the participant'}</button>
+        <p className="text-gray-500 text-xs text-center mt-3">The next screen is the participant's first set of questions. Nothing above is shown to them.</p>
+        {preparing && <div className="text-center mt-3"><button type="button" className="text-gray-400 text-sm underline hover:text-white" onClick={() => check.current?.abort()}>Cancel video check</button></div>}
       </div>
     </fieldset>
-    {preparing && <button className="suite-btn rating-cancel-check" onClick={() => check.current?.abort()}>Cancel video check</button>}
-  </main>
-}
-
-function SetupSection({ number, title, detail, children }: { number: string; title: string; detail: string; children: React.ReactNode }) {
-  return <section className="rating-setup-section"><div className="rating-section-heading"><span className="rating-step">{number}</span><div><h2>{title}</h2><p>{detail}</p></div></div>{children}</section>
-}
-function Field({ label, value, onChange, placeholder, readOnly }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; readOnly?: boolean }) {
-  return <label className="suite-field"><span>{label}{readOnly && <small>From recording</small>}</span><input className="suite-input" aria-label={label} value={value} readOnly={readOnly} placeholder={placeholder} onChange={e => onChange(e.target.value)} autoComplete="off" /></label>
-}
-function Segment<T extends string | number>({ choices, value, label, onChange, ariaLabel }: { choices: readonly T[]; value: T; label: (v: T) => string; onChange: (v: T) => void; ariaLabel: string }) {
-  return <div className="rating-setup-segments" role="group" aria-label={ariaLabel}>{choices.map(choice => <button type="button" key={choice} className={value === choice ? 'selected' : ''} aria-pressed={value === choice} onClick={() => onChange(choice)}>{label(choice)}</button>)}</div>
-}
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return <div className="suite-field"><span>{label}</span><div className="rating-color-options" role="group" aria-label={`${label} nametag`}>{Object.entries(colors).map(([name, hex]) => <button type="button" key={name} title={name} aria-label={name} className={value === name ? 'selected' : ''} aria-pressed={value === name} onClick={() => onChange(value === name ? '' : name)}><i style={{ background: hex }}>{value === name && <Check size={13} />}</i></button>)}</div></div>
-}
-function Checklist({ done, label }: { done: boolean; label: string }) {
-  return <div className={`rating-checklist-item ${done ? 'complete' : ''}`}>{done ? <Check size={16} /> : <Circle size={15} />}<span>{label}</span></div>
+  </div>
 }

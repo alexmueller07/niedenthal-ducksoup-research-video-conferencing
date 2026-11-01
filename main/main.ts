@@ -376,6 +376,32 @@ ipcMain.handle('rating:set-root', async (_e, chosen: string) => {
   store.set('prefs.ratingDriveRoot', root)
   return root
 })
+// The researcher picks one session folder by hand (the recording was filed somewhere unexpected).
+ipcMain.handle('rating:browse-session', async () => {
+  const picked = await dialog.showOpenDialog({ properties: ['openDirectory'], title: 'The folder of this conversation (it holds session_summary.json)' })
+  if (picked.canceled) return null
+  const root = await fs.promises.realpath(picked.filePaths[0])
+  let summary: { participants?: { slot?: string; identity?: { participantId?: string; dyadId?: string } }[] }
+  try { summary = JSON.parse(await fs.promises.readFile(path.join(root, 'session_summary.json'), 'utf8')) }
+  catch { throw new Error('That folder does not look like a finished call (no session_summary.json). Choose the folder that holds the recording, or its parent.') }
+  store.set('prefs.ratingDriveRoot', root)
+  const first = (summary.participants || []).find(p => p?.identity?.participantId)
+  return { root, participantId: String(first?.identity?.participantId || '') }
+})
+
+// One recording from the chosen conversation, so the researcher can see a frame and confirm it is the right one.
+let ratingPreviewUrl: string | null = null
+ipcMain.handle('rating:preview', async (_e, rawDyad: string, candidateId: string) => {
+  const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
+  const candidate = (await findRatingRecordings(root, rawDyad)).find(c => c.id === candidateId)
+  const recording = candidate?.recordings.find(r => r.kind === 'clean') || candidate?.recordings[0]
+  if (ratingPreviewUrl) { ratingMedia.revoke(ratingPreviewUrl); ratingPreviewUrl = null }
+  if (!recording) return null
+  const port = await ratingMediaServer()
+  const [served] = ratingMedia.open([recording.path])
+  ratingPreviewUrl = served
+  return `http://127.0.0.1:${port}${served}`
+})
 ipcMain.handle('rating:lookup', async (_e, rawDyad: string) => {
   const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
   if (!fs.existsSync(root)) return []
