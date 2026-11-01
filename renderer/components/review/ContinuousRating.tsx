@@ -4,6 +4,8 @@ import { POST_CONVERSATION_ITEMS, RATING_INSTRUCTIONS } from '../../../main/rati
 import type { RatingSample, VideoVersion } from '../../lib/protocol'
 import type { ReviewScreenProps } from './ReviewScreen'
 import { ReviewStage } from './ReviewStage'
+import { MouseSlider } from './MouseSlider'
+import { NumberScale } from './NumberScale'
 
 const stats = { msAltered: 0, msClean: 0, toggles: 0, edits: 0, versionNow: 'altered' as const, firstTypedAtMs: null }
 
@@ -19,7 +21,6 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
   const [instruction, setInstruction] = useState(state.current === 0 ? 0 : RATING_INSTRUCTIONS.length)
   const [announced, setAnnounced] = useState(state.status === 'writing')
   const [dwell, setDwell] = useState(false)
-  const [value, setValue] = useState(50)
   const [text, setText] = useState('')
   const [elicitation, setElicitation] = useState<number | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
@@ -149,8 +150,7 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
       {POST_CONVERSATION_ITEMS.map(([id, label], index) => {
         const talking = id === 'relative_talking'
         return <fieldset className="rating-question" key={id}><legend><span>{index + 1}.</span> {label}</legend>
-          <div className="rating-scale-labels"><span>{talking ? 'My partner talked much more' : 'Not at all'}</span><span>{talking ? 'I talked much more' : 'Very much'}</span></div>
-          <div className="rating-numbers" role="radiogroup" aria-label={label}>{Array.from({ length: 11 }, (_, i) => i + (talking ? -5 : 0)).map(n => <button key={n} role="radio" aria-checked={answers[id] === n} className={answers[id] === n ? 'selected' : ''} onClick={() => setAnswers(a => ({ ...a, [id]: n }))}>{n}</button>)}</div>
+          <NumberScale label={label} min={talking ? -5 : 0} max={talking ? 5 : 10} leftLabel={talking ? 'My partner talked much more' : 'Not at all'} rightLabel={talking ? 'I talked much more' : 'Very much'} centerLabel={talking ? 'We talked about the same' : undefined} value={answers[id]} onChange={n => setAnswers(a => ({ ...a, [id]: n }))} />
         </fieldset>
       })}
       <button className="rating-primary" onClick={() => {
@@ -171,8 +171,7 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
     <h1>Please use the box below to write about how {self ? 'YOU were' : 'YOUR PARTNER was'} feeling during the part of the conversation you just watched.</h1>
     <textarea aria-label="Description of feelings" value={text} disabled={state.done[mySlot] || submitting} maxLength={20000} onChange={e => setText(e.target.value)} />
     <p>To what extent do you feel that {self ? 'YOUR PARTNER' : 'YOU'} elicited these feelings in {self ? 'YOU' : 'YOUR PARTNER'}?</p>
-    <div className="rating-scale-labels"><span>Not at all</span><span>Very</span></div>
-    <div className="rating-numbers">{Array.from({ length: 9 }, (_, i) => i + 1).map(n => <button key={n} disabled={state.done[mySlot] || submitting} aria-pressed={elicitation === n} className={elicitation === n ? 'selected' : ''} onClick={() => setElicitation(n)}>{n}</button>)}</div>
+    <NumberScale label="How much this person elicited these feelings" min={1} max={9} leftLabel="Not at all" rightLabel="Very" value={elicitation} onChange={setElicitation} disabled={state.done[mySlot] || submitting} />
     <button className="rating-primary" disabled={!!pendingCount || submitting || state.done[mySlot]} onClick={submit}>{state.done[mySlot] ? 'Saved. Waiting for your partner' : pendingCount ? 'Saving ratings...' : submitting ? 'Saving response...' : 'Continue'} <ArrowRight size={17} /></button>
     {notice && <p role="alert">{notice}</p>}
   </TaskFrame>
@@ -181,8 +180,7 @@ function RatingBlock({ state, media, mySlot, names, baseUrl, serverNow, send, ra
     <div className="rating-video"><ReviewStage state={state} media={media} viewer={mySlot} names={names} baseUrl={baseUrl} serverNow={serverNow} mode={state.config.viewMode} versions={['altered']} versionsBySeat={versionsBySeat} version="altered" audioOnly={policy === 'audio'} onReady={ready} onBuffering={buffering} onPlaybackTime={sample} /></div>
     {state.status !== 'playing' && <p className="rating-hold" role="status">{state.status === 'paused' ? 'Paused by the researcher' : 'Preparing the conversation. Please wait.'}</p>}
     <footer><h2>How positive or negative did {self ? 'YOU' : 'YOUR PARTNER'} feel during this moment in the conversation?</h2>
-      <input type="range" min={0} max={100} step={1} value={value} disabled={state.status !== 'playing'} aria-label="Feelings from very negative to very positive" onChange={e => { const n = Number(e.target.value); setValue(n); rating.current = { value: n, touched: true } }} />
-      <div className="rating-scale-labels"><span>Very negative</span><span>Neutral</span><span>Very positive</span></div>
+      <MouseSlider resetKey={key} onChange={v => { rating.current = { value: v, touched: true } }} />
       {notice && <p role="alert">{notice}</p>}
     </footer>
   </div>

@@ -63,7 +63,7 @@ try {
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByRole('button', { name: 'Keep answering' }).click()
-  for (const question of await page.locator('.rating-question').all()) await question.getByRole('button', { name: '0', exact: true }).click()
+  for (const question of await page.locator('.rating-question').all()) await question.getByRole('radio', { name: '0', exact: true }).click()
   await page.screenshot({ path: '/tmp/rating-refined-questionnaire.png', fullPage: true })
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   for (let i = 1; i <= 6; i++) {
@@ -76,7 +76,7 @@ try {
     await page.getByRole('button', { name: 'Begin part', exact: true }).click()
     await page.waitForFunction(() => [...document.querySelectorAll('video')].every(v => !v.paused && v.readyState >= 3))
     assert.equal(await page.locator('video').evaluateAll(videos => videos.every(v => !v.muted && !v.controls && v.disablePictureInPicture)), true)
-    await page.getByRole('slider').fill(String(55 + block))
+    { const box = (await page.locator('.mouse-slider-track').boundingBox())!; await page.mouse.move(box.x + box.width * (0.55 + block / 100), box.y + box.height / 2) }
     if (block === 1) {
       await page.waitForFunction(() => Object.keys(sessionStorage).some(key => key.startsWith('rating-station:') && JSON.parse(sessionStorage.getItem(key)!).samples.length > 0))
       await page.screenshot({ path: '/tmp/rating-refined-playback.png', fullPage: true })
@@ -108,7 +108,7 @@ try {
     }, block * 150)
     await expect(page.getByLabel('Describe feelings')).toBeVisible()
     await page.getByLabel('Describe feelings').fill(`Reflection ${block}`)
-    await page.getByRole('button', { name: '5', exact: true }).click()
+    await page.getByRole('radio', { name: '5', exact: true }).click()
     if (block === 4) {
       await page.evaluate(() => { (window as unknown as { rejectRatingSave: boolean }).rejectRatingSave = true })
       await page.getByRole('button', { name: 'Continue', exact: true }).click()
