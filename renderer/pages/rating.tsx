@@ -27,6 +27,11 @@ export default function RatingStationPage() {
   const [selfColor, setSelfColor] = useState('')
   const [partnerColor, setPartnerColor] = useState('')
   const [group, setGroup] = useState<'A' | 'B' | 'C'>('A')
+  // What to present: the RA's choice before handing the computer over.
+  const [audioOnly, setAudioOnly] = useState(false)
+  const [ownVersion, setOwnVersion] = useState<'clean' | 'altered'>('clean')
+  const [partnerVersion, setPartnerVersion] = useState<'clean' | 'altered'>('altered')
+  const [blocks, setBlocks] = useState<number[]>([0, 1, 2, 3])
   const [initials, setInitials] = useState('')
   const [ra, setRa] = useState('')
   const [date, setDate] = useState(localDate)
@@ -49,7 +54,7 @@ export default function RatingStationPage() {
   const participant = selected?.participantIds[seat] || manualParticipant.trim()
   const partner = selected?.participantIds[otherSeat] || manualPartner.trim()
   const idsValid = validId(participant) && validId(partner) && participant !== partner
-  const detailsValid = Boolean(ra.trim() && initials.trim() && date && time)
+  const detailsValid = Boolean(ra.trim() && initials.trim() && date && time && blocks.length)
   const canStart = Boolean(effectiveDyad && completeRecording(selected) && idsValid && detailsValid && !searching)
   const nextStep = !root ? 'Choose a recordings folder.' : !lookupParticipant.trim() && !normalizedDyad ? 'Enter a participant or dyad ID.' : searching ? 'Searching for the recording...' : !selected ? 'Select a conversation recording.' : !effectiveDyad ? 'The recording has no dyad ID.' : !completeRecording(selected) ? 'This recording is incomplete.' : !idsValid ? 'Check both participant IDs.' : !detailsValid ? 'Complete the session details.' : 'Ready to check video files and begin.'
 
@@ -112,11 +117,11 @@ export default function RatingStationPage() {
     try {
       let recordings: Pick<RatingRecording, 'seat' | 'kind'>[]
       if (native) {
-        const prepared = await ipcInvoke<{ recordings: Pick<RatingRecording, 'seat' | 'kind'>[]; urls: string[] }>('rating:prepare', effectiveDyad, selected.id, runId, seat)
+        const prepared = await ipcInvoke<{ recordings: Pick<RatingRecording, 'seat' | 'kind'>[]; urls: string[] }>('rating:prepare', effectiveDyad, selected.id, runId, seat, { own: ownVersion, partner: partnerVersion })
         if (!prepared) throw new Error('Could not prepare the selected recording.')
         urls = prepared.urls; recordings = prepared.recordings
       } else {
-        recordings = selected.recordings.filter(r => r.kind === (r.seat === seat ? 'clean' : 'altered'))
+        recordings = selected.recordings.filter(r => r.kind === (r.seat === seat ? ownVersion : partnerVersion))
         for (const recording of recordings) {
           const file = selected.files?.[`${recording.seat}:${recording.kind}`]
           if (!file) throw new Error('A selected recording is missing. Choose the folder again.')
@@ -126,7 +131,7 @@ export default function RatingStationPage() {
       if (urls.length !== 2) throw new Error('Both participant videos are required.')
       await Promise.all(urls.map((url, i) => inspectRatingVideo(url, controller.signal).catch(e => { throw new Error(`${recordings[i].seat}: ${message(e)}`) })))
       if (controller.signal.aborted) throw new Error('Recording check cancelled.')
-      setRun({ runId, dyad: effectiveDyad, candidateId: selected.id, participantId: participant, partnerId: partner, seat, round, group, selfColor, partnerColor, initials: initials.trim(), researcher: ra.trim(), date, time, native, recordings: recordings.map((r, i) => ({ ...r, url: urls[i] })) })
+      setRun({ audioOnly, ownVersion, partnerVersion, blocks: [...blocks].sort((a, b) => a - b), runId, dyad: effectiveDyad, candidateId: selected.id, participantId: participant, partnerId: partner, seat, round, group, selfColor, partnerColor, initials: initials.trim(), researcher: ra.trim(), date, time, native, recordings: recordings.map((r, i) => ({ ...r, url: urls[i] })) })
     } catch (e) {
       if (!controller.signal.aborted) setError(message(e))
       controller.abort()
@@ -169,7 +174,18 @@ export default function RatingStationPage() {
             {participant && partner && !idsValid && <p className="rating-warning">Use two different IDs containing letters, numbers, dashes, or underscores.</p>}
             <details className="rating-optional"><summary>Nametag colors <span>Optional</span></summary><div className="rating-setup-grid"><ColorField label="Participant" value={selfColor} onChange={setSelfColor} /><ColorField label="Partner" value={partnerColor} onChange={setPartnerColor} /></div></details>
           </SetupSection>
-          <SetupSection number="02" title="Session details" detail="Saved with the participant's responses.">
+          <SetupSection number="02" title="What to show" detail="Choose what the participant sees and hears. Saved with their responses.">
+            <div className="rating-setup-grid">
+              <div className="suite-field"><span>Presentation</span><Segment choices={['video', 'audio'] as const} value={audioOnly ? 'audio' : 'video'} label={v => v === 'video' ? 'Video and audio' : 'Audio only'} onChange={v => setAudioOnly(v === 'audio')} ariaLabel="Presentation" /></div>
+              <div className="suite-field"><span>Participant's own recording</span><Segment choices={['clean', 'altered'] as const} value={ownVersion} label={v => v === 'clean' ? 'Original' : 'Changed'} onChange={setOwnVersion} ariaLabel="Own recording version" /></div>
+              <div className="suite-field"><span>Partner's recording</span><Segment choices={['clean', 'altered'] as const} value={partnerVersion} label={v => v === 'clean' ? 'Original' : 'Changed'} onChange={setPartnerVersion} ariaLabel="Partner recording version" /></div>
+              <div className="suite-field"><span>Parts to run (2:30 each)</span>
+                <div className="rating-setup-segments" role="group" aria-label="Parts to run">{[0, 1, 2, 3].map(b => <button type="button" key={b} className={blocks.includes(b) ? 'selected' : ''} aria-pressed={blocks.includes(b)} onClick={() => setBlocks(cur => cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b])}>Part {b + 1}</button>)}</div>
+                {!blocks.length && <small className="rating-warning">Choose at least one part.</small>}
+              </div>
+            </div>
+          </SetupSection>
+          <SetupSection number="03" title="Session details" detail="Saved with the participant's responses.">
             <div className="rating-setup-grid">
               <div className="suite-field"><span>Round</span><Segment choices={[1, 2, 3, 4, 5]} value={round} label={n => `R${n}`} onChange={setRound} ariaLabel="Round" /></div>
               <div className="suite-field"><span>Group</span><Segment choices={['A', 'B', 'C'] as const} value={group} label={v => v} onChange={setGroup} ariaLabel="Group" /></div>
@@ -191,7 +207,7 @@ export default function RatingStationPage() {
             <Checklist done={completeRecording(selected)} label="Conversation selected" />
             <Checklist done={idsValid && Boolean(selected)} label={idsValid && selected ? `${participant} reviewing ${partner}` : 'Participant and partner confirmed'} />
             <Checklist done={detailsValid} label="Session details complete" />
-            <div className="rating-session-facts"><span>Round {round}</span><span>Group {group}</span><span>4 parts · 2:30 each</span></div>
+            <div className="rating-session-facts"><span>Round {round}</span><span>Group {group}</span><span>{blocks.length} part{blocks.length === 1 ? '' : 's'} · 2:30 each</span><span>{audioOnly ? 'Audio only' : 'Video'}</span></div>
             {!native && <p className="rating-hint">Browser session: download responses when the task is finished.</p>}
             {error && <p className="rating-warning" role="alert">{error}</p>}
             <p className="rating-next-step" role="status">{preparing ? 'Checking that both videos can play...' : nextStep}</p>

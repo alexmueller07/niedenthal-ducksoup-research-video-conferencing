@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, ClipboardList, Download, Headphones, Loader2, Play } from 'lucide-react'
 import { POST_CONVERSATION_ITEMS, RATING_INSTRUCTIONS, RATING_TASK_VERSION } from '../../../main/ratingTask'
 import { ipcInvoke } from '../../lib/ipcUtil'
-import { RATING_BLOCK_COUNT as BLOCKS, RATING_BLOCK_SECONDS as BLOCK_SECONDS } from '../../lib/ratingStation'
+import { RATING_BLOCK_SECONDS as BLOCK_SECONDS } from '../../lib/ratingStation'
 import { prepareRatingPlayback } from '../../lib/ratingPlayback'
 import { MouseSlider } from './MouseSlider'
 import { NumberScale } from './NumberScale'
@@ -12,6 +12,12 @@ export type RatingStationRun = {
   round: number; group: 'A' | 'B' | 'C'; selfColor: string; partnerColor: string
   initials: string; researcher: string; date: string; time: string; native: boolean
   recordings: { seat: 'P1' | 'P2'; kind: 'clean' | 'altered'; url: string }[]
+  /** What the researcher chose to present. */
+  audioOnly: boolean
+  ownVersion: 'clean' | 'altered'
+  partnerVersion: 'clean' | 'altered'
+  /** Which of the 2:30 parts to run, 0-based and in order. */
+  blocks: number[]
 }
 type Sample = { block: number; videoMs: number; value: number; touched: boolean }
 type Reflection = { block: number; target: 'self' | 'partner'; text: string; elicitation: number | null }
@@ -21,7 +27,9 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
   const [stage, setStage] = useState<Stage>('questionnaire')
   const [answers, setAnswers] = useState<Record<string, number>>({})
   const [instruction, setInstruction] = useState(0)
-  const [block, setBlock] = useState(0)
+  const [block, setBlock] = useState(run.blocks[0] ?? 0)
+  const partNo = run.blocks.indexOf(block) + 1
+  const partTotal = run.blocks.length
   const [text, setText] = useState('')
   const [elicitation, setElicitation] = useState<number | null>(null)
   const [saveError, setSaveError] = useState('')
@@ -50,8 +58,8 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
   const canLeave = useRef(false)
   stageRef.current = stage
   canLeave.current = stage === 'done' && saved && (run.native || downloaded)
-  const ownVideo = run.recordings.find(r => r.seat === run.seat && r.kind === 'clean')
-  const partnerVideo = run.recordings.find(r => r.seat !== run.seat && r.kind === 'altered')
+  const ownVideo = run.recordings.find(r => r.seat === run.seat)
+  const partnerVideo = run.recordings.find(r => r.seat !== run.seat)
   const target = block % 2 === 0 ? 'self' : 'partner'
 
   function moveTo(next: Stage) { stageRef.current = next; setStage(next) }
@@ -67,7 +75,7 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
   function result() {
     return {
       taskVersion: RATING_TASK_VERSION, runId: run.runId,
-      setup: { dyad: run.dyad, recording: run.candidateId, participantId: run.participantId, partnerId: run.partnerId, seat: run.seat, round: run.round, group: run.group, selfColor: run.selfColor, partnerColor: run.partnerColor, initials: run.initials, researcher: run.researcher, date: run.date, time: run.time },
+      setup: { dyad: run.dyad, recording: run.candidateId, participantId: run.participantId, partnerId: run.partnerId, seat: run.seat, round: run.round, group: run.group, audioOnly: run.audioOnly, ownVersion: run.ownVersion, partnerVersion: run.partnerVersion, blocks: run.blocks.map(b => b + 1), selfColor: run.selfColor, partnerColor: run.partnerColor, initials: run.initials, researcher: run.researcher, date: run.date, time: run.time },
       questionnaire: Object.fromEntries(POST_CONVERSATION_ITEMS.map(([id]) => [id, answers[id] ?? null])),
       samples: samples.current.map(sample => ({ ...sample })), reflections: reflections.current.map(item => ({ ...item })),
       interruptions: interruptions.current.map(item => ({ ...item })),
@@ -208,14 +216,15 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
     if (transition.current) return
     if (!allowMissing && (!text.trim() || elicitation === null)) { setSkip('reflection'); return }
     setSkip(null); transition.current = true
-    const isLast = block + 1 >= BLOCKS
+    const nextBlock = run.blocks[run.blocks.indexOf(block) + 1]
+    const isLast = nextBlock === undefined
     reflections.current.push({ block: block + 1, target, text: text.trim(), elicitation })
     // Persist the final status and responses together before showing completion.
     stageRef.current = isLast ? 'done' : 'ready'
     if (await saveNow()) {
       setText(''); setElicitation(null)
       if (isLast) moveTo('done')
-      else { setBlock(block + 1); moveTo('ready') }
+      else { setBlock(nextBlock); moveTo('ready') }
     } else { reflections.current.pop(); stageRef.current = 'reflection' }
     transition.current = false
   }
@@ -229,10 +238,10 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
   }
 
   return <div className="rating-station-task" ref={container}>
-    <header className="rating-task-header"><span>Session View <span>/ Conversation review</span></span><span>{stage === 'questionnaire' ? 'Your conversation' : stage === 'instructions' ? 'Before you begin' : stage === 'done' ? 'Complete' : `Part ${block + 1} of ${BLOCKS}`}</span></header>
+    <header className="rating-task-header"><span>Session View <span>/ Conversation review</span></span><span>{stage === 'questionnaire' ? 'Your conversation' : stage === 'instructions' ? 'Before you begin' : stage === 'done' ? 'Complete' : `Part ${partNo} of ${partTotal}`}</span></header>
     <div className="rating-task-content">
       {saveError && <p className="rating-warning" role="alert">{saveError}</p>}
-      <div className="rating-task-media" aria-hidden={stage !== 'playing'}>
+      <div className={`rating-task-media ${run.audioOnly ? 'audio-only' : ''}`} aria-hidden={stage !== 'playing'}>
         {[{ ref: own, video: ownVideo, name: 'You' }, { ref: partner, video: partnerVideo, name: 'Your partner' }].map(({ ref, video, name }) => <figure key={name}>
           <video ref={ref} playsInline preload="metadata" disablePictureInPicture disableRemotePlayback src={video?.url}
             onContextMenu={e => e.preventDefault()}
@@ -248,13 +257,13 @@ export function RatingStationTask({ run, onExit }: { run: RatingStationRun; onEx
         <div className="rating-task-actions"><button className="rating-primary" disabled={saving} onClick={() => void questionnaireNext()}>{saving ? 'Saving...' : 'Continue'} <ArrowRight size={17} /></button></div>
       </div>}
       {stage === 'instructions' && <div className="rating-task-form centered"><Headphones size={28} /><span className="rating-eyebrow">Before you begin · {instruction + 1} of {RATING_INSTRUCTIONS.length}</span><h1 tabIndex={-1}>{RATING_INSTRUCTIONS[instruction]}</h1><div className="rating-step-dots" aria-hidden="true">{RATING_INSTRUCTIONS.map((_, i) => <span key={i} className={i <= instruction ? 'complete' : ''} />)}</div><button className="rating-primary" onClick={() => { if (instruction + 1 < RATING_INSTRUCTIONS.length) setInstruction(instruction + 1); else moveTo('ready') }}>Continue <ArrowRight size={17} /></button></div>}
-      {stage === 'ready' && <div className="rating-task-form centered"><span className="rating-eyebrow">Part {block + 1} of {BLOCKS} · 2 minutes 30 seconds</span><h1 tabIndex={-1}>Focus on {target === 'self' ? 'your own' : "your partner's"} feelings.</h1><p>The recording will play once. Move the slider continuously as you watch.</p><button className="rating-primary" onClick={() => void beginBlock()}><Play size={17} /> Begin part</button></div>}
+      {stage === 'ready' && <div className="rating-task-form centered"><span className="rating-eyebrow">Part {partNo} of {partTotal} · 2 minutes 30 seconds</span><h1 tabIndex={-1}>Focus on {target === 'self' ? 'your own' : "your partner's"} feelings.</h1><p>The recording will play once. Move the slider continuously as you watch.</p><button className="rating-primary" onClick={() => void beginBlock()}><Play size={17} /> Begin part</button></div>}
       {stage === 'playing' && <div className="rating-task-controls">
-        <div className="rating-task-banner">Part {block + 1} of {BLOCKS} · {target === 'self' ? 'YOUR OWN FEELINGS' : "YOUR PARTNER'S FEELINGS"}</div>
+        <div className="rating-task-banner">Part {partNo} of {partTotal} · {target === 'self' ? 'YOUR OWN FEELINGS' : "YOUR PARTNER'S FEELINGS"}</div>
         {(hold || starting) && <div className="rating-playback-hold" role="status"><div><strong>{starting ? 'Preparing playback' : 'Playback paused'}</strong><p>{starting ? 'Getting both videos ready.' : hold}</p></div>{starting ? <Loader2 size={20} className="rating-spin" /> : <button className="rating-primary" disabled={saving} onClick={() => void resumePlayback()}><Play size={16} /> Continue playback</button>}</div>}
         <h2>How positive or negative did {target === 'self' ? 'YOU' : 'YOUR PARTNER'} feel during this moment in the conversation?</h2><MouseSlider resetKey={block} onChange={v => { rating.current = { value: v, touched: true } }} />
       </div>}
-      {stage === 'reflection' && <div className="rating-task-form centered"><span className="rating-eyebrow">Part {block + 1} of {BLOCKS} · Reflection</span><h1 tabIndex={-1}>Please use the box below to write about how {target === 'self' ? 'YOU were' : 'YOUR PARTNER was'} feeling during the part of the conversation you just watched.</h1><textarea value={text} onChange={e => setText(e.target.value)} aria-label="Describe feelings" maxLength={20000} /><p>To what extent do you feel that {target === 'self' ? 'YOUR PARTNER' : 'YOU'} elicited these feelings in {target === 'self' ? 'YOU' : 'YOUR PARTNER'}? Click the corresponding number.</p><NumberScale label="How much this person elicited these feelings" min={1} max={9} leftLabel="Not at all" rightLabel="Very" value={elicitation} onChange={setElicitation} /><button className="rating-primary" disabled={saving} onClick={() => void reflectionNext()}>{saving ? 'Saving...' : 'Continue'} <ArrowRight size={17} /></button></div>}
+      {stage === 'reflection' && <div className="rating-task-form centered"><span className="rating-eyebrow">Part {partNo} of {partTotal} · Reflection</span><h1 tabIndex={-1}>Please use the box below to write about how {target === 'self' ? 'YOU were' : 'YOUR PARTNER was'} feeling during the part of the conversation you just watched.</h1><textarea value={text} onChange={e => setText(e.target.value)} aria-label="Describe feelings" maxLength={20000} /><p>To what extent do you feel that {target === 'self' ? 'YOUR PARTNER' : 'YOU'} elicited these feelings in {target === 'self' ? 'YOU' : 'YOUR PARTNER'}? Click the corresponding number.</p><NumberScale label="How much this person elicited these feelings" min={1} max={9} leftLabel="Not at all" rightLabel="Very" value={elicitation} onChange={setElicitation} /><button className="rating-primary" disabled={saving} onClick={() => void reflectionNext()}>{saving ? 'Saving...' : 'Continue'} <ArrowRight size={17} /></button></div>}
       {stage === 'done' && <div className="rating-task-form centered"><Check size={34} className="rating-ready-text" /><h1 tabIndex={-1}>You have finished. Thank you.</h1><p>{run.native ? 'Your responses are saved.' : 'Please let the researcher download your responses before leaving this station.'}</p>{!run.native && <button className="rating-primary" onClick={exportBrowser}><Download size={17} /> {downloaded ? 'Download again' : 'Download responses'}</button>}<button className="suite-btn" disabled={!saved || (!run.native && !downloaded)} onClick={onExit}>Return to station setup</button></div>}
     </div>
     {skip && <dialog ref={skipDialog} className="rating-dialog" aria-labelledby="rating-missing-title" onCancel={() => setSkip(null)}><h2 id="rating-missing-title">Leave unanswered items blank?</h2><p>{skip === 'questionnaire' ? `${POST_CONVERSATION_ITEMS.filter(([id]) => answers[id] === undefined).length} questions have no response.` : 'Your reflection or rating is incomplete.'} You cannot return to this page after continuing.</p><div><button className="suite-btn" autoFocus onClick={() => setSkip(null)}>Keep answering</button><button className="rating-primary" onClick={() => void (skip === 'questionnaire' ? questionnaireNext(true) : reflectionNext(true))}>Continue with blanks <ArrowRight size={16} /></button></div></dialog>}

@@ -389,7 +389,7 @@ ipcMain.handle('rating:lookup-participant', async (_e, participantId: string) =>
   if (!fs.existsSync(root)) return []
   return findRatingRecordingsByParticipant(root, participantId)
 })
-ipcMain.handle('rating:prepare', async (_e, rawDyad: string, candidateId: string, runId: string, seat: string) => {
+ipcMain.handle('rating:prepare', async (_e, rawDyad: string, candidateId: string, runId: string, seat: string, choice?: { own?: string; partner?: string }) => {
   if (!/^[a-f0-9-]{36}$/.test(runId)) throw new Error('Invalid rating run.')
   if (seat !== 'P1' && seat !== 'P2') throw new Error('Select a participant seat.')
   const root = (store.get('prefs.ratingDriveRoot', null) as string | null) || outputRoot()
@@ -399,7 +399,11 @@ ipcMain.handle('rating:prepare', async (_e, rawDyad: string, candidateId: string
   if (candidate.recordings.length !== 4 || versions.some(key => candidate.recordings.filter(r => `${r.seat}:${r.kind}` === key).length !== 1))
     throw new Error('This task needs one clean and one altered recording from each participant. Check the session recordings.')
   const port = await ratingMediaServer()
-  const allowed = candidate.recordings.filter(r => r.kind === (r.seat === seat ? 'clean' : 'altered'))
+  // The researcher chooses which version each person sees; the default is their own original and the partner's changed video.
+  const pick = (value: string | undefined, fallback: 'clean' | 'altered') => value === 'clean' || value === 'altered' ? value : fallback
+  const own = pick(choice?.own, 'clean')
+  const partner = pick(choice?.partner, 'altered')
+  const allowed = candidate.recordings.filter(r => r.kind === (r.seat === seat ? own : partner))
   const paths = ratingMedia.open(allowed.map(r => r.path))
   const urls = paths.map(p => `http://127.0.0.1:${port}${p}`)
   ratingSelections.set(runId, { root: await fs.promises.realpath(root), sessionId: candidate.id, dyad: normalizeRatingDyad(rawDyad), mediaUrl: paths[0] })
@@ -419,7 +423,7 @@ ipcMain.handle('rating:save', async (_e, payload: { dyad: string; sessionId: str
   await fs.promises.rename(temp, file)
   const content = payload.content as {
     status?: string
-    setup?: { dyad?: string; round?: number; group?: string }
+    setup?: { dyad?: string; round?: number; group?: string; audioOnly?: boolean; ownVersion?: string; partnerVersion?: string }
     questionnaire?: Record<string, number | null>
     samples?: { block: number; videoMs: number; value: number; touched: boolean }[]
     reflections?: { block: number; target: string; text: string; elicitation: number | null }[]
@@ -433,10 +437,13 @@ ipcMain.handle('rating:save', async (_e, payload: { dyad: string; sessionId: str
     const csv = (header: string[], rows: unknown[][]) => [header, ...rows].map(row => row.map(safeCell).join(',')).join('\r\n') + '\r\n'
     const prefix = `${payload.participantId}-${payload.runId}`
     const base = [payload.dyad, payload.participantId, content.setup?.round, content.setup?.group]
+    // What was presented, added at the end of every row so older readers keep their column positions.
+    const shown = [content.setup?.audioOnly ? 'audio_only' : 'video', content.setup?.ownVersion ?? '', content.setup?.partnerVersion ?? '']
+    const shownHeader = ['presentation', 'own_recording', 'partner_recording']
     const files: [string, string][] = [
-      [`${prefix}-questionnaire.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'question_id', 'answer'], Object.entries(content.questionnaire || {}).map(([id, answer]) => [...base, id, answer]))],
-      [`${prefix}-samples.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'video_ms', 'rating', 'slider_touched'], (content.samples || []).map(sample => [...base, sample.block, sample.videoMs, sample.value, sample.touched]))],
-      [`${prefix}-reflections.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'target', 'response', 'elicitation'], (content.reflections || []).map(item => [...base, item.block, item.target, item.text, item.elicitation]))],
+      [`${prefix}-questionnaire.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'question_id', 'answer', ...shownHeader], Object.entries(content.questionnaire || {}).map(([id, answer]) => [...base, id, answer, ...shown]))],
+      [`${prefix}-samples.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'video_ms', 'rating', 'slider_touched', ...shownHeader], (content.samples || []).map(sample => [...base, sample.block, sample.videoMs, sample.value, sample.touched, ...shown]))],
+      [`${prefix}-reflections.csv`, csv(['dyad_id', 'participant_id', 'round', 'group', 'block', 'target', 'response', 'elicitation', ...shownHeader], (content.reflections || []).map(item => [...base, item.block, item.target, item.text, item.elicitation, ...shown]))],
     ]
     for (const [name, data] of files) {
       const final = path.join(dir, name)
