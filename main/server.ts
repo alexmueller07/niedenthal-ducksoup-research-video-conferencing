@@ -43,6 +43,7 @@ import {
 } from './protocol'
 import { SessionLogger, LoggedEvent, EventInput } from './logger'
 import { RuleEngine, describeRule, validRules } from './rules'
+import { MessageScheduler, validScheduledMessages } from './scheduledMessages'
 import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
 import { ReviewController, buildSegments, cleanText, parseReviewConfig, parseViewingStats } from './review'
@@ -149,6 +150,7 @@ export class SessionServer {
   private ruleTimer: ReturnType<typeof setInterval> | null = null
   private readonly ruleEngine: RuleEngine
   private readonly studyTimeline: StudyTimeline
+  private readonly scheduledMessages = new MessageScheduler()
   readonly port: number
   readonly logger: SessionLogger
 
@@ -264,7 +266,13 @@ export class SessionServer {
       })
       wss.on('connection', (ws, req) => this.onConnection(ws, req.socket.remoteAddress ?? ''))
       this.pingTimer = setInterval(() => this.heartbeat(), 5000)
-      this.ruleTimer = setInterval(() => { this.ruleEngine.tick(Date.now()); this.studyTimeline.tick(Date.now()) }, 250)
+      this.ruleTimer = setInterval(() => {
+        this.ruleEngine.tick(Date.now())
+        this.studyTimeline.tick(Date.now())
+        const liveStart = this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null
+        for (const m of this.scheduledMessages.tick(Date.now(), liveStart, this.phase))
+          this.sendBanner(m.text, m.durationSec, { scheduled: true, atSec: m.atSec })
+      }, 250)
       this.reviewTimer = setInterval(() => this.review.tick(), 250)
     })
   }
@@ -454,6 +462,12 @@ export class SessionServer {
     }
   }
 
+  /** The pair's dyad ID, if both participants gave the same one (or only one is known). */
+  dyadId(): string {
+    const ids = (['P1', 'P2'] as const).map((s) => this.identityOf(s).dyadId.trim()).filter(Boolean)
+    return ids.length > 0 && ids.every((id) => id === ids[0]) ? ids[0] : ''
+  }
+
   private identityOf(slot: SlotId): Identity {
     return this.bySlot(slot)?.identity ?? this.slotIdentities.get(slot) ?? EMPTY_IDENTITY
   }
@@ -563,6 +577,7 @@ export class SessionServer {
     // edits survive an admin reconnect.
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
+      this.send(ws, { type: 'scheduled-messages', messages: this.scheduledMessages.current })
       this.send(ws, { type: 'study-schedule-state', state: this.studyTimeline.state })
       this.send(ws, { type: 'voice-state', state: this.voiceSession.snapshot() })
       this.send(ws, { type: 'review-availability', availability: this.reviewAvailability() })
@@ -775,6 +790,7 @@ export class SessionServer {
           liveLevel: telemetry.calibration?.liveLevel,
           headroom: telemetry.calibration?.headroom,
           talking: telemetry.calibration?.talking,
+          morph: telemetry.calibration?.morph,
           rawMouthSmileLeft: telemetry.expression?.rawMouthSmileLeft,
           rawMouthSmileRight: telemetry.expression?.rawMouthSmileRight,
           rawMouthFrownLeft: telemetry.expression?.rawMouthFrownLeft,
@@ -942,20 +958,26 @@ export class SessionServer {
       }
       case 'banner': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        for (const c of this.clients.values()) {
-          if (c.role === 'participant') {
-            this.send(c.ws, { type: 'banner', text: msg.text, durationSec: msg.durationSec })
-          }
+        this.sendBanner(msg.text, msg.durationSec, {}, ctx.identity.name)
+        return
+      }
+      case 'set-scheduled-messages': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        if (!validScheduledMessages(msg.messages)) {
+          this.send(ctx.ws, { type: 'voice-error', reason: 'Invalid timed message' })
+          return
         }
+        this.scheduledMessages.setMessages(msg.messages)
         this.log({
-          event: 'message_sent',
+          event: 'timed_messages_changed',
           actorRole: 'admin',
           actorSlot: 'ADMIN',
           actorName: ctx.identity.name,
-          param: 'durationSec',
-          value: msg.durationSec,
-          detail: { text: msg.text },
+          param: 'count',
+          value: msg.messages.length,
+          detail: msg.messages,
         })
+        this.send(ctx.ws, { type: 'scheduled-messages', messages: msg.messages })
         return
       }
       case 'calibration-start': {
@@ -1167,6 +1189,22 @@ export class SessionServer {
     }
   }
 
+  /** Show a banner on both participant screens and log it. */
+  private sendBanner(text: string, durationSec: number, detail: Record<string, unknown> = {}, adminName = '') {
+    for (const c of this.clients.values()) {
+      if (c.role === 'participant') this.send(c.ws, { type: 'banner', text, durationSec })
+    }
+    this.log({
+      event: 'message_sent',
+      actorRole: detail.scheduled ? 'server' : 'admin',
+      actorSlot: 'ADMIN',
+      actorName: adminName,
+      param: 'durationSec',
+      value: durationSec,
+      detail: { text, ...detail },
+    })
+  }
+
   private applyVoiceCondition(condition: typeof DEFAULT_VOICE_CONDITION) {
     this.voiceSession.condition={...condition}
     if (condition.mode!=='bypass'||condition.audibility) {
@@ -1215,6 +1253,7 @@ export class SessionServer {
     // Rules: going live re-arms the timers; ending or returning to the
     // waiting room releases anything a rule left applied.
     this.ruleEngine.onPhaseChange(phase)
+    this.scheduledMessages.onPhaseChange(phase)
     this.log({
       // Leaving the review is not the end of the conversation; keep that row unique.
       event: from === 'review' ? 'review_closed' : SESSION_PHASE_EVENT_NAMES[phase],

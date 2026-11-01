@@ -29,7 +29,7 @@ import { VoiceLogger, modeName } from './voiceLogger'
 import { formatLocalDate, formatLocalTimeOfDay } from './timeFormat'
 import type { VoiceReport } from './voiceProtocol'
 import type { ReviewResponseRecord } from './review'
-import type { ReviewConfig, ReviewViewMode } from './protocol'
+import type { AppliedMorph, ReviewConfig, ReviewViewMode } from './protocol'
 
 export interface EventInput {
   actorRole?: string
@@ -107,6 +107,8 @@ export interface EffectStateInput {
   /** Morph budget left after their real expression took its share, 0..1. */
   headroom?: number
   talking?: boolean
+  /** What the morph moved this second, by facial region. */
+  morph?: AppliedMorph
   /** Raw MediaPipe facial-movement scores (0..1) behind the expression label — not OpenFace/FACS AUs. */
   rawMouthSmileLeft?: number
   rawMouthSmileRight?: number
@@ -459,6 +461,29 @@ function decodeDataUrl(dataUrl: string): Buffer | null {
   }
 }
 
+/**
+ * Give a finished session folder its dyad name: `session_<time>` becomes
+ * `dyad_<id>_<time>`. Done only after every file is closed (Windows will not
+ * rename a folder with open files). Returns the new path, or the old one if
+ * there is no dyad ID or the name is taken.
+ */
+export async function renameSessionToDyad(dir: string, dyadId: string): Promise<string> {
+  const digits = /\d+/.exec(dyadId)?.[0]
+  const id = digits
+    ? digits.replace(/^0+(?=\d)/, '').padStart(3, '0')
+    : dyadId.trim().replace(/[^A-Za-z0-9._-]+/g, '_')
+  const base = path.basename(dir)
+  if (!id || !base.startsWith('session_')) return dir
+  const target = path.join(path.dirname(dir), `dyad_${id}_${base.slice('session_'.length)}`)
+  try {
+    if (fs.existsSync(target)) return dir
+    await fsp.rename(dir, target)
+    return target
+  } catch {
+    return dir
+  }
+}
+
 export class SessionLogger {
   studyProtocol(record: Record<string, unknown>): void {
     if (this.closed) throw new Error('Session output folder is closed.')
@@ -594,7 +619,7 @@ export class SessionLogger {
     if (!s) {
       fs.mkdirSync(path.join(this.dir, 'face'), { recursive: true })
       s = fs.createWriteStream(path.join(this.dir, 'face', `face_and_voice_changes_${key}.csv`), { flags: 'a' })
-      s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason,self_voice_smile,partner_voice_smile\n')
+      s.write(STATE_HEADER.trimEnd() + ',voice_mode,voice_target,voice_calibration_state,voice_calibration_confidence,voice_applied_pitch_st,voice_applied_gain_db,voice_effect_active,voice_fallback_reason,self_voice_smile,partner_voice_smile,applied_lip_corner_au12_au15,applied_cheek_raise_au6,applied_eye_squeeze_au6_au7,applied_brow_raise_au1_au2,applied_brow_furrow_au4,applied_lip_pout_au17,fade_for_head_turn,fade_for_open_mouth\n')
       this.stateStreams.set(key, s)
     }
     return s
@@ -679,6 +704,14 @@ export class SessionLogger {
         csvField(input.voice?.applied.fallbackReason ?? ''),
         input.selfVoiceSmile,
         input.partnerVoiceSmile ?? '',
+        input.morph?.lipCorner ?? '',
+        input.morph?.cheekRaise ?? '',
+        input.morph?.eyeSqueeze ?? '',
+        input.morph?.browRaise ?? '',
+        input.morph?.browFurrow ?? '',
+        input.morph?.lipPout ?? '',
+        input.morph?.yawFade ?? '',
+        input.morph?.openFade ?? '',
       ].join(',') + '\n',
     )
   }

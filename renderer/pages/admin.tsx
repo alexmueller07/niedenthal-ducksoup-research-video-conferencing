@@ -31,6 +31,7 @@ import {
 } from '../lib/protocol'
 import type {
   AutomationRule,
+  ScheduledMessage,
   CalibrationPhase,
   CalibrationPhaseMessage,
   CalibrationRuntimeState,
@@ -116,6 +117,7 @@ export default function AdminDashboard() {
   const [eventCount, setEventCount] = useState(0)
   const [expressions, setExpressions] = useState<Partial<Record<PSlot, ExpressionState>>>({})
   const [rules, setRules] = useState<AutomationRule[]>([])
+  const [timedMessages, setTimedMessages] = useState<ScheduledMessage[]>([])
   const [ruleActive, setRuleActive] = useState<Record<string, boolean>>({})
   const [micToggled, setMicToggled] = useState(false)
   const [micHolding, setMicHolding] = useState(false)
@@ -136,6 +138,8 @@ export default function AdminDashboard() {
   const [reviewError, setReviewError] = useState('')
   const [studyTimeline, setStudyTimeline] = useState<StudyTimelineState | null>(null)
   const [studyTimelineError, setStudyTimelineError] = useState('')
+  /** Bumped when a recorder stops or fails, so the recording effect looks again (restart on a new stream, retry a failed start). */
+  const [recTick, setRecTick] = useState(0)
 
   const clientRef = useRef<SignalClient | null>(null)
   const linksRef = useRef<Map<PSlot, PeerLink>>(new Map())
@@ -147,7 +151,7 @@ export default function AdminDashboard() {
   })
   const micStreamRef = useRef<MediaStream | null>(null)
   const micTrackRef = useRef<MediaStreamTrack | null>(null)
-  const recordersRef = useRef<Map<string, { rec: MediaRecorder; id: string; part: number }>>(new Map())
+  const recordersRef = useRef<Map<string, { rec: MediaRecorder; id: string; part: number; streamId: string }>>(new Map())
   const recPartsRef = useRef<Map<string, number>>(new Map())
   /** When a recorder last failed to start, so it is not retried on every re-render. */
   const recFailedAtRef = useRef<Map<string, number>>(new Map())
@@ -158,6 +162,8 @@ export default function AdminDashboard() {
   // slow round-trip cannot clobber an input mid-edit.
   const rulesTouchedRef = useRef(0)
   const rulesSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timedTouchedRef = useRef(0)
+  const timedSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const phase: Phase = roster?.phase ?? 'waiting'
   const micLive = micToggled || micHolding
@@ -305,6 +311,9 @@ export default function AdminDashboard() {
               if (performance.now() - rulesTouchedRef.current > 1500) {
                 setRules(msg.rules)
               }
+              return
+            case 'scheduled-messages':
+              if (performance.now() - timedTouchedRef.current > 1500) setTimedMessages(msg.messages)
               return
             case 'rule-status':
               setRuleActive(msg.active)
@@ -505,7 +514,11 @@ export default function AdminDashboard() {
       let fixed: ReturnType<typeof fixedSizeStream> | null = null
       let rec: MediaRecorder
       try {
-        fixed = hasVideo ? fixedSizeStream(stream) : null
+        fixed = hasVideo
+          ? fixedSizeStream(stream, 1280, 720, 30, (what) =>
+              clientRef.current?.send({ type: 'client-event', event: 'recording_source_stalled', target: key, param: 'what', value: what }),
+            )
+          : null
         rec = new MediaRecorder(
           fixed?.stream ?? stream,
           format.mimeType ? { mimeType: format.mimeType } : undefined,
@@ -514,6 +527,7 @@ export default function AdminDashboard() {
         // Close the empty file so nothing waits on a recording that never started.
         console.error(`[rec] could not start ${fullLabel}`, err)
         recFailedAtRef.current.set(key, performance.now())
+        setTimeout(() => setRecTick((t) => t + 1), 10_500)
         fixed?.stop()
         void ipcInvoke('rec:close', opened.id)
         return
@@ -536,11 +550,12 @@ export default function AdminDashboard() {
             const cur = prev[key]
             return cur ? { ...prev, [key]: { ...cur, active: false } } : prev
           })
+          setRecTick((t) => t + 1)
         })
       }
       rec.start(1000)
       startedAtEpochMs = Date.now()
-      recordersRef.current.set(key, { rec, id: opened.id, part })
+      recordersRef.current.set(key, { rec, id: opened.id, part, streamId: stream.id })
       setRecState((prev) => ({
         ...prev,
         [key]: { label: `${fullLabel}.${format.ext}`, bytes: 0, active: true },
@@ -555,6 +570,17 @@ export default function AdminDashboard() {
         const pid = roster?.slots[slot]?.identity.participantId || slot
         for (const kind of ['altered', 'clean'] as Kind[]) {
           const stream = streams[slot][kind]
+          // Wait until the participant has said which stream is which: a guess
+          // can pick the wrong one, and the recorder would stay on it.
+          if (stream && !bucketsRef.current[slot].map) continue
+          const running = recordersRef.current.get(`${slot}:${kind}`)
+          if (stream && running && running.streamId !== stream.id) {
+            // The stream behind this recording was replaced (re-negotiation).
+            // The old one is dead and would record a frozen picture, so end it;
+            // its stop bumps recTick and a fresh part starts on the new stream.
+            if (running.rec.state !== 'inactive') running.rec.stop()
+            continue
+          }
           if (stream)
             void startRecorder(`${slot}:${kind}`, `${slot}_${pid}_${kind}`, stream, {
               slot,
@@ -572,7 +598,7 @@ export default function AdminDashboard() {
         if (rec.state !== 'inactive') rec.stop()
       }
     }
-  }, [phase, streams, roster, startRecorder])
+  }, [phase, streams, roster, startRecorder, recTick])
 
   // ---- Commands ----
   function sendEffect(slot: PSlot, param: keyof EffectState, value: number, force = false) {
@@ -709,6 +735,16 @@ export default function AdminDashboard() {
     if (rulesSendTimer.current) clearTimeout(rulesSendTimer.current)
     rulesSendTimer.current = setTimeout(() => {
       clientRef.current?.send({ type: 'set-rules', rules: next })
+    }, 400)
+  }
+
+  /** Replace the timed-message list locally and (debounced) on the server. */
+  function updateTimedMessages(next: ScheduledMessage[]) {
+    timedTouchedRef.current = performance.now()
+    setTimedMessages(next)
+    if (timedSendTimer.current) clearTimeout(timedSendTimer.current)
+    timedSendTimer.current = setTimeout(() => {
+      clientRef.current?.send({ type: 'set-scheduled-messages', messages: next.filter((m) => m.text.trim()) })
     }, 400)
   }
 
@@ -1063,6 +1099,9 @@ export default function AdminDashboard() {
               </ul>
             )}
           </Card>
+
+          {/* Timed messages */}
+          <TimedMessagesCard messages={timedMessages} elapsedSec={phase === 'live' ? elapsedSec : null} onChange={updateTimedMessages} />
 
           {/* Automation rules */}
           <RulesCard
@@ -1807,6 +1846,112 @@ function RulesCard({
           + template: mirror smiles
         </button>
       </div>
+    </Card>
+  )
+}
+
+function TimedMessagesCard({
+  messages,
+  elapsedSec,
+  onChange,
+}: {
+  messages: ScheduledMessage[]
+  elapsedSec: number | null
+  onChange: (next: ScheduledMessage[]) => void
+}) {
+  const [lengthMin, setLengthMin] = useState(10)
+  const input =
+    'rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm outline-none focus:border-sky-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+  const add = (atSec: number, text: string) => {
+    if (messages.length >= 30) return
+    const id = `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+    onChange([...messages, { id, atSec: Math.max(0, Math.round(atSec)), text, durationSec: 8 }].sort((a, b) => a.atSec - b.atSec))
+  }
+  const update = (id: string, patch: Partial<ScheduledMessage>) =>
+    onChange(messages.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+  return (
+    <Card title="Timed messages" subtitle="Shown automatically to both participants once, at a set time into the conversation">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+        <span>Conversation length</span>
+        <input
+          type="number"
+          min={1}
+          max={180}
+          value={lengthMin}
+          onChange={(e) => setLengthMin(Math.min(180, Math.max(1, Number(e.target.value) || 10)))}
+          className={`w-16 text-center ${input}`}
+          aria-label="Conversation length in minutes"
+        />
+        <span>min</span>
+        {[5, 2, 1].filter((n) => n < lengthMin).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => add((lengthMin - n) * 60, `${n === 1 ? 'One minute' : n === 5 ? 'Five minutes' : 'Two minutes'} remaining.`)}
+            className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+          >
+            + {n} min left
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => add(Math.min(elapsedSec ?? 0, 10859) + 60, '')}
+          className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300 transition hover:bg-gray-700"
+        >
+          + Custom
+        </button>
+      </div>
+      {messages.length === 0 ? (
+        <p className="text-[11px] text-gray-500">No timed messages. Use the buttons above to add one.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {messages.map((m) => (
+            <li key={m.id} className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                max={180}
+                value={Math.floor(m.atSec / 60)}
+                onChange={(e) => update(m.id, { atSec: Math.max(0, Number(e.target.value) || 0) * 60 + (m.atSec % 60) })}
+                className={`w-14 text-center ${input}`}
+                aria-label="Minutes into the conversation"
+              />
+              <span className="text-gray-500">:</span>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={m.atSec % 60}
+                onChange={(e) => update(m.id, { atSec: Math.floor(m.atSec / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
+                className={`w-14 text-center ${input}`}
+                aria-label="Seconds into the conversation"
+              />
+              <input
+                value={m.text}
+                onChange={(e) => update(m.id, { text: e.target.value })}
+                placeholder="Message"
+                maxLength={300}
+                className={`min-w-0 flex-1 ${input}`}
+              />
+              <span
+                className={`w-12 shrink-0 text-center text-[10px] ${elapsedSec !== null && elapsedSec >= m.atSec ? 'text-emerald-400' : 'text-gray-600'}`}
+                title={`At ${clock(m.atSec)}`}
+              >
+                {elapsedSec !== null && elapsedSec >= m.atSec ? 'sent' : clock(m.atSec)}
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange(messages.filter((x) => x.id !== m.id))}
+                aria-label="Delete timed message"
+                className="rounded-md px-2 py-1 text-gray-500 transition hover:bg-gray-800 hover:text-red-400"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

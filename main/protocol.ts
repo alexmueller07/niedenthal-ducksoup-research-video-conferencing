@@ -359,6 +359,31 @@ export interface CalibrationProfile {
 }
 
 /** Live calibration/morph health, reported in telemetry for the dashboard. */
+/**
+ * What the face morph actually moved this moment, as fractions of the
+ * participant's mouth width (so it does not depend on camera distance).
+ * Named by the facial action unit (AU) each one stands in for. It is the
+ * morph's own displacement, not a FACS-coded reading of the picture.
+ */
+export interface AppliedMorph {
+  /** Fade for head turn, 0..1 (1 = facing the camera). */
+  yawFade: number
+  /** Fade for an open mouth, 0..1 (1 = closed). */
+  openFade: number
+  /** Lip corners, out and up (+, AU12) or down (-, AU15). */
+  lipCorner: number
+  /** Cheeks lifted (AU6). */
+  cheekRaise: number
+  /** Lower lids lifted (AU6/AU7 eye narrowing). */
+  eyeSqueeze: number
+  /** Brows raised (+, AU1/AU2) or lowered (-). */
+  browRaise: number
+  /** Inner brows pulled together (AU4). */
+  browFurrow: number
+  /** Lower lip pushed out/down on a frown (AU17-like). */
+  lipPout: number
+}
+
 export interface CalibrationRuntimeState {
   calibrated: boolean
   acceptedAt?: string
@@ -369,7 +394,17 @@ export interface CalibrationRuntimeState {
   headroom: number
   /** Alpha actually applied this frame, after the cap and the fades. */
   appliedAlpha: number
+  /** The movement each facial region got this frame. */
+  morph?: AppliedMorph
   talking: boolean
+}
+
+/** A message shown to both participants once, `atSec` into the live conversation. */
+export interface ScheduledMessage {
+  id: string
+  atSec: number
+  text: string
+  durationSec: number
 }
 
 export type RuleExpression =
@@ -595,6 +630,7 @@ export type ClientMessage =
   | { type: 'admin-mic'; live: boolean; mode: 'toggle' | 'hold' }
   /** Replace the full automation rule list (rules are editable mid-call). */
   | { type: 'set-rules'; rules: AutomationRule[] }
+  | { type: 'set-scheduled-messages'; messages: ScheduledMessage[] }
   | { type: 'study-schedule-arm'; presetId: string; firstSeat: PSlot }
   | { type: 'study-schedule-disarm' }
   | { type: 'review-start'; config: ReviewConfig }
@@ -657,6 +693,7 @@ export type ServerMessage =
   | { type: 'log-row'; row: LogRow }
   /** Server echo of the current rule list (also sent to a reconnecting admin). */
   | { type: 'rules'; rules: AutomationRule[] }
+  | { type: 'scheduled-messages'; messages: ScheduledMessage[] }
   /** Which rules are currently holding/fired, for the dashboard indicator. */
   | { type: 'rule-status'; active: Record<string, boolean> }
   | { type: 'study-schedule-state'; state: StudyTimelineState }

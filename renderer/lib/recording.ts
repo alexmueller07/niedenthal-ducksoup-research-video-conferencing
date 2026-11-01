@@ -38,6 +38,7 @@ export function fixedSizeStream(
   width = 1280,
   height = 720,
   fps = 30,
+  onStall?: (what: string) => void,
 ): { stream: MediaStream; stop: () => void } {
   const video = document.createElement('video')
   video.muted = true
@@ -79,6 +80,30 @@ export function fixedSizeStream(
   const timer = setInterval(() => {
     if (performance.now() - lastFrameAt > 500) draw()
   }, 1000 / fps)
+  // A source that stops delivering frames records as a frozen picture. Notice
+  // it, try to wake the element, and say so in the session log.
+  let lastTime = -1
+  let lastAdvanceAt = performance.now()
+  let stalled = false
+  const watchdog = setInterval(() => {
+    const now = performance.now()
+    if (video.currentTime !== lastTime) {
+      lastTime = video.currentTime
+      lastAdvanceAt = now
+      if (stalled) {
+        stalled = false
+        onStall?.('recovered')
+      }
+      return
+    }
+    const live = source.getVideoTracks().some((t) => t.readyState === 'live')
+    if (live && video.paused) void video.play().catch(() => {})
+    if (live && !stalled && now - lastAdvanceAt > 3000) {
+      stalled = true
+      onStall?.(video.paused ? 'paused' : 'no_new_frames')
+      void video.play().catch(() => {})
+    }
+  }, 1000)
   const canvasTrack = canvas.captureStream(fps).getVideoTracks()[0]
   const stream = new MediaStream([canvasTrack, ...source.getAudioTracks()])
   return {
@@ -86,6 +111,7 @@ export function fixedSizeStream(
     stop: () => {
       stopped = true
       clearInterval(timer)
+      clearInterval(watchdog)
       canvasTrack.stop()
       video.pause()
       video.srcObject = null

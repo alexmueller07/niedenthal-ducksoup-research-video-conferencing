@@ -29,7 +29,7 @@ import serve from 'electron-serve'
 import Store from 'electron-store'
 import { createWindow } from './helpers/create-window'
 import { SessionServer, lanIps } from './server'
-import { SessionLogger } from './logger'
+import { SessionLogger, renameSessionToDyad } from './logger'
 import { DEFAULT_PORT, APP_VERSION } from './protocol'
 import { patchMp4Duration } from './mp4duration'
 import { scanSessionRoot, resolveSessionFile } from './sessionCatalog'
@@ -42,6 +42,10 @@ const store = new Store<Record<string, unknown>>({ name: 'lab-video-call' })
 
 // Participants must hear the researcher without ever clicking the page first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+// Keep video and recording running when the window is covered or in the background.
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 if (isProd) {
   serve({ directory: 'app' })
@@ -155,11 +159,14 @@ async function shutdownServer() {
   const s = server
   server = null
   if (s) {
+    const dyad = s.dyadId()
     try {
       await s.stop()
     } catch {
       /* already down */
     }
+    // Everything is closed now, so the folder can take the dyad's name.
+    if (dyad) await renameSessionToDyad(s.logger.dir, dyad)
   }
 }
 
@@ -558,12 +565,25 @@ ipcMain.handle('rec:open', (_e, label: string, ext?: string, meta?: RecMeta) => 
   return { id, path: filePath }
 })
 
-ipcMain.handle('rec:append', (_e, id: string, chunk: ArrayBuffer) => {
+ipcMain.handle('rec:append', async (_e, id: string, chunk: ArrayBuffer) => {
   const sink = recordings.get(id)
   if (!sink) return 0
   const buf = Buffer.from(chunk)
-  sink.stream.write(buf)
   sink.bytes += buf.length
+  // Slow disk or network drive: wait for it to catch up instead of piling chunks in memory.
+  if (!sink.stream.write(buf) && !sink.stream.destroyed) {
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        sink.stream.off('drain', done)
+        sink.stream.off('error', done)
+        sink.stream.off('close', done)
+        resolve()
+      }
+      sink.stream.once('drain', done)
+      sink.stream.once('error', done)
+      sink.stream.once('close', done)
+    })
+  }
   return sink.bytes
 })
 
@@ -699,6 +719,48 @@ ipcMain.handle(
       await fsp.writeFile(path.join(target, filename), Buffer.from(match[1], 'base64'))
     }
     return jsonPath
+  },
+)
+
+// ---- AU report: marked-up pictures and the numbers behind them ----
+
+const AU_REPORT_HEADER = `# Action units modified by the face morph
+
+The app moves the face with a mesh warp, so these are the regions it moved, named by the
+facial action unit (AU) each one stands in for. They are the morph's own movement, not a
+FACS-coded reading of the picture. Amounts are a percentage of the person's mouth width.
+
+| AU | Region | How the app moves it |
+|---|---|---|
+| AU12 | Lip corner puller | Smile: corners out and up |
+| AU15 | Lip corner depressor | Frown: corners down and in |
+| AU6 | Cheek raiser | Cheeks lift toward the eyes (always, a little, on a smile) |
+| AU6/AU7 | Lower lid | Small, capped lift of the lower lid on a smile |
+| AU1/AU2 | Brow raise | Only if this person's calibration shows their brows move |
+| AU4 | Brow lowerer | Frown: inner brows pulled together |
+| AU17 | Chin / lower lip | Frown: lower lip pushed out and down |
+
+Not modified: AU13 (sharp lip puller), AU45 (blink) and AU66 (cross-eye).
+
+`
+
+ipcMain.handle(
+  'au:save',
+  async (_e, p: { dir: string; name: string; dataUrl: string; alpha: number; markdown: string }) => {
+    const fsp = await import('fs/promises')
+    const match = /^data:image\/jpeg;base64,(.+)$/i.exec(p.dataUrl ?? '')
+    if (!match || !/^[A-Za-z0-9._-]{1,120}$/.test(p.name)) throw new Error('Invalid AU picture.')
+    const folder = path.join(p.dir, 'au_report')
+    await fsp.mkdir(folder, { recursive: true })
+    await fsp.writeFile(path.join(folder, `${p.name}.jpg`), Buffer.from(match[1], 'base64'))
+    const report = path.join(folder, 'AU_report.md')
+    if (!fs.existsSync(report)) await fsp.writeFile(report, AU_REPORT_HEADER, 'utf-8')
+    await fsp.appendFile(
+      report,
+      `## ${p.name} (smile setting ${Number(p.alpha).toFixed(2)})\n\n![${p.name}](${p.name}.jpg)\n\n${p.markdown}\n`,
+      'utf-8',
+    )
+    return report
   },
 )
 
