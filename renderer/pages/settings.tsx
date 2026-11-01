@@ -5,7 +5,6 @@ import {
   Save,
   Camera,
   Square,
-  Monitor,
   Download,
   CheckCircle2,
 } from 'lucide-react'
@@ -207,10 +206,6 @@ export default function SettingsPage() {
       >
         <div className="suite-row" style={{ justifyContent: 'space-between' }}>
           <h2>Application</h2>
-          <span className="suite-badge">
-            <Monitor size={12} />
-            {native ? 'Desktop app' : 'Browser workspace'}
-          </span>
         </div>
         <div className="suite-row" style={{ marginBottom: 12 }}>
           <span style={{ marginRight: 14 }}>

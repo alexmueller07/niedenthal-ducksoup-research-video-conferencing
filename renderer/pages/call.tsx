@@ -131,7 +131,7 @@ export default function CallSetupPage() {
           e.preventDefault()
           void join()
         }}
-        style={{ maxWidth: 700 }}
+        className="call-grid"
       >
         <section className="suite-section">
           <h2>{isAdmin ? 'Researcher details' : 'Participant details'}</h2>
@@ -183,6 +183,7 @@ export default function CallSetupPage() {
             )}
           </div>
         </section>
+        <div>
         <section className="suite-section">
           <label className="suite-field" style={{ maxWidth: 340 }}>
             <span>Access code {isAdmin ? '' : '(optional)'}</span>
@@ -213,6 +214,7 @@ export default function CallSetupPage() {
               : 'Join the call'}
           <ArrowRight size={16} />
         </button>
+        </div>
       </form>
     </main>
   )
