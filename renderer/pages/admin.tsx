@@ -118,6 +118,8 @@ export default function AdminDashboard() {
   const [expressions, setExpressions] = useState<Partial<Record<PSlot, ExpressionState>>>({})
   const [rules, setRules] = useState<AutomationRule[]>([])
   const [timedMessages, setTimedMessages] = useState<ScheduledMessage[]>([])
+  const [script, setScript] = useState('')
+  const scriptLoaded = useRef(false)
   const [ruleActive, setRuleActive] = useState<Record<string, boolean>>({})
   const [micToggled, setMicToggled] = useState(false)
   const [micHolding, setMicHolding] = useState(false)
@@ -738,6 +740,28 @@ export default function AdminDashboard() {
     }, 400)
   }
 
+  // The RA's script is remembered on this computer between sessions.
+  useEffect(() => {
+    void (async () => {
+      let saved: string | null = null
+      try {
+        saved = hasIpc() ? await ipcInvoke<string | null>('prefs:get', 'raScript') : localStorage.getItem('session-view:raScript')
+      } catch { /* optional */ }
+      if (typeof saved === 'string') setScript(saved)
+      scriptLoaded.current = true
+    })()
+  }, [])
+  useEffect(() => {
+    if (!scriptLoaded.current) return
+    const timer = setTimeout(() => {
+      try {
+        if (hasIpc()) void ipcInvoke('prefs:set', 'raScript', script)
+        else localStorage.setItem('session-view:raScript', script)
+      } catch { /* optional */ }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [script])
+
   /** Replace the timed-message list locally and (debounced) on the server. */
   function updateTimedMessages(next: ScheduledMessage[]) {
     timedTouchedRef.current = performance.now()
@@ -801,6 +825,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <QuickActions
+        onTimestamp={() => setScript((t) => `${t}${t && !t.endsWith('\n') ? '\n' : ''}[${fmtClock(elapsedSec)}] `)}
+        onBanner={(text) => sendBanner(text)}
+        live={phase === 'live'}
+      />
       {/* ===== Header ===== */}
       <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-950/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-4 px-5 py-3">
@@ -1098,6 +1127,18 @@ export default function AdminDashboard() {
                 ))}
               </ul>
             )}
+          </Card>
+
+          {/* RA script */}
+          <Card title="RA script" subtitle="Your notes for this session. Only you see this; it is saved on this computer">
+            <textarea
+              id="ra-script"
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              rows={7}
+              placeholder="Introduction, instructions, reminders..."
+              className="w-full resize-y rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm outline-none focus:border-sky-500"
+            />
           </Card>
 
           {/* Timed messages */}
@@ -1847,6 +1888,47 @@ function RulesCard({
         </button>
       </div>
     </Card>
+  )
+}
+
+/** A floating + that opens a few things the researcher reaches for mid-call. */
+function QuickActions({ onTimestamp, onBanner, live }: { onTimestamp: () => void; onBanner: (text: string) => void; live: boolean }) {
+  const [pinned, setPinned] = useState(false)
+  const [hover, setHover] = useState(false)
+  const open = pinned || hover
+  const item = 'block w-full rounded-lg px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-gray-800'
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {open && (
+        <div role="menu" className="w-64 rounded-2xl border border-gray-700 bg-gray-900/95 p-2 shadow-xl backdrop-blur">
+          <button type="button" role="menuitem" className={item} onClick={() => { onTimestamp(); document.getElementById('ra-script')?.focus() }}>
+            Add a time-stamped note to the script
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => document.getElementById('ra-script')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            Jump to the script
+          </button>
+          <button type="button" role="menuitem" disabled={!live} className={`${item} disabled:opacity-40`} onClick={() => onBanner('Five minutes remaining.')}>
+            Send "Five minutes remaining."
+          </button>
+          <button type="button" role="menuitem" disabled={!live} className={`${item} disabled:opacity-40`} onClick={() => onBanner('Please begin wrapping up your conversation.')}>
+            Send "Please begin wrapping up."
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        aria-label="Quick actions"
+        aria-expanded={open}
+        onClick={() => setPinned((p) => !p)}
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-2xl font-light text-white shadow-lg transition hover:bg-sky-500"
+      >
+        {pinned ? '×' : '+'}
+      </button>
+    </div>
   )
 }
 
