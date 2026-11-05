@@ -58,6 +58,8 @@ export default function RatingStationPage() {
   const selected = candidates.find(c => c.id === selectedId)
   const effectiveDyad = lookupParticipant.trim() ? selected?.dyadId || '' : normalizedDyad
   const otherSeat = seat === 'P1' ? 'P2' : 'P1'
+  // A recording found by participant ID carries its dyad: show it instead of leaving the box empty.
+  const fromRecordingDyad = Boolean(!dyad && selected?.dyadId)
   const participant = selected?.participantIds[seat] || manualParticipant.trim()
   const partner = selected?.participantIds[otherSeat] || manualPartner.trim()
   const idsValid = validId(participant) && validId(partner) && participant !== partner
@@ -230,7 +232,7 @@ export default function RatingStationPage() {
           <p className="text-gray-400 text-sm mb-4">Type the participant's ID and their conversation is found automatically, with both IDs filled in from it. Or search by dyad ID.</p>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-white text-lg mb-2">Find by participant ID</label><input aria-label="Find by participant ID" autoComplete="off" className="suite-input" value={lookupParticipant} onChange={e => setLookupParticipant(e.target.value)} placeholder="e.g. P101" /></div>
-            <div><label className="block text-white text-lg mb-2">Dyad ID (optional)</label><input aria-label="Dyad ID" autoComplete="off" className="suite-input" value={dyad} onChange={e => setDyad(e.target.value)} placeholder="e.g. 014" /></div>
+            <div><label className="block text-white text-lg mb-2">Dyad ID{fromRecordingDyad ? <span className="text-gray-500 text-sm ml-2">from the recording</span> : <span className="text-gray-500 text-sm ml-2">optional</span>}</label><input aria-label="Dyad ID" autoComplete="off" className="suite-input" value={fromRecordingDyad ? selected?.dyadId ?? '' : dyad} readOnly={fromRecordingDyad} onChange={e => setDyad(e.target.value)} placeholder="e.g. 014" /></div>
             <div><label className="block text-white text-lg mb-2">Participant ID{selected?.participantIds[seat] && <span className="text-gray-500 text-sm ml-2">from the recording</span>}</label><input aria-label="Participant ID" autoComplete="off" className="suite-input" value={participant} readOnly={Boolean(selected?.participantIds[seat])} onChange={e => setManualParticipant(e.target.value)} /></div>
             <div><label className="block text-white text-lg mb-2">Partner ID{selected?.participantIds[otherSeat] && <span className="text-gray-500 text-sm ml-2">from the recording</span>}</label><input aria-label="Partner ID" autoComplete="off" className="suite-input" value={partner} readOnly={Boolean(selected?.participantIds[otherSeat])} onChange={e => setManualPartner(e.target.value)} /></div>
             <div className="col-span-2"><label className="block text-white text-lg mb-2">Seat in the recording</label>
