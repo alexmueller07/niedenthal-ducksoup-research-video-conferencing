@@ -19,6 +19,21 @@
 
 ## Update History
 
+* **Date:** 07-11-2026
+* **Author:** Aditya Harshavardhan
+* **Changes Made:** Two-block study flow with Next-button steps
+
+* **Previous behavior:**
+The dashboard had a fixed schedule of four 2:30 parts (face changed in parts 2 and 4) that started on its own. There were no screens between parts and no ratings in the call.
+
+* **New behavior:**
+A "Study flow" card steps both participants through: PSS/BMIS (Qualtrics) screen, block 1 intro, block 1 conversation, partner ratings, block 2 intro, block 2 conversation, partner ratings, TikTok task screen. The researcher presses Next at each step. The researcher picks (or randomizes) which topic comes first and which block changes the face; participants are not told. Blocks default to 5 minutes and show "time is up" on the dashboard. Ratings are saved to `study/partner_ratings.csv`.
+
+* **Why this matters:**
+Matches the new two-block design from the lab meeting: positive/negative topic order and the face change are counterbalanced, and the researcher stays in control of timing.
+
+---
+
 * **Date:** 01-11-2026
 * **Author:** Aditya Harshavardhan
 * **Changes Made:** Recording fixes, dyad folders, timed messages, stronger smile, AU report, rating station updates

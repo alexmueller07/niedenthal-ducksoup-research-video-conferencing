@@ -54,6 +54,22 @@ Participants fill in name, participant ID, dyad ID, and the session address (the
 6. If needed, you can **restart** the same session (continues recording as a new file) or send participants back to the **waiting room**.
 7. Optionally, run the **post-call review** (see below).
 
+## Study flow (two conversation blocks)
+
+The **Study flow** card on the dashboard runs the two-block study with you pressing **Next** at every step. Participants never see the card or which block changes their face.
+
+1. In the waiting room, choose **Topic first** (positive or negative), the block that gets the **Face change**, the **Face condition**, and the block length (5 minutes by default). **Randomize** picks the topic order and face-change block for you. Press **Arm**.
+2. Press **Start: show first screen**. The steps are:
+   1. PSS, BMIS (Qualtrics): a screen with that title. They do the survey outside the app, then you press Next.
+   2. Block 1 intro: tells both participants which topic to talk about.
+   3. Block 1: the conversation (recorded). At the block length, the card shows "time is up" and participants see a short banner. The call keeps going until you press Next.
+   4. Rate last 5 mins: both participants answer the partner questions. Next unlocks when both are done; **Continue anyway** skips a missing one.
+   5. Block 2 intro, 6. Block 2, 7. Rate last 5 mins: the same again with the other topic.
+   8. TikTok task: a screen with that title. The task itself is run outside this app.
+3. **Stop** ends the flow early (a running block is ended and both faces return to neutral).
+
+While the flow is armed or running, the normal Start/End buttons, sliders and rules are locked. Each block is its own recording (block 2 files end in `_part2`). Ratings are saved in `study/partner_ratings.csv`, with the block, the topic, and whether that block changed the face.
+
 ## Post-call review (optional)
 
 After the conversation ends, both participants can rewatch it together and write about how they felt. The video is split into short turns that take it in alternating order: Participant 1's video for the first 2.5 minutes, then Participant 2's video for the same 2.5 minutes, then Participant 1's next 2.5 minutes, and so on.
@@ -209,3 +225,4 @@ Each session saves to its own folder, named by the date and time it started (you
 - **Need to leave a participant station** — see "Leaving a participant station" above.
 - **"Start review" stays greyed out** — the line under the button says why. Usually the recordings are still saving (wait a few seconds). Recording only works in the desktop app.
 - **A review video says "This part of the recording cannot be played"** — recordings made with app versions before October 2026 can stop playing partway, when the video quality changed during the call. Newer recordings are saved in a way that avoids this.
+- **Research Drive recordings are missing** — Research Drive logs itself out about every 10 days and has to be mounted again on that computer.
