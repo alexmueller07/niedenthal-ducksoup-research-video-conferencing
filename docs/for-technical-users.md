@@ -1171,6 +1171,7 @@ Browser tabs cannot record, so `npm run server:dev` has nothing to review. Set `
 
 `main/studyFlow.ts` (state machine, no I/O), wired in `main/server.ts` (`study-flow-*` messages), `renderer/components/StudyFlowControls.tsx` (researcher) and `StudyFlowScreen.tsx` (participant). It replaces the earlier fixed 4 x 2:30 timeline (`studyTimeline.ts`, removed).
 
+- UI wording: the `armed` state is shown as **Ready**; the buttons read **Confirm setup** / **Change setup** (message and state names still say arm/disarm).
 - Steps: survey, then per block `intro`, `conversation`, `rating`, then `tiktok`. The researcher presses Next (`study-flow-next`); nothing advances on its own. At `blockMs` (default 300 s) a conversation step sets `timeUp`, sends one banner and logs `study_block_time_up`; the call continues until Next.
 - Assignment `{ firstValence, manipulatedBlock, presetId }` is chosen by the researcher (the Randomize button uses `Math.random`). Both seats get the preset's alpha in the face-change block and neutral in the other. Participants receive the state with `assignment: null` (`publicStudyState`).
 - Phases: entering a conversation step does `setPhase('live')`, leaving it does `setPhase('ended')`, so each block is a normal restartable run (`_partN` recordings, fresh `sessionStartedAt`). Intro, rating and TikTok screens render over the participant view. The admin page rewrites `session_summary.json` 1.5 s after each `ended` while a flow exists.
@@ -1178,4 +1179,5 @@ Browser tabs cannot record, so `npm run server:dev` has nothing to review. Set `
 - Ratings: `study-flow-rating { step, responses }` is validated with `validQuestionnaire`, accepted once per seat per step, and appended to `study/partner_ratings.csv` (`SessionLogger.studyRows`) with `block`, `topic`, `face_changed`. Item wording is the existing `POST_CONVERSATION_ITEMS`; only the page title says "last five minutes".
 - Events: `study_flow_armed/started/stopped/disarmed`, `study_step_changed`, `study_block_started/ended`, `study_block_time_up`, `study_ratings_submitted`. `study-protocol.json` holds the latest state.
 - Tests: `tests/study_flow_test.ts` (state machine), `tests/study_flow_server_test.ts` (three real clients through the whole flow).
+- Face condition `manual` (`STUDY_MANUAL`): the flow applies no automatic alpha in the designated block and `scheduleLocked()` stays open, so the researcher's sliders, presets and rules work. `face_changed` in `partner_ratings.csv` then only marks the designated block; analyse `applied_alpha` in `face/` for what really happened.
 - Not done: a face-model swap interface in `effects.ts`, and on/off switches on the rating station (the video rating stays as it was). The TikTok step is a placeholder screen.

@@ -58,7 +58,7 @@ Participants fill in name, participant ID, dyad ID, and the session address (the
 
 The **Study flow** card on the dashboard runs the two-block study with you pressing **Next** at every step. Participants never see the card or which block changes their face.
 
-1. In the waiting room, choose **Topic first** (positive or negative), the block that gets the **Face change**, the **Face condition**, and the block length (5 minutes by default). **Randomize** picks the topic order and face-change block for you. Press **Arm**.
+1. In the waiting room, choose **Topic first** (positive or negative), the block that gets the **Face change**, the **Face condition** (a preset, or **Manual** if you want to set the face yourself with the normal sliders in that block), and the block length (5 minutes by default). **Randomize** picks the topic order and face-change block for you. Press **Confirm setup** (use **Change setup** to edit before you start).
 2. Press **Start: show first screen**. The steps are:
    1. PSS, BMIS (Qualtrics): a screen with that title. They do the survey outside the app, then you press Next.
    2. Block 1 intro: tells both participants which topic to talk about.
@@ -68,7 +68,7 @@ The **Study flow** card on the dashboard runs the two-block study with you press
    8. TikTok task: a screen with that title. The task itself is run outside this app.
 3. **Stop** ends the flow early (a running block is ended and both faces return to neutral).
 
-While the flow is armed or running, the normal Start/End buttons, sliders and rules are locked. Each block is its own recording (block 2 files end in `_part2`). Ratings are saved in `study/partner_ratings.csv`, with the block, the topic, and whether that block changed the face.
+Once you have confirmed the setup and while the flow is running, the normal Start/End buttons are locked, and so are the sliders and rules (unless the Face condition is **Manual**). Each block is its own recording (block 2 files end in `_part2`). Ratings are saved in `study/partner_ratings.csv`, with the block, the topic, and whether that block changed the face.
 
 ## Post-call review (optional)
 

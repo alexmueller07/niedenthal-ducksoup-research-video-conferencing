@@ -19,7 +19,7 @@ assert.deepEqual(buildStudySteps('negative').map(s => s.label),
 assert.deepEqual(buildStudySteps('negative').filter(s => s.kind === 'conversation').map(s => s.valence), ['negative', 'positive'])
 
 // Cannot start or arm with bad input.
-assert.match(flow.start(0) ?? '', /Arm/)
+assert.match(flow.start(0) ?? '', /Set up/)
 assert.ok(flow.arm({ firstValence: 'positive', manipulatedBlock: 1, presetId: 'neutral' }))
 assert.ok(flow.arm({ firstValence: 'positive', manipulatedBlock: 3 as any, presetId: 'smile-subtle' }))
 assert.ok(flow.arm({ firstValence: 'positive', manipulatedBlock: 1, presetId: 'smile-subtle' }, 5))
@@ -87,4 +87,11 @@ flow.disarm()
 assert.equal(calls.at(-1), 'stop:1:0')
 assert.equal(flow.state.status, 'idle')
 assert.ok(published)
+// Manual: the flow applies no automatic face change, even in the designated block.
+calls.length = 0
+const manual = new StudyFlow({ publish: () => {}, conversation: (r, a, b) => calls.push(`${r ? 'start' : 'stop'}:${b}:${a}`), banner: () => {}, ready: () => null, log: () => {} })
+assert.equal(manual.arm({ firstValence: 'positive', manipulatedBlock: 1, presetId: 'manual' }), null)
+manual.start(0); manual.next(1); manual.next(2)
+assert.equal(calls.at(-1), 'start:1:0')
+assert.equal(manual.manipulated(1), true)
 console.log('study flow checks passed')

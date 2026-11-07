@@ -91,6 +91,15 @@ try {
   admin.send({ type: 'study-flow-next' }) // after tiktok
   await admin.take('study-flow-state', m => m.state.status === 'complete')
 
+  // Manual mode keeps the researcher's sliders and presets open.
+  admin.send({ type: 'study-flow-arm', assignment: { firstValence: 'positive', manipulatedBlock: 1, presetId: 'manual' } })
+  await admin.take('study-flow-state', m => m.state.status === 'armed' && m.state.assignment.presetId === 'manual')
+  admin.send({ type: 'apply-preset', slot: 'P1', presetId: 'smile-strong', effects: { alpha: 0.5, voiceSemitones: 0, voiceSmile: 0 } })
+  await sleep(150)
+  assert.equal((server as any).bySlot('P1').effects.alpha, 0.5)
+  assert.ok(!admin.messages.some(m => m.type === 'study-flow-error'), 'no lock in manual mode')
+  admin.send({ type: 'study-flow-disarm' })
+
   const rows = (await readFile(path.join(logger.dir, 'study', 'partner_ratings.csv'), 'utf-8')).trim().split('\n')
   const n = POST_CONVERSATION_ITEMS.length
   assert.equal(rows.length, 1 + 3 * n, 'P1 and P2 for block 1, P1 only for block 2')

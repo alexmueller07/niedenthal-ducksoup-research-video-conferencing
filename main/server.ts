@@ -48,7 +48,7 @@ import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
 import { ReviewController, buildSegments, cleanText, parseReviewConfig, parseViewingStats } from './review'
 import { POST_CONVERSATION_ITEMS, RATING_TASK_VERSION, validQuestionnaire } from './ratingTask'
-import { StudyFlow, publicStudyState } from './studyFlow'
+import { StudyFlow, publicStudyState, STUDY_MANUAL } from './studyFlow'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -717,7 +717,7 @@ export class SessionServer {
       }
       case 'voice-reset': {
         if (!this.requireAdmin(ctx,msg.type) || !['P1','P2'].includes(msg.slot)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is set up or running.'});return }
         this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
         this.logger.voice.condition(this.voiceSession.condition)
         this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
@@ -905,7 +905,7 @@ export class SessionServer {
       }
       case 'set-effect': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is set up or running.'});return }
         if ((msg.param==='voiceSemitones'||msg.param==='voiceSmile') && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using legacy pitch controls'})
           return
@@ -934,7 +934,7 @@ export class SessionServer {
       }
       case 'apply-preset': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is set up or running.'});return }
         if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && (msg.effects.voiceSemitones!==0||msg.effects.voiceSmile!==0)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using a legacy voice preset'})
           return
@@ -1059,7 +1059,7 @@ export class SessionServer {
       case 'set-phase': {
         if (!this.requireAdmin(ctx, msg.type)) return
         if (this.studyFlow.active) {
-          this.send(ctx.ws, { type: 'study-flow-error', reason: 'The study flow is armed or active. Use Next, or stop the flow first.' })
+          this.send(ctx.ws, { type: 'study-flow-error', reason: 'The study flow is set up or running. Use Next, or stop the flow first.' })
           return
         }
         // The review starts only through review-start (it needs the recordings),
@@ -1305,7 +1305,8 @@ export class SessionServer {
   }
 
   private scheduleLocked(): boolean {
-    return this.studyFlow.active
+    // In manual mode the researcher sets the face by hand, so those controls stay open.
+    return this.studyFlow.active && this.studyFlow.state.assignment?.presetId !== STUDY_MANUAL
   }
 
   // ---- Helpers ----

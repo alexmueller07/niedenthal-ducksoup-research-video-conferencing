@@ -9,6 +9,12 @@ export const STUDY_BLOCK_MS = 300_000
 export const STUDY_FACE_PRESETS = PRESETS.filter(p =>
   ['smile-subtle', 'smile-strong', 'frown-subtle', 'frown-strong'].includes(p.id))
 
+/** Face condition meaning "the researcher changes the face by hand in that block". */
+export const STUDY_MANUAL = 'manual'
+export function studyFaceAlpha(presetId: string): number {
+  return STUDY_FACE_PRESETS.find(p => p.id === presetId)?.alpha ?? 0
+}
+
 export interface StudyFlowHost {
   publish(state: StudyFlowState): void
   /** Start (true) or stop (false) a conversation block, with both faces at `alpha`. */
@@ -53,8 +59,8 @@ export class StudyFlow {
   get active(): boolean { return this.s.status === 'armed' || this.s.status === 'running' }
 
   arm(a: StudyAssignment, blockMs = STUDY_BLOCK_MS): string | null {
-    if (this.active) return 'The study flow is already armed or running.'
-    if (!STUDY_FACE_PRESETS.some(p => p.id === a.presetId)) return 'Choose a face change preset.'
+    if (this.active) return 'The study flow is already set up or running.'
+    if (a.presetId !== STUDY_MANUAL && !STUDY_FACE_PRESETS.some(p => p.id === a.presetId)) return 'Choose a face change preset.'
     if (a.firstValence !== 'positive' && a.firstValence !== 'negative') return 'Choose the first topic.'
     if (a.manipulatedBlock !== 1 && a.manipulatedBlock !== 2) return 'Choose the block with the face change.'
     if (!Number.isFinite(blockMs) || blockMs < 10_000 || blockMs > 3_600_000) return 'Block length must be between 10 seconds and 60 minutes.'
@@ -74,7 +80,7 @@ export class StudyFlow {
   }
 
   start(nowMs: number): string | null {
-    if (this.s.status !== 'armed') return 'Arm the study flow first.'
+    if (this.s.status !== 'armed') return 'Set up the study flow first.'
     const why = this.host.ready()
     if (why) return why
     this.s = { ...this.s, status: 'running', step: 0, stepStartedAtMs: nowMs, timeUp: false, submitted: { P1: false, P2: false } }
@@ -101,7 +107,7 @@ export class StudyFlow {
     this.s = { ...this.s, step: this.s.step + 1, stepStartedAtMs: nowMs, timeUp: false, submitted: { P1: false, P2: false } }
     if (nxt.kind === 'conversation') {
       const a = this.s.assignment as StudyAssignment
-      const alpha = a.manipulatedBlock === nxt.block ? STUDY_FACE_PRESETS.find(p => p.id === a.presetId)!.alpha : 0
+      const alpha = a.manipulatedBlock === nxt.block ? studyFaceAlpha(a.presetId) : 0
       this.host.conversation(true, alpha, nxt.block as 1 | 2)
     }
     this.host.publish(this.s)

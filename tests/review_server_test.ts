@@ -104,9 +104,9 @@ try {
   // Participants are told nothing about which block changes their face.
   assert.equal((await p1.take('study-flow-state', m => m.state.status === 'armed')).state.assignment, null)
   admin.send({ type: 'apply-preset', slot: 'P1', presetId: 'smile-strong', effects: { alpha: 0.5, voiceSemitones: 0, voiceSmile: 0 } })
-  assert.match((await admin.take('study-flow-error')).reason, /armed or active/)
+  assert.match((await admin.take('study-flow-error')).reason, /set up or running/)
   admin.send({ type: 'set-phase', phase: 'live' })
-  assert.match((await admin.take('study-flow-error')).reason, /armed or active/)
+  assert.match((await admin.take('study-flow-error')).reason, /set up or running/)
   admin.send({ type: 'study-flow-disarm' })
   await admin.take('study-flow-state', m => m.state.status === 'idle')
   admin.send({ type: 'set-phase', phase: 'live' })
