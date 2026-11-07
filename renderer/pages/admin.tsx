@@ -43,7 +43,7 @@ import type {
   ReviewAvailability,
   ReviewMedia,
   ReviewState,
-  StudyTimelineState,
+  StudyFlowState,
   RosterState,
   RuleExpression,
   RuleRelease,
@@ -55,7 +55,7 @@ import { hasIpc, ipcInvoke } from '../lib/ipcUtil'
 import { preferredConstraints } from '../lib/suitePreferences'
 import { VoicePanel } from '../components/VoiceControls'
 import { ReviewControls } from '../components/ReviewControls'
-import { StudyTimelineControls } from '../components/StudyTimelineControls'
+import { StudyFlowControls } from '../components/StudyFlowControls'
 import type { VoicePairState } from '../../main/voiceProtocol'
 
 type PSlot = 'P1' | 'P2'
@@ -138,8 +138,8 @@ export default function AdminDashboard() {
   const [reviewState, setReviewState] = useState<ReviewState | null>(null)
   const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
   const [reviewError, setReviewError] = useState('')
-  const [studyTimeline, setStudyTimeline] = useState<StudyTimelineState | null>(null)
-  const [studyTimelineError, setStudyTimelineError] = useState('')
+  const [studyFlow, setStudyFlow] = useState<StudyFlowState | null>(null)
+  const [studyFlowError, setStudyFlowError] = useState('')
   /** Bumped when a recorder stops or fails, so the recording effect looks again (restart on a new stream, retry a failed start). */
   const [recTick, setRecTick] = useState(0)
 
@@ -320,12 +320,12 @@ export default function AdminDashboard() {
             case 'rule-status':
               setRuleActive(msg.active)
               return
-            case 'study-schedule-state':
-              setStudyTimeline(msg.state)
-              setStudyTimelineError('')
+            case 'study-flow-state':
+              setStudyFlow(msg.state)
+              setStudyFlowError('')
               return
-            case 'study-schedule-error':
-              setStudyTimelineError(msg.reason)
+            case 'study-flow-error':
+              setStudyFlowError(msg.reason)
               return
             case 'stream-map':
               if (msg.slot === 'P1' || msg.slot === 'P2') {
@@ -790,6 +790,15 @@ export default function AdminDashboard() {
     })
   }
 
+  // The study flow ends each block itself, so nobody presses End: write the manifest for it here.
+  const writeManifestRef = useRef(writeManifest)
+  writeManifestRef.current = writeManifest
+  useEffect(() => {
+    if (phase !== 'ended' || !studyFlow || studyFlow.status === 'idle') return
+    const t = setTimeout(() => void writeManifestRef.current(), 1500)
+    return () => clearTimeout(t)
+  }, [phase, studyFlow?.status])
+
   const sessionDir = server?.sessionDir ?? null
   const bothReady = PSLOTS.every((s) => roster?.slots[s]?.ready)
   const bothConnected = PSLOTS.every((s) => !!roster?.slots[s])
@@ -1001,13 +1010,14 @@ export default function AdminDashboard() {
 
         {/* --- Right rail --- */}
         <div className="col-span-12 flex flex-col gap-4 xl:col-span-4">
-          {(phase === 'waiting' || phase === 'live' || studyTimeline?.status === 'complete' || studyTimeline?.status === 'interrupted') &&
-            <StudyTimelineControls
-              state={studyTimeline} phase={phase} now={nowTick} error={studyTimelineError}
-              connected={{ P1: !!roster?.slots.P1, P2: !!roster?.slots.P2 }}
-              onArm={(presetId, firstSeat) => clientRef.current?.send({ type: 'study-schedule-arm', presetId, firstSeat })}
-              onDisarm={() => clientRef.current?.send({ type: 'study-schedule-disarm' })}
-            />}
+          <StudyFlowControls
+            state={studyFlow} phase={phase} now={nowTick} error={studyFlowError}
+            connected={{ P1: !!roster?.slots.P1, P2: !!roster?.slots.P2 }}
+            onArm={(assignment, blockSec) => clientRef.current?.send({ type: 'study-flow-arm', assignment, blockSec })}
+            onDisarm={() => clientRef.current?.send({ type: 'study-flow-disarm' })}
+            onStart={() => clientRef.current?.send({ type: 'study-flow-start' })}
+            onNext={(force) => clientRef.current?.send({ type: 'study-flow-next', force })}
+          />
           {/* Researcher voice */}
           <Card title="Researcher voice" subtitle="Participants hear you only while live">
             <div className="flex items-center gap-3">

@@ -14,7 +14,9 @@ export default function PostConversation({
   responses,
   onChange,
   onContinue,
+  title = "Thinking back on the conversation you just had, please answer the following.",
 }: {
+  title?: string;
   responses: Record<string, number>;
   onChange: (key: string, value: number) => void;
   onContinue: () => void;
@@ -27,7 +29,7 @@ export default function PostConversation({
 
   return (
     <QuestionnairePage
-      title="Thinking back on the conversation you just had, please answer the following."
+      title={title}
       valid={missing.length === 0}
       missing={missing}
       onIncomplete={() => setAttempted(true)}

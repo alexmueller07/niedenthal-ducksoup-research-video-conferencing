@@ -26,12 +26,14 @@ import type {
   ReviewState,
   RosterState,
   ServerMessage,
+  StudyFlowState,
   SignalData,
   SlotId,
 } from '../lib/protocol'
 import { hasIpc, ipcInvoke, ipcOn } from '../lib/ipcUtil'
 import { httpBaseFor } from '../lib/reviewSync'
 import { ReviewScreen, type RestoredDraft } from '../components/review/ReviewScreen'
+import { StudyFlowScreen } from '../components/StudyFlowScreen'
 
 interface BootConfig {
   role: 'participant' | 'admin'
@@ -77,6 +79,7 @@ export default function ParticipantSession() {
   const [testFaceId, setTestFaceId] = useState<string>(TEST_FACES[0].id)
   const [setupCheck, setSetupCheck] = useState<CalibrationProgress | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState | null>(null)
+  const [studyFlow, setStudyFlow] = useState<StudyFlowState | null>(null)
   const [ratingAck, setRatingAck] = useState<{ turn: number; sequence: number } | null>(null)
   const [ratingError, setRatingError] = useState('')
   const [reviewMedia, setReviewMedia] = useState<ReviewMedia | null>(null)
@@ -387,6 +390,12 @@ export default function ParticipantSession() {
         case 'review-draft':
           setReviewDraft({ turn: msg.turn, text: msg.text, submitted: msg.submitted })
           return
+        case 'study-flow-state':
+          setStudyFlow(msg.state)
+          return
+        case 'study-flow-error':
+          setRatingError(msg.reason)
+          return
         case 'review-error':
           setRatingError(msg.reason)
           console.warn('[review]', msg.reason)
@@ -633,13 +642,16 @@ export default function ParticipantSession() {
     partnerStream !== null && partnerConn !== 'failed' && partnerConn !== 'closed'
   // The review needs the pointer and text selection that the call hides.
   const reviewing = phase === 'review'
+  // Between conversation blocks the study flow shows its own screens, which need the pointer too.
+  const flowScreen = !!studyFlow && (studyFlow.status === 'running' || studyFlow.status === 'complete') &&
+    studyFlow.steps[studyFlow.step]?.kind !== 'conversation'
   const partnerSeat: PSlot = mySlot === 'P1' ? 'P2' : 'P1'
 
   return (
     <div
       className={`relative h-screen w-screen overflow-hidden bg-gray-950 ${
         reviewing ? '' : 'select-none'
-      } ${browserMode || reviewing ? '' : 'cursor-none'}`}
+      } ${browserMode || reviewing || flowScreen ? '' : 'cursor-none'}`}
     >
       {/* Researcher audio — invisible, plays only if they unmute. */}
       <audio ref={adminAudioRef} autoPlay />
@@ -680,7 +692,7 @@ export default function ParticipantSession() {
       )}
 
       {/* ---- Live call ---- */}
-      {phase === 'review' && ratingError && <div role="alert" className="fixed top-0 left-0 right-0 z-50 bg-red-950 p-3 text-center text-red-100">{ratingError}</div>}
+      {(phase === 'review' || flowScreen) && ratingError && <div role="alert" className="fixed top-0 left-0 right-0 z-[300] bg-red-950 p-3 text-center text-red-100">{ratingError}</div>}
       {phase === 'live' && (
         <div className="absolute inset-0 bg-black">
           <video
@@ -740,6 +752,15 @@ export default function ParticipantSession() {
             Please remain seated — the researcher will be with you shortly.
           </p>
         </div>
+      )}
+
+      {/* ---- Study flow screens (between conversation blocks) ---- */}
+      {studyFlow && mySlot && (
+        <StudyFlowScreen
+          state={studyFlow}
+          mySlot={mySlot}
+          send={(step, responses) => sendToServer({ type: 'study-flow-rating', step, responses })}
+        />
       )}
 
       {/* ---- Post-call review ---- */}
