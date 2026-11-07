@@ -492,6 +492,19 @@ export class SessionLogger {
     fs.writeFileSync(temporary, JSON.stringify(record, null, 2) + '\n', 'utf8')
     fs.renameSync(temporary, destination)
   }
+  /** Appends rows to study/<file>.csv (the partner ratings between conversation blocks). */
+  studyRows(file: 'partner_ratings', rows: Record<string, unknown>[]): void {
+    if (this.closed) throw new Error('Session output folder is closed.')
+    if (!rows.length) return
+    const dir = path.join(this.dir, 'study')
+    fs.mkdirSync(dir, { recursive: true })
+    const destination = path.join(dir, `${file}.csv`)
+    const keys = Object.keys(rows[0])
+    const header = fs.existsSync(destination) ? '' : keys.join(',') + '\n'
+    fs.appendFileSync(destination, header + rows.map(row => keys.map(key =>
+      csvField(typeof row[key] === 'string' ? spreadsheetSafe(row[key] as string) : row[key] ?? '')
+    ).join(',')).join('\n') + '\n', 'utf8')
+  }
   ratingRows(file: 'samples' | 'questionnaire' | 'reflections', rows: Record<string, unknown>[]): void {
     if (!this.reviewDir || this.closed) throw new Error('Rating output folder is not open.')
     if (!rows.length) return

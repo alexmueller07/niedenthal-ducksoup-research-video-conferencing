@@ -47,8 +47,8 @@ import { MessageScheduler, validScheduledMessages } from './scheduledMessages'
 import { VoiceSession } from './voiceSession'
 import { ReviewMediaRoute } from './mediaRoute'
 import { ReviewController, buildSegments, cleanText, parseReviewConfig, parseViewingStats } from './review'
-import { POST_CONVERSATION_ITEMS, RATING_TASK_VERSION } from './ratingTask'
-import { StudyTimeline, STUDY_BLOCK_MS, STUDY_FACE_PRESETS } from './studyTimeline'
+import { POST_CONVERSATION_ITEMS, RATING_TASK_VERSION, validQuestionnaire } from './ratingTask'
+import { StudyFlow, publicStudyState } from './studyFlow'
 import { DEFAULT_VOICE_CONDITION, finite, parseVoiceCondition, validVoiceReport } from './voiceProtocol'
 import type { VoiceReport } from './voiceProtocol'
 
@@ -149,7 +149,9 @@ export class SessionServer {
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private ruleTimer: ReturnType<typeof setInterval> | null = null
   private readonly ruleEngine: RuleEngine
-  private readonly studyTimeline: StudyTimeline
+  private readonly studyFlow: StudyFlow
+  /** Name of the researcher who pressed the last study-flow button (for the phase log). */
+  private flowAdmin = ''
   private readonly scheduledMessages = new MessageScheduler()
   readonly port: number
   readonly logger: SessionLogger
@@ -157,31 +159,30 @@ export class SessionServer {
   constructor(port: number, logger: SessionLogger) {
     this.port = port
     this.logger = logger
-    this.studyTimeline = new StudyTimeline({
-      skipped: (fromBlock, toBlock) => this.log({ event: 'study_blocks_skipped', actorRole: 'server',
-        detail: { fromBlock, toBlock, reason: 'timer_resumed_after_block_boundary' } }),
-      apply: (block, target, alpha) => {
+    this.studyFlow = new StudyFlow({
+      log: (event, detail) => this.log({ event, actorRole: 'server', detail }),
+      banner: (text) => this.sendBanner(text, 10, { scheduled: true, study: true }),
+      ready: () => (this.bySlot('P1') && this.bySlot('P2')) ? null : 'Both participants must be connected.',
+      conversation: (running, alpha, block) => {
         for (const slot of ['P1', 'P2'] as const) {
           const participant = this.bySlot(slot)
-          const effects = { ...NEUTRAL_EFFECTS, alpha: target === slot ? alpha : 0 }
+          const effects = { ...NEUTRAL_EFFECTS, alpha: running ? alpha : 0 }
           if (participant) {
             participant.effects = effects
-            this.send(participant.ws, { type: 'effect-command', effects, cause: 'study_schedule' })
+            this.send(participant.ws, { type: 'effect-command', effects, cause: 'study_flow' })
           }
         }
-        const plannedAtMs = this.studyTimeline.state.startedAtMs === null ? null :
-          this.studyTimeline.state.startedAtMs + block * STUDY_BLOCK_MS
-        this.log({ event: 'study_block_applied', actorRole: 'server', target: target ?? 'both',
-          param: 'block', value: block + 1,
-          detail: { presetId: this.studyTimeline.state.presetId, alpha, plannedAtMs,
-            appliedAtMs: Date.now(), connected: { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') } } })
-        this.broadcastRoster()
+        this.log({ event: running ? 'study_block_started' : 'study_block_ended', actorRole: 'server',
+          param: 'block', value: block,
+          detail: { alpha, valence: this.studyFlow.state.steps.find(x => x.block === block)?.valence,
+            faceChanged: running && alpha !== 0, connected: { P1: !!this.bySlot('P1'), P2: !!this.bySlot('P2') } } })
+        this.setPhase(running ? 'live' : 'ended', this.flowAdmin)
       },
       publish: (state) => {
-        this.broadcast({ type: 'study-schedule-state', state })
+        for (const c of this.clients.values()) this.send(c.ws, { type: 'study-flow-state',
+          state: c.role === 'admin' ? state : publicStudyState(state) })
         try {
-          this.logger.studyProtocol({ version: 1, blockMs: STUDY_BLOCK_MS, blocks: [null, state.firstSeat, null,
-            state.firstSeat === 'P1' ? 'P2' : 'P1'], state,
+          this.logger.studyProtocol({ version: 2, state,
             participantIds: { P1: this.identityOf('P1').participantId, P2: this.identityOf('P2').participantId } })
         } catch (error) {
           this.log({ event: 'study_protocol_write_failed', detail: { error: String(error) } })
@@ -268,7 +269,7 @@ export class SessionServer {
       this.pingTimer = setInterval(() => this.heartbeat(), 5000)
       this.ruleTimer = setInterval(() => {
         this.ruleEngine.tick(Date.now())
-        this.studyTimeline.tick(Date.now())
+        this.studyFlow.tick(Date.now())
         const liveStart = this.sessionStartedAt !== null ? Date.parse(this.sessionStartedAt) : null
         for (const m of this.scheduledMessages.tick(Date.now(), liveStart, this.phase))
           this.sendBanner(m.text, m.durationSec, { scheduled: true, atSec: m.atSec })
@@ -578,10 +579,11 @@ export class SessionServer {
     if (ctx.role === 'admin') {
       this.send(ws, { type: 'rules', rules: this.ruleEngine.currentRules })
       this.send(ws, { type: 'scheduled-messages', messages: this.scheduledMessages.current })
-      this.send(ws, { type: 'study-schedule-state', state: this.studyTimeline.state })
       this.send(ws, { type: 'voice-state', state: this.voiceSession.snapshot() })
       this.send(ws, { type: 'review-availability', availability: this.reviewAvailability() })
     }
+    this.send(ws, { type: 'study-flow-state',
+      state: ctx.role === 'admin' ? this.studyFlow.state : publicStudyState(this.studyFlow.state) })
     if (slot === 'P1' || slot === 'P2') this.restoreCalibration(slot, identity)
     this.sendReviewTo(ctx)
     if (slot === 'P1' || slot === 'P2') this.review.connection(slot, true)
@@ -644,7 +646,6 @@ export class SessionServer {
     if (!ctx) return
     this.clients.delete(ws)
     if (ctx.slot === 'P1' || ctx.slot === 'P2') {
-      if (this.studyTimeline.state.status === 'running') this.studyTimeline.interrupt()
       this.voiceSession.disconnect(ctx.slot)
       this.ruleEngine.onExpression(ctx.slot,null)
       this.review.connection(ctx.slot, false)
@@ -705,7 +706,7 @@ export class SessionServer {
       }
       case 'voice-condition': {
         if (!this.requireAdmin(ctx,msg.type)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule owns face and voice settings. End the session to change them.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow owns face and voice settings. Stop it to change them.'});return }
         const condition=parseVoiceCondition(msg.condition)
         const reason=!condition?'Invalid voice condition':this.phase==='ended'&&condition.mode!=='bypass'?'Session has ended':this.voiceSession.canApply(condition)
         if (reason || !condition) {this.send(ctx.ws,{type:'voice-error',reason:reason!});return}
@@ -716,7 +717,7 @@ export class SessionServer {
       }
       case 'voice-reset': {
         if (!this.requireAdmin(ctx,msg.type) || !['P1','P2'].includes(msg.slot)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
         this.voiceSession.condition={...DEFAULT_VOICE_CONDITION}
         this.logger.voice.condition(this.voiceSession.condition)
         this.broadcast({type:'voice-condition',condition:this.voiceSession.condition})
@@ -904,7 +905,7 @@ export class SessionServer {
       }
       case 'set-effect': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
         if ((msg.param==='voiceSemitones'||msg.param==='voiceSmile') && (this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using legacy pitch controls'})
           return
@@ -933,7 +934,7 @@ export class SessionServer {
       }
       case 'apply-preset': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-schedule-error',reason:'The timed study schedule is armed or active.'});return }
+        if (this.scheduleLocked()) { this.send(ctx.ws,{type:'study-flow-error',reason:'The study flow is armed or active.'});return }
         if ((this.voiceSession.condition.mode!=='bypass'||this.voiceSession.condition.audibility) && (msg.effects.voiceSemitones!==0||msg.effects.voiceSmile!==0)) {
           this.send(ctx.ws,{type:'voice-error',reason:'Bypass voice synchrony before using a legacy voice preset'})
           return
@@ -1057,9 +1058,8 @@ export class SessionServer {
       }
       case 'set-phase': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (msg.phase === 'live' && this.studyTimeline.state.status === 'armed' &&
-          (!this.bySlot('P1') || !this.bySlot('P2'))) {
-          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Both participants must be connected before starting the timed schedule.' })
+        if (this.studyFlow.active) {
+          this.send(ctx.ws, { type: 'study-flow-error', reason: 'The study flow is armed or active. Use Next, or stop the flow first.' })
           return
         }
         // The review starts only through review-start (it needs the recordings),
@@ -1119,7 +1119,7 @@ export class SessionServer {
       case 'set-rules': {
         if (!this.requireAdmin(ctx, msg.type)) return
         if (this.scheduleLocked() && msg.rules.some(rule => rule.enabled)) {
-          this.send(ctx.ws,{type:'study-schedule-error',reason:'Disable automation rules before using the timed study schedule.'})
+          this.send(ctx.ws,{type:'study-flow-error',reason:'Disable automation rules before using the timed study schedule.'})
           return
         }
         if (!validRules(msg.rules)) {
@@ -1139,39 +1139,67 @@ export class SessionServer {
         this.send(ctx.ws, { type: 'rules', rules: msg.rules })
         return
       }
-      case 'study-schedule-arm': {
+      case 'study-flow-arm': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (this.phase !== 'waiting' || !this.bySlot('P1') || !this.bySlot('P2') ||
-          this.ruleEngine.currentRules.some(rule => rule.enabled) ||
-          this.voiceSession.condition.mode !== 'bypass' || this.voiceSession.condition.audibility) {
-          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Connect both participants, return to the waiting room, and disable other face/voice automation before arming.' })
-          return
-        }
-        if (!STUDY_FACE_PRESETS.some(p => p.id === msg.presetId) || !['P1', 'P2'].includes(msg.firstSeat)) {
-          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Choose a face-only preset and a valid participant order.' })
-          return
-        }
-        try {
-          this.logger.studyProtocol({ version: 1, blockMs: STUDY_BLOCK_MS,
-            blocks: [null, msg.firstSeat, null, msg.firstSeat === 'P1' ? 'P2' : 'P1'],
-            state: { status: 'armed', presetId: msg.presetId, firstSeat: msg.firstSeat },
-            participantIds: { P1: this.identityOf('P1').participantId, P2: this.identityOf('P2').participantId } })
-        } catch {
-          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Could not save the study schedule. Check session storage before starting.' })
-          return
-        }
-        if (!this.studyTimeline.arm(msg.presetId, msg.firstSeat)) {
-          this.send(ctx.ws, { type: 'study-schedule-error', reason: 'Choose a face-only preset and a valid participant order.' })
-          return
-        }
-        this.log({ event: 'study_schedule_armed', actorRole: 'admin', actorName: ctx.identity.name,
-          detail: { presetId: msg.presetId, firstSeat: msg.firstSeat, blockMs: STUDY_BLOCK_MS } })
+        const err = this.studyFlow.arm(msg.assignment, msg.blockSec === undefined ? undefined : msg.blockSec * 1000)
+        if (err) { this.send(ctx.ws, { type: 'study-flow-error', reason: err }); return }
+        this.log({ event: 'study_flow_armed', actorRole: 'admin', actorName: ctx.identity.name,
+          detail: { ...msg.assignment, blockMs: this.studyFlow.state.blockMs, dyadId: this.dyadId() } })
         return
       }
-      case 'study-schedule-disarm': {
+      case 'study-flow-disarm': {
         if (!this.requireAdmin(ctx, msg.type)) return
-        if (!this.studyTimeline.disarm()) this.send(ctx.ws, { type: 'study-schedule-error', reason: 'A running schedule can only be stopped by ending the session.' })
-        else this.log({ event: 'study_schedule_disarmed', actorRole: 'admin', actorName: ctx.identity.name })
+        this.flowAdmin = ctx.identity.name
+        const wasRunning = this.studyFlow.state.status === 'running'
+        this.studyFlow.disarm()
+        this.log({ event: wasRunning ? 'study_flow_stopped' : 'study_flow_disarmed', actorRole: 'admin', actorName: ctx.identity.name })
+        return
+      }
+      case 'study-flow-start': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        this.flowAdmin = ctx.identity.name
+        if (this.phase !== 'waiting') { this.send(ctx.ws, { type: 'study-flow-error', reason: 'Return to the waiting room before starting the study flow.' }); return }
+        const err = this.studyFlow.start(Date.now())
+        if (err) this.send(ctx.ws, { type: 'study-flow-error', reason: err })
+        else this.log({ event: 'study_flow_started', actorRole: 'admin', actorName: ctx.identity.name })
+        return
+      }
+      case 'study-flow-next': {
+        if (!this.requireAdmin(ctx, msg.type)) return
+        this.flowAdmin = ctx.identity.name
+        const before = this.studyFlow.state.step
+        const err = this.studyFlow.next(Date.now(), msg.force === true)
+        if (err) { this.send(ctx.ws, { type: 'study-flow-error', reason: err }); return }
+        this.log({ event: 'study_step_changed', actorRole: 'admin', actorName: ctx.identity.name,
+          param: 'step', value: this.studyFlow.state.step,
+          detail: { from: this.studyFlow.state.steps[before]?.label, to: this.studyFlow.state.steps[this.studyFlow.state.step]?.label,
+            forced: msg.force === true } })
+        return
+      }
+      case 'study-flow-rating': {
+        if (ctx.slot !== 'P1' && ctx.slot !== 'P2') return
+        if (!validQuestionnaire(msg.responses)) {
+          this.send(ctx.ws, { type: 'study-flow-error', reason: 'Some answers were not valid. Please check them and try again.' })
+          return
+        }
+        const step = this.studyFlow.state.steps[msg.step]
+        const seat: PSlot = ctx.slot
+        if (!this.studyFlow.rated(seat, msg.step)) return
+        const identity = this.identityOf(seat)
+        const nowMs = Date.now()
+        try {
+          this.logger.studyRows('partner_ratings', POST_CONVERSATION_ITEMS.map(([id, question], order) => ({
+            task_version: RATING_TASK_VERSION, dyad_id: identity.dyadId, participant_id: identity.participantId,
+            seat, partner_id: this.identityOf(otherSlot(seat)).participantId,
+            block: step?.block ?? '', topic: step?.valence ?? '', face_changed: this.studyFlow.manipulated(step?.block ?? null),
+            item: id, order: order + 1, question, response: msg.responses[id], submitted_at_ms: nowMs,
+          })))
+        } catch {
+          this.send(ctx.ws, { type: 'study-flow-error', reason: 'Could not save the ratings. Please tell the researcher.' })
+          return
+        }
+        this.log({ event: 'study_ratings_submitted', actorRole: 'participant', actorSlot: seat, actorName: identity.name,
+          param: 'block', value: step?.block ?? '' })
         return
       }
       case 'admin-mic': {
@@ -1247,9 +1275,6 @@ export class SessionServer {
     if (phase === 'waiting') {
       this.sessionStartedAt = null
     }
-    if (phase === 'live' && this.studyTimeline.state.status === 'armed' && this.sessionStartedAt)
-      this.studyTimeline.start(Date.parse(this.sessionStartedAt))
-    else if (phase === 'ended' || phase === 'waiting') this.studyTimeline.interrupt()
     // Rules: going live re-arms the timers; ending or returning to the
     // waiting room releases anything a rule left applied.
     this.ruleEngine.onPhaseChange(phase)
@@ -1280,8 +1305,7 @@ export class SessionServer {
   }
 
   private scheduleLocked(): boolean {
-    const status = this.studyTimeline.state.status
-    return status === 'armed' || status === 'running' || (status === 'complete' && this.phase === 'live')
+    return this.studyFlow.active
   }
 
   // ---- Helpers ----

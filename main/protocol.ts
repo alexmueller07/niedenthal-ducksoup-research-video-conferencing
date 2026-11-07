@@ -165,13 +165,37 @@ export interface Telemetry extends EffectState {
 
 export type PSlot = 'P1' | 'P2'
 
-export interface StudyTimelineState {
-  status: 'idle' | 'armed' | 'running' | 'complete' | 'interrupted'
-  presetId: string | null
-  firstSeat: PSlot
-  /** Zero-based active block, or 4 once the timed blocks are complete. */
-  block: number
-  startedAtMs: number | null
+export type StudyValence = 'positive' | 'negative'
+export type StudyStepKind = 'survey' | 'intro' | 'conversation' | 'rating' | 'tiktok'
+
+export interface StudyStep {
+  kind: StudyStepKind
+  /** 1 or 2 for the block's intro, conversation and rating screens. */
+  block: 1 | 2 | null
+  valence: StudyValence | null
+  /** Researcher-facing name. */
+  label: string
+}
+
+/** Chosen before the flow starts: which topic comes first, and which block changes the face. */
+export interface StudyAssignment {
+  firstValence: StudyValence
+  manipulatedBlock: 1 | 2
+  presetId: string
+}
+
+export interface StudyFlowState {
+  status: 'idle' | 'armed' | 'running' | 'complete'
+  /** Index into `steps`, -1 until the flow starts. */
+  step: number
+  steps: StudyStep[]
+  /** Researcher only: participants get null, so they cannot tell which block changes their face. */
+  assignment: StudyAssignment | null
+  blockMs: number
+  stepStartedAtMs: number | null
+  /** The conversation block has reached its length; the researcher presses Next. */
+  timeUp: boolean
+  submitted: Record<PSlot, boolean>
 }
 
 // ---- Calibration ----
@@ -631,8 +655,12 @@ export type ClientMessage =
   /** Replace the full automation rule list (rules are editable mid-call). */
   | { type: 'set-rules'; rules: AutomationRule[] }
   | { type: 'set-scheduled-messages'; messages: ScheduledMessage[] }
-  | { type: 'study-schedule-arm'; presetId: string; firstSeat: PSlot }
-  | { type: 'study-schedule-disarm' }
+  | { type: 'study-flow-arm'; assignment: StudyAssignment; blockSec?: number }
+  | { type: 'study-flow-disarm' }
+  | { type: 'study-flow-start' }
+  | { type: 'study-flow-next'; force?: boolean }
+  /** Participant: the partner ratings at the end of a block (`step` is the flow step they were shown). */
+  | { type: 'study-flow-rating'; step: number; responses: Record<string, number | null> }
   | { type: 'review-start'; config: ReviewConfig }
   /** Researcher; participants only for pause/resume when the config allows it. */
   | { type: 'review-control'; action: ReviewControlAction }
@@ -696,8 +724,8 @@ export type ServerMessage =
   | { type: 'scheduled-messages'; messages: ScheduledMessage[] }
   /** Which rules are currently holding/fired, for the dashboard indicator. */
   | { type: 'rule-status'; active: Record<string, boolean> }
-  | { type: 'study-schedule-state'; state: StudyTimelineState }
-  | { type: 'study-schedule-error'; reason: string }
+  | { type: 'study-flow-state'; state: StudyFlowState }
+  | { type: 'study-flow-error'; reason: string }
   | { type: 'rejected'; reason: string }
   | { type: 'review-state'; state: ReviewState }
   | { type: 'review-media'; media: ReviewMedia | null }
