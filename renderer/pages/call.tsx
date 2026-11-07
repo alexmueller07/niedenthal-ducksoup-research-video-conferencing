@@ -185,7 +185,8 @@ export default function CallSetupPage() {
         </section>
         <div>
         <section className="suite-section">
-          <label className="suite-field" style={{ maxWidth: 340 }}>
+          <h2>Access</h2>
+          <label className="suite-field">
             <span>Access code {isAdmin ? '' : '(optional)'}</span>
             <input
               className="suite-input"
