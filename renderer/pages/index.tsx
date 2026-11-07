@@ -13,7 +13,7 @@ export default function SuiteHome() {
         <p>Choose a station to begin.</p>
       </PageHeading>
       <div className="suite-launchers">
-        {SUITE_SECTIONS.map((s, i) => (
+        {SUITE_SECTIONS.filter((s) => !s.hidden).map((s, i) => (
           <Link
             className={`suite-launcher tone-${s.tone}`}
             href={s.href}

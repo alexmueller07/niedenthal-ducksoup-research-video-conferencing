@@ -28,6 +28,8 @@ export const SUITE_SECTIONS = [
     icon: ClipboardList,
     tone: 'violet',
     badge: undefined,
+    // Not used for the current study; the page still works if you go to /rating.
+    hidden: true,
   },
   {
     href: '/data',

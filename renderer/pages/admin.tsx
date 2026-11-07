@@ -96,6 +96,8 @@ function initialCalibrationState(): Record<PSlot, CalibrationUiState> {
   return { P1: emptyCalibrationUiState(), P2: emptyCalibrationUiState() }
 }
 
+const SHOW_RATING_STATION = false
+
 export default function AdminDashboard() {
   const router = useRouter()
 
@@ -960,7 +962,8 @@ export default function AdminDashboard() {
 
       {/* ===== Body ===== */}
       <main className="grid grid-cols-12 gap-4 p-4">
-        {(phase === 'ended' || phase === 'review') && (
+        {/* The old Rating Station (rewatch and rate) is on hold for this study. Flip SHOW_RATING_STATION to bring it back. */}
+        {SHOW_RATING_STATION && (phase === 'ended' || phase === 'review') && (
           <div className="col-span-12">
             <ReviewControls
               phase={phase}
