@@ -133,8 +133,6 @@ export default function AdminDashboard() {
     useState<Record<PSlot, CalibrationUiState>>(initialCalibrationState)
   const [recState, setRecState] = useState<Record<string, RecState>>({})
   const [nowTick, setNowTick] = useState(Date.now())
-  const [endConfirm, setEndConfirm] = useState(false)
-  const [startConfirm, setStartConfirm] = useState(false)
   const [adminName, setAdminName] = useState('')
   const [reviewAvailability, setReviewAvailability] = useState<ReviewAvailability | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState | null>(null)
@@ -716,19 +714,8 @@ export default function AdminDashboard() {
     clientRef.current?.send({ type: 'admin-mic', live, mode })
   }
 
-  function startSession() {
-    clientRef.current?.send({ type: 'set-phase', phase: 'live' })
-  }
-
-  async function endSession() {
-    setEndConfirm(false)
-    clientRef.current?.send({ type: 'set-phase', phase: 'ended' })
-    // Give recorders a beat to flush, then write the manifest.
-    setTimeout(() => void writeManifest(), 1500)
-  }
-
   /** Sessions are restartable (RA request). Recordings continue as _partN files. */
-  function restartSession(to: 'live' | 'waiting') {
+  function restartSession(to: 'waiting') {
     clientRef.current?.send({ type: 'set-phase', phase: to })
   }
 
@@ -802,8 +789,6 @@ export default function AdminDashboard() {
   }, [phase, studyFlow?.status])
 
   const sessionDir = server?.sessionDir ?? null
-  const bothReady = PSLOTS.every((s) => roster?.slots[s]?.ready)
-  const bothConnected = PSLOTS.every((s) => !!roster?.slots[s])
   const elapsedSec = roster?.sessionStartedAt
     ? Math.max(0, Math.floor((nowTick - Date.parse(roster.sessionStartedAt)) / 1000))
     : 0
@@ -900,51 +885,15 @@ export default function AdminDashboard() {
                 📂 Data folder
               </button>
             )}
-            {phase === 'waiting' && (
-              <button
-                type="button"
-                onClick={() => (bothReady ? startSession() : setStartConfirm(true))}
-                disabled={!bothConnected}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold transition enabled:hover:bg-emerald-500 disabled:opacity-40"
-                title={
-                  !bothConnected
-                    ? 'Waiting for both participants to connect'
-                    : bothReady
-                      ? 'Both participants are ready'
-                      : 'Not all checks have passed yet. You will be asked to confirm.'
-                }
-              >
-                ▶ Start conversation
-              </button>
-            )}
-            {phase === 'live' && (
-              <button
-                type="button"
-                onClick={() => setEndConfirm(true)}
-                className="rounded-lg bg-red-600/90 px-4 py-1.5 text-sm font-semibold transition hover:bg-red-500"
-              >
-                ■ End session
-              </button>
-            )}
             {phase === 'ended' && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => restartSession('live')}
-                  className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold transition hover:bg-emerald-500"
-                  title="Restarts the clock. New recordings save as separate files. Nothing is overwritten."
-                >
-                  ↻ Restart conversation
-                </button>
-                <button
-                  type="button"
-                  onClick={() => restartSession('waiting')}
-                  className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition hover:bg-gray-700"
-                  title="Send participants back to the waiting room"
-                >
-                  Waiting room
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => restartSession('waiting')}
+                className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition hover:bg-gray-700"
+                title="Send participants back to the waiting room"
+              >
+                Waiting room
+              </button>
             )}
           </div>
         </div>
@@ -1204,67 +1153,6 @@ export default function AdminDashboard() {
         </div>
       </main>
 
-      {/* ===== Start-anyway confirm (readiness checks incomplete) ===== */}
-      {startConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-[440px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
-            <h2 className="text-base font-semibold">Start with pending checks?</h2>
-            <p className="mt-2 text-sm text-gray-400">
-              Not every check (camera, face model, voice) is green yet. You can start
-              anyway, but a participant's video or audio may be missing until it finishes.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setStartConfirm(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setStartConfirm(false)
-                  startSession()
-                }}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500"
-              >
-                Start anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== End-session confirm ===== */}
-      {endConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-[420px] rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
-            <h2 className="text-base font-semibold">End the session?</h2>
-            <p className="mt-2 text-sm text-gray-400">
-              Participants will see an &ldquo;ended&rdquo; screen. Recordings stop and
-              save, and the manifest is written. You can restart afterward if needed;
-              new recordings save as separate files.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEndConfirm(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void endSession()}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500"
-              >
-                End session
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
