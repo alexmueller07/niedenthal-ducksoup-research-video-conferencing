@@ -41,7 +41,7 @@ Participants fill in name, participant ID, dyad ID, and the session address (the
 
 1. **Everyone signs in.** The researcher opens the dashboard; each participant's machine shows a waiting screen.
 2. **Wait for both participants to connect.** The dashboard shows a colored dot per participant: gray = not connected, amber = connected but camera/mic not ready yet, green = ready.
-3. **Press "Start conversation."** If both participants are fully ready, the call starts immediately. If not, you'll be asked to confirm starting anyway.
+3. **Set up and start the Study flow** (see "Study flow" below). Conversations are started and ended only by pressing Next in the flow; there is no separate Start or End button.
 4. **During the call**, from your dashboard you can:
    - Drag the **Smile** slider to make a participant look more or less happy to their partner (or use a **preset** button for a pre-set amount).
    - Drag the **Voice pitch** slider to make their voice sound higher or lower to their partner.
@@ -50,8 +50,8 @@ Participants fill in name, participant ID, dyad ID, and the session address (the
    - Send a short **message banner** to a participant's screen (there are one-click templates for common messages).
    - Turn on your **microphone** to talk to a participant directly (or hold a button to talk only while pressed).
    - Set up **automation rules** so certain changes happen on their own (see below).
-5. **Press "End session"** when the conversation is done. Both participants see an "ended" screen. Everything is saved automatically.
-6. If needed, you can **restart** the same session (continues recording as a new file) or send participants back to the **waiting room**.
+5. **Finish the flow.** After each block the participants see the next screen, and everything is saved automatically. Use **Waiting room** to reset for the next pair.
+6. **Waiting room** sends participants back to the waiting room.
 7. Optionally, run the **post-call review** (see below).
 
 ## Study flow (two conversation blocks)
@@ -68,7 +68,7 @@ The **Study flow** card on the dashboard runs the two-block study with you press
    8. TikTok task: a screen with that title. The task itself is run outside this app.
 3. **Stop** ends the flow early (a running block is ended and both faces return to neutral).
 
-Once you have confirmed the setup and while the flow is running, the normal Start/End buttons are locked, and so are the sliders and rules (unless the Face condition is **Manual**). Each block is its own recording (block 2 files end in `_part2`). Ratings are saved in `study/partner_ratings.csv`, with the block, the topic, and whether that block changed the face.
+Once you have confirmed the setup and while the flow is running, the sliders and rules are locked (unless the Face condition is **Manual**). Each block is its own recording (block 2 files end in `_part2`). Ratings are saved in `study/partner_ratings.csv`, with the block, the topic, and whether that block changed the face.
 
 ## Post-call review (optional)
 
@@ -83,7 +83,7 @@ Both screens always show the same moment. Neither participant can see what the o
 
 ### Running it
 
-1. Press **End session** as usual. A **Post-call review** box appears at the top of your dashboard.
+1. Finish the conversation. A **Post-call review** box appears at the top of your dashboard.
 2. Wait a moment while the recordings finish saving. The box shows how much was recorded and how many turns that makes.
 3. Choose the settings (they are remembered for next time):
    - **View mode**:
